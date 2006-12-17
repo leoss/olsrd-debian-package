@@ -1,0 +1,16 @@
+# Defaults for olsrd initscript
+# sourced by /etc/init.d/olsrd
+# installed at /etc/default/olsrd by the maintainer scripts
+
+#
+# This is a POSIX shell fragment
+#
+
+#
+# uncomment this to run olsrd automatically at startup
+#
+#START_OLSRD="YES"
+
+
+# Additional options that are passed to the Daemon.
+#DAEMON_OPTS="-d 0"

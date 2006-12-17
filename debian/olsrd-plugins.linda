@@ -1,0 +1,4 @@
+Tag: package-not-start-lib
+Tag: section-not-libs
+Tag: lib-not-in-shlibs
+Tag: no-shlib-file

@@ -1,0 +1,16 @@
+olsrd (0.4.10-2) unstable; urgency=low
+
+  * fix debian/copyright (gui/linux-gtk is GPL licenced, not BSD like the rest)
+  * upgraded debian/compat debhelper source-depends version to 5 (as it's enough 
+    if 0.4.10-1 builds on sarge without changes)
+  * use ${binary:Version} format for olsrd-plugins depends on olsrd, for the
+    same reason
+
+ -- Holger Levsen <debian@layer-acht.org>  Sun, 17 Dec 2006 18:51:00 +0000
+
+olsrd (0.4.10-1) unstable; urgency=low
+
+  * Initial release (Closes: #401307)
+
+ -- Holger Levsen <debian@layer-acht.org>  Sat,  9 Dec 2006 17:04:26 +0000
+
