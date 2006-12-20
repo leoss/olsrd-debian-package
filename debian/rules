@@ -53,6 +53,7 @@ clean:
 
 	# Add here commands to clean up after the build process.
 	-$(MAKE) clean
+	-rm $(CURDIR)/lib/*/src/*.o $(CURDIR)/lib/*/*.so.?.?
 	QUILT_PATCHES=debian/patches quilt pop -a -R || test $$? = 2
 
 	dh_clean 

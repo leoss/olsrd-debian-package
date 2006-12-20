@@ -1,3 +1,11 @@
+olsrd (0.4.10-3) unstable; urgency=low
+
+  * improved Makefile clean target to allow rebuilds
+  * fixed and improved broken /etc/default/olsrd and /etc/init.d/olsrd
+  * improved README.Debian and olsrd.conf
+
+ -- Holger Levsen <debian@layer-acht.org>  Wed, 20 Dec 2006 22:57:21 +0000
+
 olsrd (0.4.10-2) unstable; urgency=low
 
   * fix debian/copyright (gui/linux-gtk is GPL licenced, not BSD like the rest)
@@ -10,7 +18,7 @@ olsrd (0.4.10-2) unstable; urgency=low
 
 olsrd (0.4.10-1) unstable; urgency=low
 
-  * Initial release (Closes: #401307)
+  * Initial release (Closes: #401307, #243527)
 
  -- Holger Levsen <debian@layer-acht.org>  Sat,  9 Dec 2006 17:04:26 +0000
 

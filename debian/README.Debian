@@ -6,9 +6,15 @@ Configuration
 -------------
 
 Before running olsrd you must edit the default configuration file
-/etc/olsrd/olsrd.conf (this differs in the debian package from the upstream 
-default /etc/olsrd.conf) and configure at least on which interfaces olsrd is 
-supposed to act on.
+/etc/olsrd/olsrd.conf (the location differs in the debian package from the 
+upstream default /etc/olsrd.conf) and configure at least on 
+which interfaces olsrd is supposed to act on.
+
+If you want, you can run olsrd via init.d by editing /etc/default/olsrd - the
+default configuration is to not start olsrd on boot. It needs root privileges
+to run olsrd. 
+
+To debug olsrd you can start it with "/etc/init.d/olsrd start debug".
 
 You also need to configure your network interface. For example, for 
 freifunk.hamburg.net the following settings are used:
@@ -20,14 +26,9 @@ Options in the olsrd config file can also be overridden by command line
 options or in /etc/default/olsrd. See the manual pages olsrd(8) and 
 olsrd.conf(5) for details.
 
-You need have root privileges to run olsrd! To run olsrd just type: olsrd
-
 If debug level is set to 0 olsrd will detach and run in the background (this 
 is the default in the debian package), if not it will keep running in your 
 shell.
-
-If you want, you can run olsrd via init.d by editing /etc/default/olsrd - the
-default configuration is to not start olsrd on boot.
 
 
 Plugins
