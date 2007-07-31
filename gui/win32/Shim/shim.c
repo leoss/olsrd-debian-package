@@ -36,12 +36,12 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: shim.c,v 1.4 2004/11/21 01:21:10 tlopatic Exp $
+ * $Id: shim.c,v 1.6 2007/03/28 14:49:15 tlopatic Exp $
  */
 
 #include <windows.h>
 
-void EntryPoint(void)
+int main(int argc, char *argv[])
 {
 	STARTUPINFO StartInfo;
 	PROCESS_INFORMATION ProcInfo;

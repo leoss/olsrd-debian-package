@@ -1,0 +1,65 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          olsrd
+# Required-Start:    networking ifupdown $local_fs
+# Required-Stop:     $local_fs
+# Default-Start:     S
+# Default-Stop:      0 6
+# Short-Description: /etc/init.d/olsrd: start olsrd
+### END INIT INFO
+
+#		Based on skeleton script written by Miquel van Smoorenburg <miquels@cistron.nl>.
+#		Modified for Debian 
+#		by Ian Murdock <imurdock@gnu.ai.mit.edu>.
+#		Modified for olsrd
+#		by Holger Levsen <debian@layer-acht.org>
+# 
+# Version:	21-Dec-2006  
+# modified:    01-Aug-2007
+
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+DAEMON=/usr/sbin/olsrd
+NAME=olsrd
+DESC=olsrd
+
+test -x $DAEMON || exit 0
+
+# Include olsrd defaults if available
+if [ -f /etc/default/olsrd ] ; then
+	. /etc/default/olsrd
+fi
+
+set -e
+
+case "$1" in
+  debug)
+	echo -n "Starting $DESC: "
+	start-stop-daemon --start --quiet --exec $DAEMON -- $DAEMON_OPTS &
+	echo "$NAME."
+	;;
+  start)
+	if [ "$START_OLSRD" != "YES" ] ; then exit 0 ; fi
+	echo -n "Starting $DESC: "
+	start-stop-daemon --start --quiet --exec $DAEMON -- $DAEMON_OPTS &
+	echo "$NAME."
+	;;
+  stop)
+	echo -n "Stopping $DESC: "
+	killall -q $DAEMON || true
+	echo "$NAME."
+	;;
+  restart|force-reload)
+	echo -n "Restarting $DESC: "
+	killall -q $DAEMON || true
+	sleep 1
+	start-stop-daemon --start --quiet --exec $DAEMON -- $DAEMON_OPTS
+	echo "$NAME."
+	;;
+  *)
+	N=/etc/init.d/$NAME
+	echo "Usage: $N {start|stop|restart}" >&2
+	exit 1
+	;;
+esac
+
+exit 0

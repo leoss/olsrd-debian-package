@@ -3,3 +3,4 @@ usr/sbin
 usr/share/lintian/overrides
 usr/share/linda/overrides
 etc/default/
+etc/olsrd

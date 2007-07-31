@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: cfgfile_gen.c,v 1.2 2005/12/30 02:24:00 tlopatic Exp $
+ * $Id: cfgfile_gen.c,v 1.6 2007/03/27 03:05:21 tlopatic Exp $
  */
 
 
@@ -178,6 +178,10 @@ olsrd_write_cnf(struct olsrd_config *cnf, const char *fname)
   fprintf(fd, "# Polling rate in seconds(float).\n# Auto uses default value 0.05 sec\n\n");
   fprintf(fd, "Pollrate\t%0.2f\n", cnf->pollrate);
 
+  /* NIC Changes Pollrate */
+  fprintf(fd, "# Interval to poll network interfaces for configuration\n# changes. Defaults to 2.5 seconds\n");
+  fprintf(fd, "NicChgsPollInt\t%0.2f\n", cnf->nic_chgs_pollrate);
+
   /* TC redundancy */
   fprintf(fd, "# TC redundancy\n# Specifies how much neighbor info should\n# be sent in TC messages\n# Possible values are:\n# 0 - only send MPR selectors\n# 1 - send MPR selectors and MPRs\n# 2 - send all neighbors\n#\n# defaults to 0\n\n");
   fprintf(fd, "TcRedundancy\t%d\n\n", cnf->tc_redundancy);
@@ -189,6 +193,9 @@ olsrd_write_cnf(struct olsrd_config *cnf, const char *fname)
 
   fprintf(fd, "# Link quality level\n# 0 = do not use link quality\n# 1 = use link quality for MPR selection\n# 2 = use link quality for MPR selection and routing\n\n");
   fprintf(fd, "LinkQualityLevel\t%d\n\n", cnf->lq_level);
+
+  fprintf(fd, "# Fish Eye algorithm\n# 0 = do not use fish eye\n# 1 = use fish eye\n\n");
+  fprintf(fd, "LinkQualityFishEye\t%d\n\n", cnf->lq_fish);
 
   fprintf(fd, "# Link quality window size\n\n");
   fprintf(fd, "LinkQualityWinSize\t%d\n\n", cnf->lq_wsize);
@@ -254,7 +261,8 @@ olsrd_write_cnf(struct olsrd_config *cnf, const char *fname)
 	  fprintf(fd, "    Ip6MulticastGlobal\t%s\n\n", (char *)inet_ntop(AF_INET6, &in->cnf->ipv6_multi_glbl.v6, ipv6_buf, sizeof(ipv6_buf)));
 	  
 	  
-	  
+          fprintf(fd, "    # Olsrd can autodetect changes in\n    # interface configurations. Enabled by default\n    # turn off to save CPU.\n    AutoDetectChanges: %s\n", in->cnf->autodetect_chg ? "yes" : "no");
+
 	  fprintf(fd, "    # Emission and validity intervals.\n    # If not defined, RFC proposed values will\n    # in most cases be used.\n\n");
 	  
 	  
@@ -311,7 +319,17 @@ olsrd_write_cnf(struct olsrd_config *cnf, const char *fname)
 		}
 	    }
 
-	  fprintf(fd, "    # When multiple links exist between hosts\n    # the weight of interface is used to determine\n    # the link to use. Normally the weight is\n    # automatically calculated by olsrd based\n    # on the characteristics of the interface,\n    # but here you can specify a fixed value.\n    # Olsrd will choose links with the lowest value.\n");
+         fprintf(fd, "    # When multiple links exist between hosts\n");
+         fprintf(fd, "    # the weight of interface is used to determine\n");
+         fprintf(fd, "    # the link to use. Normally the weight is\n");
+         fprintf(fd, "    # automatically calculated by olsrd based\n");
+         fprintf(fd, "    # on the characteristics of the interface,\n");
+         fprintf(fd, "    # but here you can specify a fixed value.\n");
+         fprintf(fd, "    # Olsrd will choose links with the lowest value.\n");
+         fprintf(fd, "    # Note:\n");
+         fprintf(fd, "    # Interface weight is used only when LinkQualityLevel is 0.\n");
+         fprintf(fd, "    # For any other value of LinkQualityLevel, the interface ETX\n");
+         fprintf(fd, "    # value is used instead.\n\n");
 	  if(in->cnf->weight.fixed)
 	    {
 	      fprintf(fd, "    Weight\t %d\n\n", in->cnf->weight.value);
@@ -363,6 +381,7 @@ olsrd_write_cnf_buf(struct olsrd_config *cnf, char *buf, olsr_u32_t bufsize)
   char ipv6_buf[100];             /* buffer for IPv6 inet_htop */
   struct in_addr in4;
 
+  printf("\n\n\n\nolsrd_write_cnf_buf bufsize  %d\n\n\n\n\n", bufsize);
   if(buf == NULL || bufsize < MAX_LINESIZE)
     {
       return -1;
@@ -615,9 +634,19 @@ olsrd_write_cnf_buf(struct olsrd_config *cnf, char *buf, olsr_u32_t bufsize)
 	    }
 
 	  if(first)
-    	    WRITE_TO_BUF("    # When multiple links exist between hosts\n    # the weight of interface is used to determine\n    # the link to use. Normally the weight is\n")
-          if(first)
-            WRITE_TO_BUF("    # automatically calculated by olsrd based\n    # on the characteristics of the interface,\n    # but here you can specify a fixed value.\n    # Olsrd will choose links with the lowest value.\n")
+	    {
+             WRITE_TO_BUF("    # When multiple links exist between hosts\n");
+             WRITE_TO_BUF("    # the weight of interface is used to determine\n");
+             WRITE_TO_BUF("    # the link to use. Normally the weight is\n")
+             WRITE_TO_BUF("    # automatically calculated by olsrd based\n");
+             WRITE_TO_BUF("    # on the characteristics of the interface,\n");
+             WRITE_TO_BUF("    # but here you can specify a fixed value.\n");
+             WRITE_TO_BUF("    # Olsrd will choose links with the lowest value.\n")
+             WRITE_TO_BUF("    # Note:\n");
+             WRITE_TO_BUF("    # Interface weight is used only when LinkQualityLevel is 0.\n");
+             WRITE_TO_BUF("    # For any other value of LinkQualityLevel, the interface ETX\n");
+             WRITE_TO_BUF("    # value is used instead.\n\n");
+            }
 	  if(in->cnf->weight.fixed)
 	    {
 	      WRITE_TO_BUF("    Weight\t %d\n\n", in->cnf->weight.value)

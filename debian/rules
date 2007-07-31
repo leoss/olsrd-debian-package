@@ -42,7 +42,8 @@ build-stamp: configure-stamp
 	dh_testdir
 
 	# Add here commands to compile the package.
-	$(MAKE) INSTALL_PREFIX=$(CURDIR)/debian/olsrd
+	# DEFINES='-DSUPPORT_OLD_PLUGIN_VERSIONS=1' from sven-ola, fixed upstream
+	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd DEFINES='-DSUPPORT_OLD_PLUGIN_VERSIONS=1'
 
 	touch $@
 
@@ -52,8 +53,8 @@ clean:
 	rm -f build-stamp configure-stamp
 
 	# Add here commands to clean up after the build process.
-	-$(MAKE) clean
-	-rm $(CURDIR)/lib/*/src/*.o $(CURDIR)/lib/*/*.so.?.?
+	-$(MAKE) uberclean
+	rm -f $(CURDIR)/lib/*/src/*.o $(CURDIR)/lib/*/*.so.?.?
 	QUILT_PATCHES=debian/patches quilt pop -a -R || test $$? = 2
 
 	dh_clean 
@@ -65,8 +66,8 @@ install: build
 	dh_installdirs
 
 	# Add here commands to install the package into debian/olsrd.
-	$(MAKE) INSTALL_PREFIX=$(CURDIR)/debian/olsrd install 
-	$(MAKE) INSTALL_PREFIX=$(CURDIR)/debian/olsrd-plugins $(PLUGINS)
+	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd install 
+	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd-plugins $(PLUGINS)
 
 # Build architecture-independent files here.
 binary-indep: build install
@@ -79,9 +80,6 @@ binary-arch: build install
 	dh_installchangelogs 
 	dh_installchangelogs -polsrd CHANGELOG
 	dh_installdocs
-	# rename READMEs to fit the naming scheme of the other plugin READMEs
-	cp $(CURDIR)/lib/secure/SOLSR-README $(CURDIR)/debian/olsrd-plugins/usr/share/doc/olsrd-plugins/README_SECURE
-	cp $(CURDIR)/lib/nameservice/README $(CURDIR)/debian/olsrd-plugins/usr/share/doc/olsrd-plugins/README_NAMESERVICE
 	dh_installinit
 	dh_installman
 	dh_link
@@ -97,6 +95,7 @@ binary-arch: build install
 	cp $(CURDIR)/debian/olsrd-plugins.lintian $(CURDIR)/debian/olsrd-plugins/usr/share/lintian/overrides/olsrd-plugins
 	cp $(CURDIR)/debian/olsrd-plugins.linda $(CURDIR)/debian/olsrd-plugins/usr/share/linda/overrides/olsrd-plugins
 	# provide better default config
+	rm $(CURDIR)/debian/olsrd/etc/olsrd.conf
 	cp $(CURDIR)/debian/olsrd.conf $(CURDIR)/debian/olsrd/etc/olsrd/olsrd.conf
 	cp  $(CURDIR)/debian/olsrd-default $(CURDIR)/debian/olsrd/etc/default/olsrd
 	dh_fixperms

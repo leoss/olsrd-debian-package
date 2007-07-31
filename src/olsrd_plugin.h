@@ -29,7 +29,7 @@
  *
  */
 
-/* $Id: olsrd_plugin.h,v 1.1 2005/05/29 12:47:45 br1 Exp $ */
+/* $Id: olsrd_plugin.h,v 1.3 2007/07/15 19:29:37 bernd67 Exp $ */
 
 /*
  * Example plugin for olsrd.org OLSR daemon
@@ -40,36 +40,66 @@
 #define _OLSRD_PLUGIN
 
 
-/* Interface version 4 is new direct access to main functions */
-#define OLSRD_PLUGIN_INTERFACE_VERSION 4
+/* Define the most recent version */
+#define MOST_RECENT_PLUGIN_INTERFACE_VERSION		5
+#define LAST_SUPPORTED_PLUGIN_INTERFACE_VERSION		4
 
 
 /****************************************************************************
  *                Functions that the plugin MUST provide                    *
  ****************************************************************************/
+#if 1
+/* We hide them from the compiler here to allow the plugins itself to declare them
+ * as they also implement them if we activate -Wredundant-decls.
+ * Normally we leave it seen so that we enforce a check by the compiler if they are
+ * identical.
+ */
 
 /**
  * Plugin interface version
  * Used by main olsrd to check plugin interface version
  */
-int 
-olsrd_plugin_interface_version(void);
-
-
-/**
- * Register parameters from config file
- * Called for all plugin parameters
- */
-int
-olsrd_plugin_register_param(char *key, char *value);
+int olsrd_plugin_interface_version(void);
 
 
 /**
  * Initialize plugin
  * Called after all parameters are passed
  */
-int
-olsrd_plugin_init(void);
+int olsrd_plugin_init(void);
 
+
+/* Interface version 4 */
+/**
+ * Register parameters from config file
+ * Called for all plugin parameters
+ */
+int olsrd_plugin_register_param(char *key, char *value);
+
+/* Interface version 5 */
+
+typedef int (*set_plugin_parameter)(const char *value, void *data);
+
+struct olsrd_plugin_parameters {
+    const char *name;
+    set_plugin_parameter set_plugin_parameter;
+    void *data;
+};
+
+/**
+ * Delivers the (address of the) table and the size of the parameter description
+ */
+void olsrd_get_plugin_parameters(const struct olsrd_plugin_parameters **params, int *size);
 
 #endif
+
+#endif
+
+/*
+ * Local Variables:
+ * mode: c
+ * style: linux
+ * c-basic-offset: 4
+ * indent-tabs-mode: nil
+ * End:
+ */

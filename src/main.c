@@ -37,7 +37,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: main.c,v 1.83 2005/09/29 05:53:34 kattemat Exp $
+ * $Id: main.c,v 1.96 2007/05/08 23:10:37 bernd67 Exp $
  */
 
 #include <unistd.h>
@@ -54,30 +54,32 @@
 #include "socket_parser.h"
 #include "apm.h"
 #include "net_os.h"
+#include "build_msg.h"
+
+/* Global stuff externed in defs.h */
+FILE *debug_handle;             /* Where to send debug(defaults to stdout) */
+struct olsrd_config *olsr_cnf;  /* The global configuration */
 
 #ifdef WIN32
 #define close(x) closesocket(x)
-int __stdcall SignalHandler(unsigned long signal);
+int __stdcall SignalHandler(unsigned long signal) __attribute__((noreturn));
 void ListInterfaces(void);
 void DisableIcmpRedirects(void);
 olsr_bool olsr_win32_end_request = OLSR_FALSE;
 olsr_bool olsr_win32_end_flag = OLSR_FALSE;
 #else
 static void
-olsr_shutdown(int);
+olsr_shutdown(int) __attribute__((noreturn));
 #endif
 
 /*
  * Local function prototypes
  */
 void
-olsr_reconfigure(int);
+olsr_reconfigure(int) __attribute__((noreturn));
 
 static void
 print_usage(void);
-
-static void
-set_default_values(void);
 
 static int
 set_default_ifcnfs(struct olsr_if *, struct if_config_options *);
@@ -91,6 +93,7 @@ static char **olsr_argv;
 
 static char copyright_string[] = "The olsr.org Optimized Link-State Routing daemon(olsrd) Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org) All rights reserved.";
 
+
 /**
  * Main entrypoint
  */
@@ -102,30 +105,28 @@ main(int argc, char *argv[])
   char conf_file_name[FILENAME_MAX];
   struct tms tms_buf;
 
-  debug_handle = stdout;
-  olsr_argv = argv;
-
 #ifdef WIN32
   WSADATA WsaData;
   int len;
 #endif
 
+  /* Stop the compiler from complaining */
+  (void)copyright_string;
+
+  debug_handle = stdout;
+  olsr_argv = argv;
+
   setbuf(stdout, NULL);
   setbuf(stderr, NULL);
 
 #ifndef WIN32
-  /* Initialize tick resolution */
-  system_tick_divider = 1000/sysconf(_SC_CLK_TCK);
-
   /* Check if user is root */
-  if(getuid() || getgid())
+  if(geteuid())
     {
       fprintf(stderr, "You must be root(uid = 0) to run olsrd!\nExiting\n\n");
       exit(EXIT_FAILURE);
     }
 #else
-  system_tick_divider = 1;
-
   DisableIcmpRedirects();
 
   if (WSAStartup(0x0202, &WsaData))
@@ -141,18 +142,12 @@ main(int argc, char *argv[])
   /* Open syslog */
   olsr_openlog("olsrd");
 
-  /* Set default values */
-  set_default_values();
- 
   /* Get initial timestep */
   nowtm = NULL;
   while (nowtm == NULL)
     {
       nowtm = localtime((time_t *)&now.tv_sec);
     }
-    
-  /* The port to use for OLSR traffic */
-  olsr_udp_port = htons(OLSRPORT);
     
   printf("\n *** %s ***\n Build date: %s\n http://www.olsr.org\n\n", 
 	 SOFTWARE_VERSION, 
@@ -219,6 +214,13 @@ main(int argc, char *argv[])
       exit(EXIT_FAILURE);
     }
 
+  /* Initialize tick resolution */
+#ifndef WIN32
+  olsr_cnf->system_tick_divider = 1000/sysconf(_SC_CLK_TCK);
+#else
+  olsr_cnf->system_tick_divider = 1;
+#endif
+
   /*
    * Process olsrd options.
    */
@@ -257,7 +259,7 @@ main(int argc, char *argv[])
   /*
    *socket for icotl calls
    */
-  if ((ioctl_s = socket(olsr_cnf->ip_version, SOCK_DGRAM, 0)) < 0) 
+  if ((olsr_cnf->ioctl_s = socket(olsr_cnf->ip_version, SOCK_DGRAM, 0)) < 0) 
 
     {
       olsr_syslog(OLSR_LOG_ERR, "ioctl socket: %m");
@@ -265,12 +267,15 @@ main(int argc, char *argv[])
     }
 
 #if defined __FreeBSD__ || defined __MacOSX__ || defined __NetBSD__ || defined __OpenBSD__
-  if ((rts = socket(PF_ROUTE, SOCK_RAW, 0)) < 0)
+  if ((olsr_cnf->rts = socket(PF_ROUTE, SOCK_RAW, 0)) < 0)
     {
       olsr_syslog(OLSR_LOG_ERR, "routing socket: %m");
       olsr_exit(__func__, 0);
     }
 #endif
+
+  /* Init empty TC timer */
+  set_empty_tc_timer(GET_TIMESTAMP(0));
 
   /*
    *enable ip forwarding on host
@@ -279,6 +284,9 @@ main(int argc, char *argv[])
 
   /* Initialize parser */
   olsr_init_parser();
+
+  /* Initialize route-exporter */
+  olsr_init_export_route();
 
   /* Initialize message sequencnumber */
   init_msg_seqno();
@@ -293,7 +301,7 @@ main(int argc, char *argv[])
     {
       if(apm_init() < 0)
 	{
-	  OLSR_PRINTF(1, "Could not read APM info - setting default willingness(%d)\n", WILL_DEFAULT)
+	  OLSR_PRINTF(1, "Could not read APM info - setting default willingness(%d)\n", WILL_DEFAULT);
 
 	  olsr_syslog(OLSR_LOG_ERR, "Could not read APM info - setting default willingness(%d)\n", WILL_DEFAULT);
 
@@ -304,22 +312,20 @@ main(int argc, char *argv[])
 	{
 	  olsr_cnf->willingness = olsr_calculate_willingness();
 
-	  OLSR_PRINTF(1, "Willingness set to %d - next update in %.1f secs\n", olsr_cnf->willingness, will_int)
+	  OLSR_PRINTF(1, "Willingness set to %d - next update in %.1f secs\n", olsr_cnf->willingness, olsr_cnf->will_int);
 	}
     }
 
-  /* Set ipsize and minimum packetsize */
+  /* Set ipsize */
   if(olsr_cnf->ip_version == AF_INET6)
     {
-      OLSR_PRINTF(1, "Using IP version 6\n")
-      ipsize = sizeof(struct in6_addr);
-      minsize = (int)sizeof(olsr_u8_t) * 7; /* Minimum packetsize IPv6 */
+      OLSR_PRINTF(1, "Using IP version 6\n");
+      olsr_cnf->ipsize = sizeof(struct in6_addr);
     }
   else
     {
-      OLSR_PRINTF(1, "Using IP version 4\n")
-      ipsize = sizeof(olsr_u32_t);
-      minsize = (int)sizeof(olsr_u8_t) * 4; /* Minimum packetsize IPv4 */
+      OLSR_PRINTF(1, "Using IP version 4\n");
+      olsr_cnf->ipsize = sizeof(olsr_u32_t);
     }
 
   /* Initialize net */
@@ -374,7 +380,7 @@ main(int argc, char *argv[])
   /* Load plugins */
   olsr_load_plugins();
 
-  OLSR_PRINTF(1, "Main address: %s\n\n", olsr_ip_to_string(&main_addr))
+  OLSR_PRINTF(1, "Main address: %s\n\n", olsr_ip_to_string(&olsr_cnf->main_addr));
 
   /* Start syslog entry */
   olsr_syslog(OLSR_LOG_INFO, "%s successfully started", SOFTWARE_VERSION);
@@ -392,6 +398,7 @@ main(int argc, char *argv[])
   signal(SIGHUP, olsr_reconfigure);  
   signal(SIGINT, olsr_shutdown);  
   signal(SIGTERM, olsr_shutdown);  
+  signal(SIGPIPE, SIG_IGN);
 #endif
 
   /* Register socket poll event */
@@ -401,11 +408,10 @@ main(int argc, char *argv[])
   scheduler();
 
   /* Stop the compiler from complaining */
-  strlen(copyright_string);
+  (void)copyright_string;
 
   /* Like we're ever going to reach this ;-) */
   return 1;
-
 } /* main */
 
 
@@ -417,7 +423,7 @@ main(int argc, char *argv[])
  */
 #ifndef WIN32
 void
-olsr_reconfigure(int signal)
+olsr_reconfigure(int signal __attribute__((unused)))
 {
   if(!fork())
     {
@@ -463,7 +469,7 @@ olsr_shutdown(int signal)
 
   olsr_delete_all_kernel_routes();
 
-  OLSR_PRINTF(1, "Closing sockets...\n")
+  OLSR_PRINTF(1, "Closing sockets...\n");
 
   /* front-end IPC socket */
   if(olsr_cnf->open_ipc)
@@ -480,59 +486,37 @@ olsr_shutdown(int signal)
   restore_settings(olsr_cnf->ip_version);
 
   /* ioctl socket */
-  close(ioctl_s);
+  close(olsr_cnf->ioctl_s);
 
 #if defined __FreeBSD__ || defined __MacOSX__ || defined __NetBSD__ || defined __OpenBSD__
   /* routing socket */
-  close(rts);
+  close(olsr_cnf->rts);
 #endif
 
   olsr_syslog(OLSR_LOG_INFO, "%s stopped", SOFTWARE_VERSION);
 
-  OLSR_PRINTF(1, "\n <<<< %s - terminating >>>>\n           http://www.olsr.org\n", SOFTWARE_VERSION)
+  OLSR_PRINTF(1, "\n <<<< %s - terminating >>>>\n           http://www.olsr.org\n", SOFTWARE_VERSION);
 
-  exit(exit_value);
+  exit(olsr_cnf->exit_value);
 }
-
-
-
-
-
-/**
- *Sets the default values of variables at startup
- *
- */
-static void
-set_default_values()
-{
-  exit_value = EXIT_SUCCESS; 
-  /* If the application exits by signal it is concidered success,
-   * if not, exit_value is set by the function calling olsr_exit.
-   */
-
-  will_int = 10 * HELLO_INTERVAL; /* Willingness update interval */
-
-  /* Initialize empty TC timer */
-  send_empty_tc = GET_TIMESTAMP(0);
-}
-
-
 
 /**
  * Print the command line usage
  */
 static void
-print_usage()
+print_usage(void)
 {
 
-  fprintf(stderr, "An error occured somwhere between your keyboard and your chair!\n"); 
-  fprintf(stderr, "usage: olsrd [-f <configfile>] [ -i interface1 interface2 ... ]\n");
-  fprintf(stderr, "  [-d <debug_level>] [-ipv6] [-multi <IPv6 multicast address>]\n"); 
-  fprintf(stderr, "  [-bcast <broadcastaddr>] [-ipc] [-dispin] [-dispout] [-delgw]\n");
-  fprintf(stderr, "  [-hint <hello interval (secs)>] [-tcint <tc interval (secs)>]\n");
-  fprintf(stderr, "  [-midint <mid interval (secs)>] [-hnaint <hna interval (secs)>]\n");
-  fprintf(stderr, "  [-T <Polling Rate (secs)>] [-nofork] [-hemu <ip_address>] \n"); 
-
+  fprintf(stderr,
+          "An error occured somwhere between your keyboard and your chair!\n"
+          "usage: olsrd [-f <configfile>] [ -i interface1 interface2 ... ]\n"
+          "  [-d <debug_level>] [-ipv6] [-multi <IPv6 multicast address>]\n"
+          "  [-lql <LQ level>] [-lqw <LQ winsize>]\n"
+          "  [-bcast <broadcastaddr>] [-ipc] [-dispin] [-dispout] [-delgw]\n"
+          "  [-hint <hello interval (secs)>] [-tcint <tc interval (secs)>]\n"
+          "  [-midint <mid interval (secs)>] [-hnaint <hna interval (secs)>]\n"
+          "  [-T <Polling Rate (secs)>] [-nofork] [-hemu <ip_address>]\n"
+          "  [-lql <LQ level>] [-lqw <LQ winsize>]\n");
 }
 
 
@@ -630,6 +614,42 @@ olsr_process_arguments(int argc, char *argv[],
 	      continue;
 	    }
 	  memcpy(&ifcnf->ipv4_broadcast.v4, &in.s_addr, sizeof(olsr_u32_t));  
+	  continue;
+	}
+
+      /*
+       * Set LQ level
+       */
+      if (strcmp(*argv, "-lql") == 0) 
+	{
+	  int tmp_lq_level;
+	  NEXT_ARG;
+          CHECK_ARGC;
+	  
+	  /* Sanity checking is done later */
+	  sscanf(*argv, "%d", &tmp_lq_level);
+	  olsr_cnf->lq_level = tmp_lq_level;
+	  continue;
+	}
+
+      /*
+       * Set LQ winsize
+       */
+      if (strcmp(*argv, "-lqw") == 0) 
+	{
+	  int tmp_lq_wsize;
+	  NEXT_ARG;
+          CHECK_ARGC;
+	  
+	  sscanf(*argv, "%d", &tmp_lq_wsize);
+
+	  if(tmp_lq_wsize < MIN_LQ_WSIZE || tmp_lq_wsize > MAX_LQ_WSIZE)
+	    {
+	      printf("LQ winsize %d not allowed. Range [%d-%d]\n", 
+		     tmp_lq_wsize, MIN_LQ_WSIZE, MAX_LQ_WSIZE);
+	      olsr_exit(__func__, EXIT_FAILURE);
+	    }
+	  olsr_cnf->lq_wsize = tmp_lq_wsize;
 	  continue;
 	}
       
@@ -740,7 +760,7 @@ olsr_process_arguments(int argc, char *argv[],
        */
       if (strcmp(*argv, "-dispin") == 0) 
 	{
-	  disp_pack_in = OLSR_TRUE;
+	  parser_set_disp_pack_in(OLSR_TRUE);
 	  continue;
 	}
 
@@ -749,7 +769,7 @@ olsr_process_arguments(int argc, char *argv[],
        */
       if (strcmp(*argv, "-dispout") == 0) 
 	{
-	  disp_pack_out = OLSR_TRUE;
+	  net_set_disp_pack_out(OLSR_TRUE);
 	  continue;
 	}
 
@@ -772,7 +792,7 @@ olsr_process_arguments(int argc, char *argv[],
 	  struct in6_addr in6;
 	  NEXT_ARG;
           CHECK_ARGC;
-	  if(inet_pton(AF_INET6, *argv, &in6) < 0)
+	  if(inet_pton(AF_INET6, *argv, &in6) <= 0)
 	    {
 	      fprintf(stderr, "Failed converting IP address %s\n", *argv);
 	      exit(EXIT_FAILURE);
@@ -793,7 +813,7 @@ olsr_process_arguments(int argc, char *argv[],
       
 	  NEXT_ARG;
           CHECK_ARGC;
-	  if(inet_pton(AF_INET, *argv, &in) < 0)
+	  if(inet_pton(AF_INET, *argv, &in) <= 0)
 	    {
 	      fprintf(stderr, "Failed converting IP address %s\n", *argv);
 	      exit(EXIT_FAILURE);
@@ -819,7 +839,7 @@ olsr_process_arguments(int argc, char *argv[],
        */
       if (strcmp(*argv, "-delgw") == 0) 
 	{
-	  del_gws = OLSR_TRUE;
+	  olsr_cnf->del_gws = OLSR_TRUE;
 	  continue;
 	}
 

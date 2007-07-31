@@ -1,3 +1,17 @@
+olsrd (0.5.2-1) unstable; urgency=low
+
+  * new upstream release (Closes: #426580, #404899, #405331)
+  * added build-dependency on bison and flex
+  * removed dependency on libpthread2 (Closes: #412752)
+  * maintainer address updated
+  * updated README.Debian
+  * cleaned up debian/patches/ (from openwrt) as they are included
+    upstream by now
+  * added debian/todo in source
+  * make init-script exit gracefully if stopping olsrd fails (Closes: #412936)
+
+ -- Holger Levsen <holger@debian.org>  Wed,  1 Aug 2007 00:58:23 +0200
+
 olsrd (0.4.10-3) unstable; urgency=low
 
   * improved Makefile clean target to allow rebuilds

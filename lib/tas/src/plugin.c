@@ -37,7 +37,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: plugin.c,v 1.6 2005/11/10 19:50:42 kattemat Exp $
+ * $Id: plugin.c,v 1.8 2007/04/20 13:46:03 bernd67 Exp $
  */
 
 #include <string.h>
@@ -465,10 +465,10 @@ int olsrd_plugin_interface_version(void)
   return 4;
 }
 
-int olsrd_plugin_init()
+int olsrd_plugin_init(void)
 {
-  ipAddrLen = ipsize;
-  mainAddr = &main_addr;
+  ipAddrLen = olsr_cnf->ipsize;
+  mainAddr = &olsr_cnf->main_addr;
 
   intTab = ifnet;
   neighTab = neighbortable;

@@ -37,7 +37,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: olsrd_pgraph.c,v 1.2 2005/12/29 19:48:43 tlopatic Exp $
+ * $Id: olsrd_pgraph.c,v 1.5 2007/04/28 20:48:57 bernd67 Exp $
  */
 
 /*
@@ -56,33 +56,47 @@
 #define close(x) closesocket(x)
 #endif
 
-int ipc_socket;
-int ipc_open;
-int ipc_connection;
-int ipc_socket_up;
+static int ipc_socket;
+static int ipc_open;
+static int ipc_connection;
+static int ipc_socket_up;
 
-static void inline
+static void
+ipc_print_neigh_link(struct neighbor_entry *neighbor);
+
+static void
+ipc_print_tc_link(struct tc_entry *entry, struct topo_dst *dst_entry);
+
+#if 0
+static void
+ipc_print_net(union olsr_ip_addr *, union olsr_ip_addr *, union hna_netmask *);
+#endif
+
+static int
+ipc_send(const char *, int);
+
+static void
 ipc_print_neigh_link(struct neighbor_entry *);
 
-int
+static int
 plugin_ipc_init(void);
 
 void
 olsr_plugin_exit(void);
 
 
-static void inline
+static void
 ipc_print_neigh_link(struct neighbor_entry *neighbor)
 {
   char buf[256];
   int len;
-  char* main_adr;
-  char* adr;
+  const char* main_adr;
+  const char* adr;
 //  double etx=0.0;
 //  char* style = "solid";
 //  struct link_entry* link;
 
-  main_adr = olsr_ip_to_string(&main_addr);
+  main_adr = olsr_ip_to_string(&olsr_cnf->main_addr);
   adr = olsr_ip_to_string(&neighbor->neighbor_main_addr);
   len = sprintf( buf, "add link %s %s\n", main_adr, adr );
   ipc_send(buf, len);
@@ -120,7 +134,7 @@ ipc_print_neigh_link(struct neighbor_entry *neighbor)
  *function in uolsrd_plugin.c
  */
 int
-olsrd_plugin_init()
+olsrd_plugin_init(void)
 {
 
   /* Initial IPC value */
@@ -134,7 +148,7 @@ olsrd_plugin_init()
 }
 
 int
-plugin_ipc_init()
+plugin_ipc_init(void)
 {
   struct sockaddr_in sin;
   olsr_u32_t yes = 1;
@@ -193,7 +207,7 @@ plugin_ipc_init()
 }
 
 void
-ipc_action(int fd)
+ipc_action(int fd __attribute__((unused)))
 {
   struct sockaddr_in pin;
   socklen_t addrlen;
@@ -223,7 +237,7 @@ ipc_action(int fd)
 */
 	  ipc_open = 1;
 	  olsr_printf(1, "(DOT DRAW)IPC: Connection from %s\n",addr);
-          len = sprintf(buf, "add node %s\n", olsr_ip_to_string(&main_addr));
+          len = sprintf(buf, "add node %s\n", olsr_ip_to_string(&olsr_cnf->main_addr));
   	  ipc_send(buf, len);
 	  pcf_event(1, 1, 1);
 //	}
@@ -235,7 +249,7 @@ ipc_action(int fd)
  * destructor - called at unload
  */
 void
-olsr_plugin_exit()
+olsr_plugin_exit(void)
 {
   if(ipc_open)
     close(ipc_socket);
@@ -249,7 +263,7 @@ olsr_plugin_exit()
 int
 pcf_event(int changes_neighborhood,
 	  int changes_topology,
-	  int changes_hna)
+	  int changes_hna __attribute__((unused)))
 {
   int res;
   olsr_u8_t index;
@@ -344,13 +358,13 @@ calc_etx(double loss, double neigh_loss)
 }
 #endif
 
-static void inline
+static void
 ipc_print_tc_link(struct tc_entry *entry, struct topo_dst *dst_entry)
 {
   char buf[256];
   int len;
-  char* main_adr;
-  char* adr;
+  const char* main_adr;
+  const char* adr;
 //  double etx = calc_etx( dst_entry->link_quality, dst_entry->inverse_link_quality );
 
   main_adr = olsr_ip_to_string(&entry->T_last_addr);
@@ -359,10 +373,11 @@ ipc_print_tc_link(struct tc_entry *entry, struct topo_dst *dst_entry)
   ipc_send(buf, len);
 }
 
-static void inline
+#if 0
+static void
 ipc_print_net(union olsr_ip_addr *gw, union olsr_ip_addr *net, union hna_netmask *mask)
 {
-  char *adr;
+  const char *adr;
 
   adr = olsr_ip_to_string(gw);
   ipc_send("\"", 1);
@@ -383,11 +398,11 @@ ipc_print_net(union olsr_ip_addr *gw, union olsr_ip_addr *net, union hna_netmask
   ipc_send("\"", 1);
   ipc_send("[shape=diamond];\n", strlen("[shape=diamond];\n"));
 }
-
+#endif
 
 
 int
-ipc_send(char *data, int size)
+ipc_send(const char *data, int size)
 {
   if(!ipc_open)
     return 0;
@@ -408,7 +423,6 @@ ipc_send(char *data, int size)
 }
 
 
-#define COMP_IP(ip1, ip2) (!memcmp(ip1, ip2, ipsize))
 struct link_entry *olsr_neighbor_best_link(union olsr_ip_addr *main)
 {
   struct link_entry *walker;

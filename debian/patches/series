@@ -1,7 +1,2 @@
 100-debug_level.patch
-110-opt_flags.patch
-120-secure_path.patch
-130-olsrd_fixes.patch
-140-olsrd_optimize.patch
-150-hna_ip_fix.patch
 200-etc-olsrd.patch

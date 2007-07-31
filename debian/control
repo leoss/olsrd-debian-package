@@ -1,8 +1,8 @@
 Source: olsrd
 Section: net
 Priority: extra
-Maintainer: Holger Levsen <debian@layer-acht.org>
-Build-Depends: debhelper (>= 5), quilt
+Maintainer: Holger Levsen <holger@debian.org>
+Build-Depends: debhelper (>= 5), quilt, bison, flex
 Standards-Version: 3.7.2
 
 Package: olsrd
@@ -22,7 +22,7 @@ Description: optimized link-state routing daemon (unik-olsrd)
 
 Package: olsrd-plugins
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, olsrd (= ${binary:Version}), libpthread20 | libpthread2 
+Depends: ${shlibs:Depends}, ${misc:Depends}, olsrd (= ${binary:Version})
 Description: various plugins to enhance olsrd
  olsrd is an implementation of the Optimized Link State Routing protocol
  for Mobile Ad-Hoc networks(MANET)

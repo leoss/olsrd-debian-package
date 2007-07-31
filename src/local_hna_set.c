@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: local_hna_set.c,v 1.10 2005/02/27 18:39:43 kattemat Exp $
+ * $Id: local_hna_set.c,v 1.13 2007/04/20 13:46:04 bernd67 Exp $
  */
 
 #include "defs.h"
@@ -106,11 +106,11 @@ remove_local_hna4_entry(union olsr_ip_addr *net, union olsr_ip_addr *mask)
 int
 remove_local_hna6_entry(union olsr_ip_addr *net, olsr_u16_t prefix_len)
 {
-  struct hna6_entry *h6 = olsr_cnf->hna6_entries, *h6prev = NULL;
+  struct hna6_entry *h6, *h6prev = NULL;
 
-  while(h6)
+  for(h6 = olsr_cnf->hna6_entries; h6; h6 = h6->next)
     {
-      if((memcmp(net, &h6->net, ipsize) == 0) && 
+      if((memcmp(net, &h6->net, olsr_cnf->ipsize) == 0) && 
 	 (prefix_len == h6->prefix_len))
 	{
 	  /* Dequeue */
@@ -123,28 +123,62 @@ remove_local_hna6_entry(union olsr_ip_addr *net, olsr_u16_t prefix_len)
 	  return 1;
 	}
       h6prev = h6;
-      h6 = h6->next;
+    }
+  return 0;
+}
+
+struct hna4_entry *
+find_local_hna4_entry(union olsr_ip_addr *net, olsr_u32_t mask)
+{
+  struct hna4_entry *h4 = olsr_cnf->hna4_entries;
+
+  while(h4)
+    {
+      if((net->v4 == h4->net.v4) && 
+	 (mask == h4->netmask.v4))
+	{
+	  return h4;
+	}
+      h4 = h4->next;
     }
 
-  return 0;
+  return NULL;
 }
 
 
 
-int
-check_inet_gw()
+struct hna6_entry *
+find_local_hna6_entry(union olsr_ip_addr *net, olsr_u16_t prefix_len)
 {
-  struct hna4_entry *h4 = olsr_cnf->hna4_entries;
+  struct hna6_entry *h6 = olsr_cnf->hna6_entries;
 
+  while(h6)
+    {
+      if((memcmp(net, &h6->net, olsr_cnf->ipsize) == 0) && 
+	 (prefix_len == h6->prefix_len))
+	{
+	  return h6;
+	}
+      h6 = h6->next;
+    }
+
+  return NULL;
+}
+
+
+
+
+int
+check_inet_gw(void)
+{
   if(olsr_cnf->ip_version == AF_INET)
     {
-      while(h4)
+      struct hna4_entry *h4;
+      for(h4 = olsr_cnf->hna4_entries; h4; h4 = h4->next)
 	{
 	  if(h4->netmask.v4 == 0 && h4->net.v4 == 0)
 	    return 1;
-	  h4 = h4->next;
 	}
-      return 0;
     }
   return 0;
 

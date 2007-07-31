@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: scheduler.c,v 1.33 2005/12/29 22:34:37 kattemat Exp $
+ * $Id: scheduler.c,v 1.40 2007/07/17 09:28:15 bernd67 Exp $
  */
 
 
@@ -57,19 +57,33 @@ extern olsr_bool olsr_win32_end_request;
 extern olsr_bool olsr_win32_end_flag;
 #endif
 
+/* Timer data, global. Externed in defs.h */
+clock_t now_times;              /* current idea of times(2) reported uptime */
+struct timeval now;		/* current idea of time */
+struct tm *nowtm;		/* current idea of time (in tm) */
+
 static float pollrate;
 
 /* Lists */
 static struct timeout_entry *timeout_functions;
 static struct event_entry *event_functions;
 
+static olsr_bool link_changes; /* is set if changes occur in MPRS set */ 
 
-static void trigger_dijkstra(void *dummy)
+void
+signal_link_changes(olsr_bool val)
+{
+  link_changes = val;
+}
+
+static void 
+trigger_dijkstra(void *foo __attribute__((unused)))
 {
   OLSR_PRINTF(3, "Triggering Dijkstra\n");
 
   changes_neighborhood = OLSR_TRUE;
   changes_topology = OLSR_TRUE;
+  changes_force = OLSR_TRUE;
 }
 
 /**
@@ -84,7 +98,7 @@ static void trigger_dijkstra(void *dummy)
  */
 
 void
-scheduler()
+scheduler(void)
 {
   struct timespec remainder_spec;
   struct timespec sleeptime_spec;
@@ -104,9 +118,11 @@ scheduler()
 
   struct interface *ifn;
 
-  /* Global buffer for times(2) calls */
+  /* Global buffer for times(2) calls. Do not remove - at least OpenBSD needs it. */
   struct tms tms_buf;
  
+  link_changes = OLSR_FALSE;
+
   if(olsr_cnf->lq_level > 1 && olsr_cnf->lq_dinter > 0.0)
     olsr_register_scheduler_event(trigger_dijkstra, NULL, olsr_cnf->lq_dinter, 0, NULL);
 
@@ -116,13 +132,12 @@ scheduler()
   interval.tv_sec = interval_usec / 1000000;
   interval.tv_usec = interval_usec % 1000000;
 
-  OLSR_PRINTF(1, "Scheduler started - polling every %0.2f seconds\n", pollrate)
-  OLSR_PRINTF(3, "Max jitter is %f\n\n", max_jitter)
+  OLSR_PRINTF(1, "Scheduler started - polling every %0.2f seconds\n", pollrate);
+  OLSR_PRINTF(3, "Max jitter is %f\n\n", olsr_cnf->max_jitter);
 
   /* Main scheduler event loop */
   for(;;)
     {
-
       /* Update now_times */
       now_times = times(&tms_buf);
 
@@ -152,11 +167,11 @@ scheduler()
 
 
       /* Check for changes in topology */
-      if(changes)
+      if(link_changes)
         {
-	  OLSR_PRINTF(3, "ANSN UPDATED %d\n\n", get_local_ansn())
+	  OLSR_PRINTF(3, "ANSN UPDATED %d\n\n", get_local_ansn());
 	  increase_local_ansn();
-          changes = OLSR_FALSE;
+          link_changes = OLSR_FALSE;
 	}
 
 
@@ -179,13 +194,13 @@ scheduler()
 
 	      /* Set jitter */
 	      entry->since_last = (float) random()/RAND_MAX;
-	      entry->since_last *= max_jitter;
+	      entry->since_last *= olsr_cnf->max_jitter;
 	      
 	      /* Reset trigger */
 	      if(entry->trigger != NULL)
 		*(entry->trigger) = 0;
 	      
-	      //OLSR_PRINTF(3, "Since_last jitter: %0.2f\n", entry->since_last)
+	      //OLSR_PRINTF(3, "Since_last jitter: %0.2f\n", entry->since_last);
 
 	    }
 
@@ -197,7 +212,7 @@ scheduler()
       /* looping trough interfaces and emmittin pending data */
       for (ifn = ifnet; ifn ; ifn = ifn->int_next) 
 	{ 
-	  if(net_output_pending(ifn) && TIMED_OUT(fwdtimer[ifn->if_nr])) 
+	  if(net_output_pending(ifn) && TIMED_OUT(ifn->fwdtimer)) 
 	    net_output(ifn);
 	}
 
@@ -205,8 +220,8 @@ scheduler()
       end_of_loop = times(&tms_buf);
 
       //printf("Tick diff: %d\n", end_of_loop - now_times);
-      time_used.tv_sec = ((end_of_loop - now_times) * system_tick_divider) / 1000;
-      time_used.tv_usec = ((end_of_loop - now_times) * system_tick_divider) % 1000;
+      time_used.tv_sec = ((end_of_loop - now_times) * olsr_cnf->system_tick_divider) / 1000;
+      time_used.tv_usec = ((end_of_loop - now_times) * olsr_cnf->system_tick_divider) % 1000;
 
       //printf("Time used: %d.%04d\n", time_used.tv_sec, time_used.tv_usec);
 
@@ -262,7 +277,7 @@ olsr_register_scheduler_event(void (*event_function)(void *),
 {
   struct event_entry *new_entry;
 
-  OLSR_PRINTF(3, "Scheduler event registered int: %0.2f\n", interval)
+  OLSR_PRINTF(3, "Scheduler event registered int: %0.2f\n", interval);
 
   /* check that this entry is not added already */
   new_entry = event_functions;
@@ -298,7 +313,7 @@ olsr_register_scheduler_event(void (*event_function)(void *),
 
 /*
  *
- *@param initial how long utnil the first generation
+ *@param initial how long until the first generation
  *@param trigger pointer to a boolean indicating that
  *this function should be triggered immediatley
  */
@@ -306,7 +321,7 @@ int
 olsr_remove_scheduler_event(void (*event_function)(void *), 
 			    void *par,
 			    float interval, 
-			    float initial, 
+			    float initial __attribute__((unused)), 
 			    olsr_u8_t *trigger)
 {
   struct event_entry *entry, *prev;
@@ -329,6 +344,7 @@ olsr_remove_scheduler_event(void (*event_function)(void *),
 	    {
 	      prev->next = entry->next;
 	    }
+          free(entry);
 	  return 1;
 	}
 

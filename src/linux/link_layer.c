@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: link_layer.c,v 1.11 2005/02/27 10:43:38 kattemat Exp $
+ * $Id: link_layer.c,v 1.13 2007/04/25 22:08:17 bernd67 Exp $
  */
 
 
@@ -80,10 +80,6 @@ olsr_ip_to_string(union olsr_ip_addr *);
 #define	MAXIPLEN	60
 #define	MAXICMPLEN	76
 
-extern size_t ipsize;
-
-extern int ioctl_s;
-
 float poll_int = 0.2;
 
 int
@@ -104,7 +100,7 @@ init_link_layer_notification()
 {
   struct interface *ifd;
 
-  OLSR_PRINTF(1, "Initializing link-layer notification...\n")
+  OLSR_PRINTF(1, "Initializing link-layer notification...\n");
 
 
   for (ifd = ifnet; ifd ; ifd = ifd->int_next) 
@@ -131,9 +127,9 @@ clear_spy_list(char *ifname)
   /* Set device name */
   strncpy(wrq.ifr_name, ifname, IFNAMSIZ);
 
-  if(ioctl(ioctl_s, SIOCSIWSPY, &wrq) < 0)
+  if(ioctl(olsr_cnf->ioctl_s, SIOCSIWSPY, &wrq) < 0)
     {
-      OLSR_PRINTF(1, "Could not clear spylist %s\n", strerror(errno))
+      OLSR_PRINTF(1, "Could not clear spylist %s\n", strerror(errno));
       return -1;
     }
 
@@ -152,7 +148,7 @@ add_spy_node(union olsr_ip_addr *addr, char *interface)
   char	buffer[(sizeof(struct iw_quality) +
 		sizeof(struct sockaddr)) * IW_MAX_SPY];
   
-  OLSR_PRINTF(1, "Adding spynode!\n\n")
+  OLSR_PRINTF(1, "Adding spynode!\n\n");
   
   /* get all addresses already in the driver */
 
@@ -162,9 +158,9 @@ add_spy_node(union olsr_ip_addr *addr, char *interface)
 
   strncpy(wrq.ifr_name, interface, IFNAMSIZ);
 
-  if(ioctl(ioctl_s, SIOCGIWSPY, &wrq) < 0)
+  if(ioctl(olsr_cnf->ioctl_s, SIOCGIWSPY, &wrq) < 0)
     {
-      OLSR_PRINTF(1, "Could not get old spylist %s\n", strerror(errno))
+      OLSR_PRINTF(1, "Could not get old spylist %s\n", strerror(errno));
       return 0;
     }
 
@@ -172,7 +168,7 @@ add_spy_node(union olsr_ip_addr *addr, char *interface)
   nbr = wrq.u.data.length;
   memcpy(hw_address, buffer, nbr * sizeof(struct sockaddr));
 
-  OLSR_PRINTF(1, "Old addresses: %d\n\n", nbr)
+  OLSR_PRINTF(1, "Old addresses: %d\n\n", nbr);
 
   /* Check upper limit */
   if(nbr >= IW_MAX_SPY)
@@ -195,9 +191,9 @@ add_spy_node(union olsr_ip_addr *addr, char *interface)
   /* Set device name */
   strncpy(wrq.ifr_name, interface, IFNAMSIZ);
   
-  if(ioctl(ioctl_s, SIOCSIWSPY, &wrq) < 0)
+  if(ioctl(olsr_cnf->ioctl_s, SIOCSIWSPY, &wrq) < 0)
     {
-      OLSR_PRINTF(1, "Could not clear spylist %s\n", strerror(errno))
+      OLSR_PRINTF(1, "Could not clear spylist %s\n", strerror(errno));
       return 0;
     }
 
@@ -217,12 +213,12 @@ convert_ip_to_mac(union olsr_ip_addr *ip, struct sockaddr *mac, char *interface)
 
   OLSR_PRINTF(1, "\nARP conversion for %s interface %s\n", 
 	      olsr_ip_to_string(ip),
-	      interface)
+	      interface);
 
   tmp_sockaddr.sin_family = AF_INET;
   tmp_sockaddr.sin_port = 0;
 
-  memcpy(&tmp_sockaddr.sin_addr, ip, ipsize);
+  memcpy(&tmp_sockaddr.sin_addr, ip, olsr_cnf->ipsize);
 
   /* Translate IP addresses to MAC addresses */
   memcpy(&arp_query.arp_pa, &tmp_sockaddr, sizeof(struct sockaddr_in));
@@ -231,10 +227,10 @@ convert_ip_to_mac(union olsr_ip_addr *ip, struct sockaddr *mac, char *interface)
 
   strncpy(arp_query.arp_dev, interface, IFNAMSIZ);
   
-  if((ioctl(ioctl_s, SIOCGARP, &arp_query) < 0) ||
+  if((ioctl(olsr_cnf->ioctl_s, SIOCGARP, &arp_query) < 0) ||
      !(arp_query.arp_flags & ATF_COM)) /* ATF_COM - hw addr valid */
     {
-      OLSR_PRINTF(1, "Arp failed: (%s) - trying lookup\n", strerror(errno))
+      OLSR_PRINTF(1, "Arp failed: (%s) - trying lookup\n", strerror(errno));
 
       /* No address - create a thread that sends a PING */
       send_ping(ip);
@@ -242,7 +238,7 @@ convert_ip_to_mac(union olsr_ip_addr *ip, struct sockaddr *mac, char *interface)
       return -1;
     }
 
-  OLSR_PRINTF(1, "Arp success!\n")
+  OLSR_PRINTF(1, "Arp success!\n");
 
   memcpy(mac, &arp_query.arp_ha, sizeof(struct sockaddr));
 
@@ -272,13 +268,13 @@ send_ping(union olsr_ip_addr *ip)
   dst_in = (struct sockaddr_in *) &dst;
 
   dst_in->sin_family = AF_INET;
-  memcpy(&dst_in->sin_addr, ip, ipsize);
+  memcpy(&dst_in->sin_addr, ip, olsr_cnf->ipsize);
 
-  OLSR_PRINTF(1, "pinging %s\n\n", olsr_ip_to_string(ip))
+  OLSR_PRINTF(1, "pinging %s\n\n", olsr_ip_to_string(ip));
 
   if ((ping_s = socket(AF_INET, SOCK_RAW, PF_INET)) < 0) 
     {
-      OLSR_PRINTF(1, "Could not create RAW socket for ping!\n%s\n", strerror(errno))
+      OLSR_PRINTF(1, "Could not create RAW socket for ping!\n%s\n", strerror(errno));
       return;
     }
 
@@ -296,12 +292,12 @@ send_ping(union olsr_ip_addr *ip)
   if((sendto(ping_s, packet, MAXIPLEN + MAXICMPLEN + 8, 0, &dst, sizeof(struct sockaddr))) !=
      MAXIPLEN + MAXICMPLEN + 8)
     {
-      OLSR_PRINTF(1, "Error PING: %s\n", strerror(errno))
+      OLSR_PRINTF(1, "Error PING: %s\n", strerror(errno));
     }
 
   /* Nevermind the pong ;-) */
 
-  OLSR_PRINTF(1, "Ping complete...\n")
+  OLSR_PRINTF(1, "Ping complete...\n");
   close(ping_s);
 
   free(packet);
@@ -323,7 +319,7 @@ poll_link_layer(void *foo)
   int                   has_range = 0;
   struct interface      *iflist;
 
-  //OLSR_PRINTF(1, "Polling link-layer notification...\n")
+  //OLSR_PRINTF(1, "Polling link-layer notification...\n");
 
   for(iflist = ifnet; iflist != NULL; iflist = iflist->int_next)
     {
@@ -339,9 +335,9 @@ poll_link_layer(void *foo)
       strncpy(wrq.ifr_name, iflist->int_name, IFNAMSIZ);
       
       /* Do the request */
-      if(ioctl(ioctl_s, SIOCGIWSPY, &wrq) < 0)
+      if(ioctl(olsr_cnf->ioctl_s, SIOCGIWSPY, &wrq) < 0)
 	{
-	  OLSR_PRINTF(1, "%-8.16s  Interface doesn't support wireless statistic collection\n\n", iflist->int_name)
+          OLSR_PRINTF(1, "%-8.16s  Interface doesn't support wireless statistic collection\n\n", iflist->int_name);
 	  return;
 	}
       
@@ -362,29 +358,29 @@ poll_link_layer(void *foo)
 	    continue;
 	  
 	  /* Print stats for each address */
-	  OLSR_PRINTF(1, "MAC")
+	  OLSR_PRINTF(1, "MAC");
 	  for(j = 0; j < 6; j++)
 	    {
-	      OLSR_PRINTF(1, ":%02x", (hwa[i].sa_data[j] % 0xffffff00))
+                    OLSR_PRINTF(1, ":%02x", (hwa[i].sa_data[j] % 0xffffff00));
 	    }
 	  if(!has_range)
 	    OLSR_PRINTF(1, " : Quality:%d  Signal level:%d dBm  Noise level:%d dBm",
 			qual[i].qual,
 			qual[i].level - 0x100, 
-			qual[i].noise - 0x100)
+			qual[i].noise - 0x100);
 	  else
 	    OLSR_PRINTF(1, " : Quality:%d/%d  Signal level:%d dBm  Noise level:%d dBm",
 			qual[i].qual,
 			range.max_qual.qual,
 			qual[i].level - 0x100, 
-			qual[i].noise - 0x100)
+			qual[i].noise - 0x100);
 	  
-	  OLSR_PRINTF(1, "\n")
+	  OLSR_PRINTF(1, "\n");
 	  
 	}
     }
 
-  //OLSR_PRINTF(1, "\n")
+  //OLSR_PRINTF(1, "\n");
   return;
 }
 
@@ -413,9 +409,9 @@ iw_get_range_info(char            *ifname,
   /* Set device name */
   strncpy(wrq.ifr_name, ifname, IFNAMSIZ);
 
-  if(ioctl(ioctl_s, SIOCGIWRANGE, &wrq) < 0)
+  if(ioctl(olsr_cnf->ioctl_s, SIOCGIWRANGE, &wrq) < 0)
     {
-      OLSR_PRINTF(1, "NO RANGE\n")
+      OLSR_PRINTF(1, "NO RANGE\n");
       return -1;
     }
 

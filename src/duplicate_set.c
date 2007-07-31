@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: duplicate_set.c,v 1.12 2005/02/27 18:39:43 kattemat Exp $
+ * $Id: duplicate_set.c,v 1.15 2007/04/25 22:08:07 bernd67 Exp $
  */
 
 
@@ -57,11 +57,11 @@ static float dup_hold_time = DUP_HOLD_TIME;
  *@return nada
  */
 void
-olsr_init_duplicate_table()
+olsr_init_duplicate_table(void)
 {
   int i;
 
-  OLSR_PRINTF(3, "Initializing duplicatetable - hashsize %d\n", HASHSIZE)
+  OLSR_PRINTF(3, "Initializing duplicatetable - hashsize %d\n", HASHSIZE);
 
   /* Since the holdingtime is rather large for duplicate
    * entries the timeoutfunction is only ran every 2 seconds
@@ -93,7 +93,7 @@ olsr_add_dup_entry(union olsr_ip_addr *originator, olsr_u16_t seqno)
 
 
   /* Hash the senders address */
-  hash = olsr_hashing(originator);
+  hash = HASHMASK & seqno;
 
   new_dup_entry = olsr_malloc(sizeof(struct dup_entry), "New dup entry");
 
@@ -131,7 +131,7 @@ olsr_check_dup_table_proc(union olsr_ip_addr *originator, olsr_u16_t seqno)
   struct dup_entry *tmp_dup_table;
 
   /* Hash the senders address */
-  hash = olsr_hashing(originator);
+  hash = HASHMASK & seqno;
 
   /* Check for entry */
   for(tmp_dup_table = dup_set[hash].next;
@@ -163,7 +163,7 @@ olsr_check_dup_table_fwd(union olsr_ip_addr *originator,
   struct dup_entry *tmp_dup_table;
 
   /* Hash the senders address */
-  hash = olsr_hashing(originator);
+  hash = HASHMASK & seqno;
 
   /* Check for entry */
   for(tmp_dup_table = dup_set[hash].next;
@@ -225,7 +225,7 @@ olsr_del_dup_entry(struct dup_entry *entry)
 
 
 void
-olsr_time_out_duplicate_table(void *foo)
+olsr_time_out_duplicate_table(void *foo __attribute__((unused)))
 {
   int i;
 
@@ -242,7 +242,7 @@ olsr_time_out_duplicate_table(void *foo)
 #ifdef DEBUG
 	      OLSR_PRINTF(5, "DUP TIMEOUT[%s] s: %d\n", 
 		          olsr_ip_to_string(&tmp_dup_table->addr),
-		          tmp_dup_table->seqno)
+		          tmp_dup_table->seqno);
 #endif
 	      tmp_dup_table = tmp_dup_table->next;
 	      olsr_del_dup_entry(entry_to_delete);
@@ -268,7 +268,7 @@ olsr_update_dup_entry(union olsr_ip_addr *originator,
   struct dup_iface *new_iface;
 
   /* Hash the senders address */
-  hash = olsr_hashing(originator);
+  hash = HASHMASK & seqno;
 
 
   /* Check for entry */
@@ -313,7 +313,7 @@ olsr_set_dup_forward(union olsr_ip_addr *originator,
   struct dup_entry *tmp_dup_table;
 
   /* Hash the senders address */
-  hash = olsr_hashing(originator);
+  hash = HASHMASK & seqno;
 
   /* Check for entry */
   for(tmp_dup_table = dup_set[hash].next;
@@ -332,7 +332,7 @@ olsr_set_dup_forward(union olsr_ip_addr *originator,
     return 0;
   
 #ifdef DEBUG
-  OLSR_PRINTF(3, "Setting DUP %s/%d forwarded\n", olsr_ip_to_string(&tmp_dup_table->addr), seqno)
+  OLSR_PRINTF(3, "Setting DUP %s/%d forwarded\n", olsr_ip_to_string(&tmp_dup_table->addr), seqno);
 #endif
 
   /* Set forwarded */
@@ -344,14 +344,8 @@ olsr_set_dup_forward(union olsr_ip_addr *originator,
   return 1;
 }
 
-
-
-
-
-
-
 void
-olsr_print_duplicate_table()
+olsr_print_duplicate_table(void)
 {
   int i;
 
@@ -370,6 +364,6 @@ olsr_print_duplicate_table()
 	  tmp_dup_table = tmp_dup_table->next;
 	}
     }
-printf("\n");
+  printf("\n");
 
 }

@@ -2,6 +2,7 @@
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
  * Copyright (c) 2003, Andreas Tønnesen (andreto@olsr.org)
  *               2004, Thomas Lopatic (thomas@lopatic.de)
+ *               2006, for some fixups, sven-ola(gmx.de)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -37,7 +38,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: lq_packet.c,v 1.19 2005/11/17 01:58:51 tlopatic Exp $
+ * $Id: lq_packet.c,v 1.23 2007/02/10 17:36:51 bernd67 Exp $
  */
 
 #include "olsr_protocol.h"
@@ -53,6 +54,7 @@
 #include "two_hop_neighbor_table.h"
 #include "hysteresis.h"
 #include "olsr.h"
+#include "build_msg.h"
 
 olsr_bool lq_tc_pending = OLSR_FALSE;
 
@@ -70,7 +72,7 @@ create_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
   lq_hello->comm.vtime = ME_TO_DOUBLE(outif->valtimes.hello);
   lq_hello->comm.size = 0;
 
-  COPY_IP(&lq_hello->comm.orig, &main_addr);
+  COPY_IP(&lq_hello->comm.orig, &olsr_cnf->main_addr);
 
   lq_hello->comm.ttl = 1;
   lq_hello->comm.hops = 0;
@@ -149,8 +151,7 @@ create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
   int i;
   struct neighbor_entry *walker;
   struct link_entry *link;
-  static int ttl_list[] = { MAX_TTL, 3, 2, 1, 2, 1, 1, 3, 2, 1, 2, 1, 1, 0 };
-  static int ttl_index = 0;
+  static int ttl_list[] = { 1, 2, 1, 4, 1, 2, 1, 8, 1, 2, 1, 4, 1, 2, 1, MAX_TTL-1, 0};
 
   // remember that we have generated an LQ TC message; this is
   // checked in net_output()
@@ -163,14 +164,18 @@ create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
   lq_tc->comm.vtime = ME_TO_DOUBLE(outif->valtimes.tc);
   lq_tc->comm.size = 0;
 
-  COPY_IP(&lq_tc->comm.orig, &main_addr);
+  COPY_IP(&lq_tc->comm.orig, &olsr_cnf->main_addr);
 
   if (olsr_cnf->lq_fish > 0)
   {
-    if (ttl_list[ttl_index] == 0)
-      ttl_index = 0;
-
-    lq_tc->comm.ttl = ttl_list[ttl_index++];
+    // Sven-Ola: Too lazy to find the different iface inits. This will do it too.
+    if (outif->ttl_index >= (int)(sizeof(ttl_list) / sizeof(ttl_list[0])))
+      outif->ttl_index = 0;
+    
+    if (ttl_list[outif->ttl_index] == 0)
+      outif->ttl_index = 0;
+  
+    lq_tc->comm.ttl = ttl_list[outif->ttl_index++];
 
     OLSR_PRINTF(3, "Creating LQ TC with TTL %d.\n", lq_tc->comm.ttl);
   }
@@ -181,7 +186,7 @@ create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
   lq_tc->comm.hops = 0;
   lq_tc->comm.seqno = get_msg_seqno();
 
-  COPY_IP(&lq_tc->from, &main_addr);
+  COPY_IP(&lq_tc->from, &olsr_cnf->main_addr);
 
   lq_tc->ansn = get_local_ansn();
 
@@ -223,8 +228,10 @@ create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
 
           link = get_best_link_to_neighbor(&neigh->main);
 
-          neigh->link_quality = link->loss_link_quality;
-          neigh->neigh_link_quality = link->neigh_link_quality;
+          if (link) {
+            neigh->link_quality = link->loss_link_quality;
+            neigh->neigh_link_quality = link->neigh_link_quality;
+          }
 
           // queue the neighbour entry
 
@@ -340,7 +347,7 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
 
   // force signed comparison
 
-  if (rem < (int)(sizeof (struct lq_hello_info_header) + ipsize + 4))
+  if (rem < (int)(sizeof (struct lq_hello_info_header) + olsr_cnf->ipsize + 4))
   {
     net_output(outif);
 
@@ -370,7 +377,7 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
               // we need space for an IP address plus link quality
               // information
 
-              req = ipsize + 4;
+              req = olsr_cnf->ipsize + 4;
 
               // no, we also need space for an info header, as this is the
               // first neighbor with the current neighor type and link type
@@ -425,7 +432,7 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
               // add the current neighbor's IP address
 
               COPY_IP(buff + size, &neigh->addr);
-              size += ipsize;
+              size += olsr_cnf->ipsize;
 
               // add the corresponding link quality
 
@@ -500,7 +507,7 @@ serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
 
   // force signed comparison
 
-  if (rem < (int)(ipsize + 4))
+  if (rem < (int)(olsr_cnf->ipsize + 4))
   {
     net_output(outif);
 
@@ -516,7 +523,7 @@ serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
 
       // force signed comparison
 
-      if ((int)(size + ipsize + 4) > rem)
+      if ((int)(size + olsr_cnf->ipsize + 4) > rem)
         {
           // finalize the OLSR header
 
@@ -539,7 +546,7 @@ serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
       // add the current neighbor's IP address
 
       COPY_IP(buff + size, &neigh->main);
-      size += ipsize;
+      size += olsr_cnf->ipsize;
 
       // add the corresponding link quality
 
@@ -644,7 +651,7 @@ deserialize_lq_hello(struct lq_hello_message *lq_hello, void *ser)
                               "LQ_HELLO deserialization");
 
           COPY_IP(&neigh->addr, curr);
-          curr += ipsize;
+          curr += olsr_cnf->ipsize;
 
           neigh->link_quality = (double)*curr++ / 255.0;
           neigh->neigh_link_quality = (double)*curr++ / 255.0;
@@ -702,7 +709,7 @@ deserialize_lq_tc(struct lq_tc_message *lq_tc, void *ser,
                           "LQ_TC deserialization");
 
       COPY_IP(&neigh->main, curr);
-      curr += ipsize;
+      curr += olsr_cnf->ipsize;
 
       neigh->link_quality = (double)*curr++ / 255.0;
       neigh->neigh_link_quality = (double)*curr++ / 255.0;
@@ -764,7 +771,7 @@ olsr_output_lq_tc(void *para)
     {
       // initialize timer
 
-      send_empty_tc = GET_TIMESTAMP((max_tc_vtime * 3) * 1000);
+      set_empty_tc_timer(GET_TIMESTAMP((olsr_cnf->max_tc_vtime * 3) * 1000));
 
       prev_empty = 1;
 
@@ -775,14 +782,14 @@ olsr_output_lq_tc(void *para)
 
   // c) this is not the first empty message, send if timer hasn't fired
 
-  else if (!TIMED_OUT(send_empty_tc))
+  else if (!TIMED_OUT(get_empty_tc_timer()))
     serialize_lq_tc(&lq_tc, outif);
 
   // destroy internal format
 
   destroy_lq_tc(&lq_tc);
 
-  if(net_output_pending(outif) && TIMED_OUT(fwdtimer[outif->if_nr]))
+  if(net_output_pending(outif) && TIMED_OUT(outif->fwdtimer))
     set_buffer_timer(outif);
 }
 
@@ -794,7 +801,7 @@ process_lq_hello(struct lq_hello_message *lq_hello, struct interface *inif,
   struct lq_hello_neighbor *neigh;
   struct hello_neighbor *new_neigh;
 
-  // SVEN_OLA: Check the message source addr
+  // Sven-Ola: Check the message source addr
   if(!olsr_validate_address(&lq_hello->comm.orig))
     {
       return;
@@ -820,7 +827,7 @@ process_lq_hello(struct lq_hello_message *lq_hello, struct interface *inif,
 
   for (neigh = lq_hello->neigh; neigh != NULL; neigh = neigh->next)
     {
-      // SVEN_OLA: Also check the neighbours
+      // Sven-Ola: Also check the neighbours
       if(!olsr_validate_address(&neigh->addr)) continue;
       
       // allocate HELLO neighbour
@@ -854,7 +861,7 @@ process_lq_tc(struct lq_tc_message *lq_tc, struct interface *inif,
   struct lq_tc_neighbor *neigh;
   struct tc_mpr_addr *new_neigh;
 
-  // SVEN_OLA: Check the message source addr
+  // Sven-Ola: Check the message source addr
   if(!olsr_validate_address(&lq_tc->from)||!olsr_validate_address(&lq_tc->comm.orig))
     {
       return;
@@ -880,7 +887,7 @@ process_lq_tc(struct lq_tc_message *lq_tc, struct interface *inif,
 
   for (neigh = lq_tc->neigh; neigh != NULL; neigh = neigh->next)
     {
-      // SVEN_OLA: Also check the neighbours
+      // Sven-Ola: Also check the neighbours
       if(!olsr_validate_address(&neigh->main)) continue;
       
       // allocate TC neighbour

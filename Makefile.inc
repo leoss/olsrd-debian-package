@@ -1,27 +1,54 @@
 # programs
-CC ?= 		gcc
+CCACHE ?=       $(shell sh -c "type -path ccache")
+ifeq ($(origin CC),default)
+CC = 		$(CCACHE) gcc
+else
+CC ?= 		$(CCACHE) gcc
+endif
 STRIP ?=	strip
 BISON ?=	bison
 FLEX ?=		flex
 TAGCMD ?=	etags
 
 # target directories and names
-#INSTALL_PREFIX = 
-SBINDIR = $(INSTALL_PREFIX)/usr/sbin
-ETCDIR = $(INSTALL_PREFIX)/etc
-LIBDIR = $(INSTALL_PREFIX)/usr/lib
-DOCDIR = $(INSTALL_PREFIX)/usr/share/doc
-MANDIR = $(INSTALL_PREFIX)/usr/share/man
-CFGFILE = $(ETCDIR)/olsrd.conf
-EXENAME = olsrd
+DESTDIR ?=
+SBINDIR ?= $(DESTDIR)/usr/sbin
+ETCDIR  ?= $(DESTDIR)/etc
+LIBDIR  ?= $(DESTDIR)/usr/lib
+DOCDIR  ?= $(DESTDIR)/usr/share/doc
+MANDIR  ?= $(DESTDIR)/usr/share/man
+CFGFILE ?= $(ETCDIR)/olsrd.conf
+EXENAME ?= olsrd
 
 INCLUDES =	-Isrc -I$(TOPDIR)/src 
 
 # add gcc warnings and optimizations if CFLAGS not set
 ifndef CFLAGS
-CFLAGS +=	-Wall -Wmissing-prototypes -Wstrict-prototypes \
-		-Wmissing-declarations -Wsign-compare
-CFLAGS +=	-O2 -g
+ifndef WARNINGS
+WARNINGS +=	-Wall
+WARNINGS +=	-Wextra
+WARNINGS +=	-Wold-style-definition
+WARNINGS +=	-Wdeclaration-after-statement
+WARNINGS +=	-Wmissing-prototypes
+WARNINGS +=	-Wstrict-prototypes
+WARNINGS +=	-Wmissing-declarations
+WARNINGS +=	-Wsign-compare
+WARNINGS +=	-Waggregate-return
+WARNINGS +=	-Wmissing-noreturn
+WARNINGS +=	-Wmissing-format-attribute
+WARNINGS +=	-Wno-multichar
+WARNINGS +=	-Wno-deprecated-declarations
+#WARNINGS +=	-Wredundant-decls
+WARNINGS +=	-Wnested-externs
+#WARNINGS +=	-Wunreachable-code
+WARNINGS +=	-Winline
+WARNINGS +=	-Wdisabled-optimization
+#WARNINGS +=	-Werror
+WARNINGS :=	$(shell CC="$(CC)" $(TOPDIR)/gcc-warnings $(WARNINGS))
+endif
+CFLAGS +=	$(WARNINGS)
+CFLAGS +=	-O2
+CFLAGS +=	-g
 endif
 
 ifdef OLSRD_PLUGIN
@@ -34,6 +61,9 @@ else
 LDFLAGS +=	-Wl,-export-dynamic 
 endif
 
+# options to save space on small systems
+DEFINES +=      -DSUPPORT_OLD_PLUGIN_VERSIONS=1
+
 # search sources and headers in current dir and in src/
 SRCS =		$(wildcard src/*.c)
 SRCS +=		$(wildcard *.c)
@@ -43,7 +73,12 @@ HDRS +=		$(wildcard *.h)
 all: default_target
 
 # OS detection
-OS =		$(shell sh $(TOPDIR)/make/guess_os.sh)
+ifeq ($(OS),Windows_NT)
+OS = win32
+endif
+ifeq ($(OS),)
+OS :=		$(shell sh $(TOPDIR)/make/guess_os.sh)
+endif
 ifeq ($(OS),UNKNOWN)
 all: help
 else
@@ -94,6 +129,10 @@ help:
 	@echo ' be a good idea :-) Have fun!       '
 	@echo '************************************'
 	@echo
-	
+
 # include dependencies
 -include $(SRCS:%.c=%.d)
+
+# Local Variables:
+# mode: makefile
+# End:

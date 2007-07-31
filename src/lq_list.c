@@ -1,6 +1,7 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
  * Copyright (c) 2004, Thomas Lopatic (thomas@lopatic.de)
+ * IPv4 performance optimization (c) 2006, sven-ola(gmx.de)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +37,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: lq_list.c,v 1.3 2004/12/04 17:06:57 tlopatic Exp $
+ * $Id: lq_list.c,v 1.5 2007/02/10 17:36:51 bernd67 Exp $
  */
 
 #include <stdlib.h>
@@ -46,26 +47,6 @@ void list_init(struct list *list)
 {
   list->head = NULL;
   list->tail = NULL;
-}
-
-struct list_node *list_get_head(struct list *list)
-{
-  return list->head;
-}
-
-struct list_node *list_get_tail(struct list *list)
-{
-  return list->tail;
-}
-
-struct list_node *list_get_next(struct list_node *node)
-{
-  return node->next;
-}
-
-struct list_node *list_get_prev(struct list_node *node)
-{
-  return node->prev;
 }
 
 void list_add_head(struct list *list, struct list_node *node)

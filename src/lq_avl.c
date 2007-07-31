@@ -1,6 +1,7 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
  * Copyright (c) 2004, Thomas Lopatic (thomas@lopatic.de)
+ * IPv4 performance optimization (c) 2006, sven-ola(gmx.de)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,15 +37,34 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: lq_avl.c,v 1.1 2005/01/22 14:30:57 tlopatic Exp $
+ * $Id: lq_avl.c,v 1.10 2007/07/05 22:43:46 bernd67 Exp $
  */
 
 #include <stddef.h>
+#include <time.h>
+#include <string.h>
 
 #include "lq_avl.h"
 
 #define AVLMAX(x, y) ((x > y) ? x : y)
 #define AVLMIN(x, y) ((x < y) ? x : y)
+
+/*
+ * dummy comparison pointer
+ * set to zero for a fast inline ipv4 comparison
+ */
+int (*avl_comp_default)(void *, void *) = 0;
+
+int avl_comp_ipv4(void *ip1, void *ip2)
+{
+    return(*(unsigned int *)ip1 == *(unsigned int *)ip2 ? 0 : \
+           *(unsigned int *)ip1 < *(unsigned int *)ip2 ? -1 : +1);
+}
+
+int avl_comp_ipv6(void *ip1, void *ip2)
+{
+  return memcmp(ip1, ip2, 16);
+}
 
 void avl_init(struct avl_tree *tree, int (*comp)(void *, void *))
 {
@@ -52,10 +72,30 @@ void avl_init(struct avl_tree *tree, int (*comp)(void *, void *))
   tree->comp = comp;
 }
 
+static struct avl_node *avl_find_rec_ipv4(struct avl_node *node, void *key)
+{
+  if (*(unsigned int *)key < *(unsigned int *)node->key)
+  {
+    if (node->left != NULL)
+      return avl_find_rec_ipv4(node->left, key);
+  }
+
+  else if (*(unsigned int *)key > *(unsigned int *)node->key)
+  {
+    if (node->right != NULL)
+      return avl_find_rec_ipv4(node->right, key);
+  }
+
+  return node;
+}
+
 static struct avl_node *avl_find_rec(struct avl_node *node, void *key,
                                      int (*comp)(void *, void *))
 {
   int diff;
+
+  if (0 == comp)
+    return avl_find_rec_ipv4(node, key);
 
   diff = (*comp)(key, node->key);
 
@@ -87,13 +127,22 @@ struct avl_node *avl_find(struct avl_tree *tree, void *key)
 
   node = avl_find_rec(tree->root, key, tree->comp);
 
-  if ((*tree->comp)(node->key, key) != 0)
-    return NULL;
+  if (0 == tree->comp)
+  {
+    if (0 != inline_avl_comp_ipv4(node->key, key))
+      return NULL;
+  }
+
+  else
+  {
+    if ((*tree->comp)(node->key, key) != 0)
+      return NULL;
+  }
 
   return node;
 }
 
-static void rotate_right(struct avl_tree *tree, struct avl_node *node)
+static void avl_rotate_right(struct avl_tree *tree, struct avl_node *node)
 {
   struct avl_node *left, *parent;
 
@@ -125,7 +174,7 @@ static void rotate_right(struct avl_tree *tree, struct avl_node *node)
   left->balance += 1 + AVLMAX(node->balance, 0);
 }
 
-static void rotate_left(struct avl_tree *tree, struct avl_node *node)
+static void avl_rotate_left(struct avl_tree *tree, struct avl_node *node)
 {
   struct avl_node *right, *parent;
 
@@ -179,12 +228,12 @@ static void post_insert(struct avl_tree *tree, struct avl_node *node)
 
     if (node->balance == -1)
     {
-      rotate_right(tree, parent);
+      avl_rotate_right(tree, parent);
       return;
     }
 
-    rotate_left(tree, node);
-    rotate_right(tree, node->parent->parent);
+    avl_rotate_left(tree, node);
+    avl_rotate_right(tree, node->parent->parent);
     return;
   }
 
@@ -201,40 +250,97 @@ static void post_insert(struct avl_tree *tree, struct avl_node *node)
 
   if (node->balance == 1)
   {
-    rotate_left(tree, parent);
+    avl_rotate_left(tree, parent);
     return;
   }
 
-  rotate_right(tree, node);
-  rotate_left(tree, node->parent->parent);
+  avl_rotate_right(tree, node);
+  avl_rotate_left(tree, node->parent->parent);
   return;
 }
 
-int avl_insert(struct avl_tree *tree, struct avl_node *new)
+static void avl_insert_before(struct avl_node *pos_node, struct avl_node *node)
+{
+  if (pos_node->prev != NULL)
+    pos_node->prev->next = node;
+
+  node->prev = pos_node->prev;
+  node->next = pos_node;
+
+  pos_node->prev = node;
+}
+
+static void avl_insert_after(struct avl_node *pos_node, struct avl_node *node)
+{
+  if (pos_node->next != NULL)
+    pos_node->next->prev = node;
+
+  node->prev = pos_node;
+  node->next = pos_node->next;
+
+  pos_node->next = node;
+}
+
+static void avl_remove(struct avl_node *node)
+{
+  if (node->prev != NULL)
+    node->prev->next = node->next;
+
+  if (node->next != NULL)
+    node->next->prev = node->prev;
+}
+
+int avl_insert(struct avl_tree *tree, struct avl_node *new, int allow_duplicates)
 {
   struct avl_node *node;
+  struct avl_node *last;
   int diff;
 
-  new->balance = 0;
+  new->parent = NULL;
+
   new->left = NULL;
   new->right = NULL;
 
+  new->next = NULL;
+  new->prev = NULL;
+
+  new->balance = 0;
+  new->leader = 1;
+
   if (tree->root == NULL)
   {
-    new->parent = NULL;
     tree->root = new;
     return 0;
   }
 
   node = avl_find_rec(tree->root, new->key, tree->comp);
 
-  diff = (*tree->comp)(new->key, node->key);
+  last = node;
+
+  while (last->next != NULL && last->next->leader == 0)
+    last = last->next;
+
+  if (0 == tree->comp)
+    diff = inline_avl_comp_ipv4(new->key, node->key);
+
+  else
+    diff = (*tree->comp)(new->key, node->key);
 
   if (diff == 0)
-    return -1;
+  {
+    if (allow_duplicates == 0)
+      return -1;
+
+    new->leader = 0;
+
+    avl_insert_after(last, new);
+    return 0;
+  }
 
   if (node->balance == 1)
   {
+    avl_insert_before(node, new);
+
     node->balance = 0;
     new->parent = node;
     node->left = new;
@@ -243,6 +349,8 @@ int avl_insert(struct avl_tree *tree, struct avl_node *new)
   
   if (node->balance == -1)
   {
+    avl_insert_after(last, new);
+
     node->balance = 0;
     new->parent = node;
     node->right = new;
@@ -251,6 +359,8 @@ int avl_insert(struct avl_tree *tree, struct avl_node *new)
 
   if (diff < 0)
   {
+    avl_insert_before(node, new);
+
     node->balance = -1;
     new->parent = node;
     node->left = new;
@@ -258,9 +368,334 @@ int avl_insert(struct avl_tree *tree, struct avl_node *new)
     return 0;
   }
 
+  avl_insert_after(last, new);
+
   node->balance = 1;
   new->parent = node;
   node->right = new;
   post_insert(tree, node);
   return 0;
 }
+
+static void avl_post_delete(struct avl_tree *tree, struct avl_node *node)
+{
+  struct avl_node *parent;
+
+  if ((parent = node->parent) == NULL)
+    return;
+
+  if (node == parent->left)
+  {
+    parent->balance++;
+
+    if (parent->balance == 0)
+    {
+      avl_post_delete(tree, parent);
+      return;
+    }
+    
+    if (parent->balance == 1)
+      return;
+
+    if (parent->right->balance == 0)
+    {
+      avl_rotate_left(tree, parent);
+      return;
+    }
+
+    if (parent->right->balance == 1)
+    {
+      avl_rotate_left(tree, parent);
+      avl_post_delete(tree, parent->parent);
+      return;
+    }
+
+    avl_rotate_right(tree, parent->right);
+    avl_rotate_left(tree, parent);
+    avl_post_delete(tree, parent->parent);
+    return;
+  }
+
+  parent->balance--;
+
+  if (parent->balance == 0)
+  {
+    avl_post_delete(tree, parent);
+    return;
+  }
+    
+  if (parent->balance == -1)
+    return;
+
+  if (parent->left->balance == 0)
+  {
+    avl_rotate_right(tree, parent);
+    return;
+  }
+
+  if (parent->left->balance == -1)
+  {
+    avl_rotate_right(tree, parent);
+    avl_post_delete(tree, parent->parent);
+    return;
+  }
+
+  avl_rotate_left(tree, parent->left);
+  avl_rotate_right(tree, parent);
+  avl_post_delete(tree, parent->parent);
+}
+
+static struct avl_node *avl_local_min(struct avl_node *node)
+{
+  while (node->left != NULL)
+    node = node->left;
+
+  return node;
+}
+
+static struct avl_node *avl_local_max(struct avl_node *node)
+{
+  while (node->right != NULL)
+    node = node->right;
+
+  return node;
+}
+
+static void avl_delete_worker(struct avl_tree *tree, struct avl_node *node)
+{
+  struct avl_node *parent, *min;
+
+  parent = node->parent;
+
+  if (node->left == NULL && node->right == NULL)
+  {
+    if (parent == NULL)
+    {
+      tree->root = NULL;
+      return;
+    }
+
+    if (parent->left == node)
+    {
+      parent->left = NULL;
+      parent->balance++;
+
+      if (parent->balance == 1)
+        return;
+
+      if (parent->balance == 0)
+      {
+        avl_post_delete(tree, parent);
+        return;
+      }
+
+      if (parent->right->balance == 0)
+      {
+        avl_rotate_left(tree, parent);
+        return;
+      }
+      
+      if (parent->right->balance == 1)
+      {
+        avl_rotate_left(tree, parent);
+        avl_post_delete(tree, parent->parent);
+        return;
+      }
+
+      avl_rotate_right(tree, parent->right);
+      avl_rotate_left(tree, parent);
+      avl_post_delete(tree, parent->parent);
+      return;
+    }
+
+    if (parent->right == node)
+    {
+      parent->right = NULL;
+      parent->balance--;
+
+      if (parent->balance == -1)
+        return;
+
+      if (parent->balance == 0)
+      {
+        avl_post_delete(tree, parent);
+        return;
+      }
+
+      if (parent->left->balance == 0)
+      {
+        avl_rotate_right(tree, parent);
+        return;
+      }
+      
+      if (parent->left->balance == -1)
+      {
+        avl_rotate_right(tree, parent);
+        avl_post_delete(tree, parent->parent);
+        return;
+      }
+
+      avl_rotate_left(tree, parent->left);
+      avl_rotate_right(tree, parent);
+      avl_post_delete(tree, parent->parent);
+      return;
+    }
+  }
+
+  if (node->left == NULL)
+  {
+    if (parent == NULL)
+    {
+      tree->root = node->right;
+      node->right->parent = NULL;
+      return;
+    }
+
+    node->right->parent = parent;
+
+    if (parent->left == node)
+      parent->left = node->right;
+    
+    else
+      parent->right = node->right;
+
+    avl_post_delete(tree, node->right);
+    return;
+  }
+
+  if (node->right == NULL)
+  {
+    if (parent == NULL)
+    {
+      tree->root = node->left;
+      node->left->parent = NULL;
+      return;
+    }
+
+    node->left->parent = parent;
+
+    if (parent->left == node)
+      parent->left = node->left;
+
+    else
+      parent->right = node->left;
+
+    avl_post_delete(tree, node->left);
+    return;
+  }
+
+  min = avl_local_min(node->right);
+  avl_delete_worker(tree, min);
+  parent = node->parent;
+
+  min->balance = node->balance;
+  min->parent = parent;
+  min->left = node->left;
+  min->right = node->right;
+
+  if (min->left != NULL)
+    min->left->parent = min;
+
+  if (min->right != NULL)
+    min->right->parent = min;
+    
+  if (parent == NULL)
+  {
+    tree->root = min;
+    return;
+  }
+
+  if (parent->left == node)
+  {
+    parent->left = min;
+    return;
+  }
+
+  parent->right = min;
+}
+
+void avl_delete(struct avl_tree *tree, struct avl_node *node)
+{
+  struct avl_node *next;
+  struct avl_node *parent;
+  struct avl_node *left;
+  struct avl_node *right;
+
+  if (node->leader != 0)
+  {
+    next = node->next;
+
+    if (next != NULL && next->leader == 0)
+    {
+      next->leader = 1;
+      next->balance = node->balance;
+
+      parent = node->parent;
+      left = node->left;
+      right = node->right;
+
+      next->parent = parent;
+      next->left = left;
+      next->right = right;
+
+      if (parent == NULL)
+        tree->root = next;
+
+      else
+      {
+        if (node == parent->left)
+          parent->left = next;
+
+        else
+          parent->right = next;
+      }
+
+      if (left != NULL)
+        left->parent = next;
+
+      if (right != NULL)
+        right->parent = next;
+    }
+
+    else
+      avl_delete_worker(tree, node);
+  }
+
+  avl_remove(node);
+}
+
+struct avl_node *avl_walk_first(struct avl_tree *tree)
+{
+  struct avl_node *node = tree->root;
+
+  if (node == NULL)
+    return NULL;
+
+  return avl_local_min(node);
+}
+
+struct avl_node *avl_walk_last(struct avl_tree *tree)
+{
+  struct avl_node *node = tree->root;
+
+  if (node == NULL)
+    return NULL;
+
+  return avl_local_max(node);
+}
+
+struct avl_node *avl_walk_next(struct avl_node *node)
+{
+  return node->next;
+}
+
+struct avl_node *avl_walk_prev(struct avl_node *node)
+{
+  return node->prev;
+}
+
+/*
+ * Local Variables:
+ * c-basic-offset: 2
+ * End:
+ */

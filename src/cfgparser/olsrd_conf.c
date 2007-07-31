@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: olsrd_conf.c,v 1.46 2005/11/17 04:25:44 tlopatic Exp $
+ * $Id: olsrd_conf.c,v 1.54 2007/05/13 22:23:55 bernd67 Exp $
  */
 
 
@@ -103,14 +103,14 @@ olsrd_parse_cnf(const char *filename)
   struct olsr_if *in, *new_ifqueue, *in_tmp;
 
   /* Stop the compiler from complaining */
-  strlen(copyright_string);
+  (void)strlen(copyright_string);
 
   cnf = malloc(sizeof(struct olsrd_config));
   if (cnf == NULL)
     {
       fprintf(stderr, "Out of memory %s\n", __func__);
       return NULL;
-  }
+    }
 
   set_default_cnf(cnf);
 
@@ -124,7 +124,7 @@ olsrd_parse_cnf(const char *filename)
 	      filename, strerror(errno));
       free(cnf);
       return NULL;
-  }
+    }
 
   current_line = 1;
 
@@ -157,7 +157,6 @@ olsrd_parse_cnf(const char *filename)
   while(in)
     {
       /* set various stuff */
-      in->index = cnf->ifcnt++;
       in->configured = OLSR_FALSE;
       in->interf = NULL;
       in->host_emul = OLSR_FALSE;
@@ -243,6 +242,15 @@ olsrd_sanity_check_cnf(struct olsrd_config *cnf)
      cnf->pollrate > MAX_POLLRATE)
     {
       fprintf(stderr, "Pollrate %0.2f is not allowed\n", cnf->pollrate);
+      return -1;
+    }
+
+  /* NIC Changes Pollrate */
+
+  if(cnf->nic_chgs_pollrate < MIN_NICCHGPOLLRT ||
+     cnf->nic_chgs_pollrate > MAX_NICCHGPOLLRT)
+    {
+      fprintf(stderr, "NIC Changes Pollrate %0.2f is not allowed\n", cnf->nic_chgs_pollrate);
       return -1;
     }
 
@@ -410,14 +418,14 @@ olsrd_free_cnf(struct olsrd_config *cnf)
 
 
 struct olsrd_config *
-olsrd_get_default_cnf()
+olsrd_get_default_cnf(void)
 {
   cnf = malloc(sizeof(struct olsrd_config));
   if (cnf == NULL)
     {
       fprintf(stderr, "Out of memory %s\n", __func__);
       return NULL;
-  }
+    }
 
   set_default_cnf(cnf);
 
@@ -448,6 +456,7 @@ set_default_cnf(struct olsrd_config *cnf)
     cnf->hysteresis_param.thr_low = HYST_THRESHOLD_LOW;
 
     cnf->pollrate = DEF_POLLRATE;
+    cnf->nic_chgs_pollrate = DEF_NICCHGPOLLRT;
 
     cnf->tc_redundancy = TC_REDUNDANCY;
     cnf->mpr_coverage = MPR_COVERAGE;
@@ -457,33 +466,39 @@ set_default_cnf(struct olsrd_config *cnf)
     cnf->lq_dinter = DEF_LQ_DIJK_INTER;
     cnf->lq_wsize = DEF_LQ_WSIZE;
     cnf->clear_screen = DEF_CLEAR_SCREEN;
+
+    cnf->del_gws = OLSR_FALSE;
+    cnf->will_int = 10 * HELLO_INTERVAL;
+    cnf->max_jitter = 0.0;
+    cnf->exit_value = EXIT_SUCCESS;
+    cnf->max_tc_vtime = 0.0;
+    cnf->ioctl_s = 0;
+    cnf->rts = 0;
 }
 
 
 
 
 struct if_config_options *
-get_default_if_config()
+get_default_if_config(void)
 {
   struct if_config_options *io = malloc(sizeof(struct if_config_options));
   struct in6_addr in6;
- 
+
+  if(io == NULL)
+    {
+      fprintf(stderr, "Out of memory %s\n", __func__);
+      return NULL;
+    }
+
   memset(io, 0, sizeof(struct if_config_options));
 
   io->ipv6_addrtype = 1; /* XXX - FixMe */
 
-  if(inet_pton(AF_INET6, OLSR_IPV6_MCAST_SITE_LOCAL, &in6) < 0)
-    {
-      fprintf(stderr, "Failed converting IP address %s\n", OLSR_IPV6_MCAST_SITE_LOCAL);
-      return NULL;
-    }
+  inet_pton(AF_INET6, OLSR_IPV6_MCAST_SITE_LOCAL, &in6);
   memcpy(&io->ipv6_multi_site.v6, &in6, sizeof(struct in6_addr));
 
-  if(inet_pton(AF_INET6, OLSR_IPV6_MCAST_GLOBAL, &in6) < 0)
-    {
-      fprintf(stderr, "Failed converting IP address %s\n", OLSR_IPV6_MCAST_GLOBAL);
-      return NULL;
-    }
+  inet_pton(AF_INET6, OLSR_IPV6_MCAST_GLOBAL, &in6);
   memcpy(&io->ipv6_multi_glbl.v6, &in6, sizeof(struct in6_addr));
 
   io->lq_mult = NULL;
@@ -501,6 +516,7 @@ get_default_if_config()
   io->mid_params.validity_time = MID_HOLD_TIME;
   io->hna_params.emission_interval = HNA_INTERVAL;
   io->hna_params.validity_time = HNA_HOLD_TIME;
+  io->autodetect_chg = OLSR_TRUE;
 
   return io;
 
@@ -559,6 +575,8 @@ olsrd_print_cnf(struct olsrd_config *cnf)
 
   printf("Pollrate         : %0.2f\n", cnf->pollrate);
 
+  printf("NIC ChangPollrate: %0.2f\n", cnf->nic_chgs_pollrate);
+
   printf("TC redundancy    : %d\n", cnf->tc_redundancy);
 
   printf("MPR coverage     : %d\n", cnf->mpr_coverage);
@@ -611,7 +629,9 @@ olsrd_print_cnf(struct olsrd_config *cnf)
             printf("\tLinkQualityMult          : %s %0.2f\n",
                    ipv6_buf, mult->val);
           }
-	  
+
+          printf("\tAutodetetc changes       : %s\n", in->cnf->autodetect_chg ? "yes" : "no");
+
 	  in = in->next;
 	}
     }
@@ -710,6 +730,4 @@ void win32_stdio_hack(unsigned int handle)
   // setbuf(stdout, NULL);
   setbuf(stderr, NULL);
 }
-#else
-void win32_stdio_hack(unsigned int handle) {}
 #endif

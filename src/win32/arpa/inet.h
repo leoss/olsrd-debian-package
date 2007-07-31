@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: inet.h,v 1.6 2004/11/21 01:21:10 tlopatic Exp $
+ * $Id: inet.h,v 1.8 2007/07/15 21:09:38 bernd67 Exp $
  */
 
 #if !defined TL_ARPA_INET_H_INCLUDED
@@ -48,8 +48,8 @@
 #include <ws2tcpip.h>
 #undef interface
 
-int inet_aton(char *cp, struct in_addr *addr);
-int inet_pton(int af, char *src, void *dst);
-char *inet_ntop(int af, void *src, char *dst, int size);
+int inet_aton(const char *cp, struct in_addr *addr);
+int inet_pton(int af, const char *src, void *dst);
+char *inet_ntop(int af, const void *src, char *dst, int size);
 
 #endif

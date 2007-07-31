@@ -1,0 +1,5 @@
+- upstream README says 0.5.1 
+- check config file
+- fix remaining bugs in bts
+- upstream CVS-HEAD has some more bugfixes, waiting for 0.5.3 :)
+- confirm that init-script still needs killall instead of start-stop-daemon

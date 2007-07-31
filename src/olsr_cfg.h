@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: olsr_cfg.h,v 1.27 2005/11/17 04:25:44 tlopatic Exp $
+ * $Id: olsr_cfg.h,v 1.31 2007/05/13 22:23:55 bernd67 Exp $
  */
 
 
@@ -47,13 +47,14 @@
 
 /* Default valuse not declared in olsr_protocol.h */
 #define DEF_POLLRATE        0.05
+#define DEF_NICCHGPOLLRT    2.5
 #define DEF_WILL_AUTO       OLSR_TRUE
 #define DEF_ALLOW_NO_INTS   OLSR_TRUE
 #define DEF_TOS             16
 #define DEF_DEBUGLVL        1
 #define DEF_IPC_CONNECTIONS 0
-#define DEF_USE_HYST        OLSR_TRUE
-#define DEF_LQ_LEVEL        0
+#define DEF_USE_HYST        OLSR_FALSE
+#define DEF_LQ_LEVEL        2
 #define DEF_LQ_FISH         0
 #define DEF_LQ_DIJK_LIMIT   255
 #define DEF_LQ_DIJK_INTER   0.0
@@ -66,6 +67,8 @@
 
 #define MAX_POLLRATE        10.0
 #define MIN_POLLRATE        0.01
+#define MAX_NICCHGPOLLRT    100.0
+#define MIN_NICCHGPOLLRT    1.0
 #define MAX_DEBUGLVL        9
 #define MIN_DEBUGLVL        0
 #define MAX_TOS             16
@@ -120,6 +123,7 @@ struct if_config_options
   struct olsr_msg_params   mid_params;
   struct olsr_msg_params   hna_params;
   struct olsr_lq_mult      *lq_mult;
+  olsr_bool                autodetect_chg;
 };
 
 
@@ -128,7 +132,6 @@ struct olsr_if
 {
   char                     *name;
   char                     *config;
-  int                      index;
   olsr_bool                configured;
   olsr_bool                host_emul;
   union olsr_ip_addr       hemu_ip;
@@ -204,6 +207,7 @@ struct olsrd_config
   olsr_bool                use_hysteresis;
   struct hyst_param        hysteresis_param;
   float                    pollrate;
+  float                    nic_chgs_pollrate;
   olsr_u8_t                tc_redundancy;
   olsr_u8_t                mpr_coverage;
   olsr_bool                clear_screen;
@@ -218,7 +222,19 @@ struct olsrd_config
   struct ipc_host          *ipc_hosts;
   struct ipc_net           *ipc_nets;
   struct olsr_if           *interfaces;
-  olsr_u16_t               ifcnt;
+
+  /* Stuff set by olsrd */
+  size_t                   ipsize;               /* Size of address */
+  olsr_u16_t               system_tick_divider;  /* Tick resolution */
+  olsr_bool                del_gws;              /* Delete InternetGWs at startup */
+  union olsr_ip_addr       main_addr;            /* Main address of this node */
+  float                    will_int;
+  float                    max_jitter;
+  int                      exit_value; /* Global return value for process termination */
+  float                    max_tc_vtime;
+
+  int                      ioctl_s;              /* Socket used for ioctl calls */
+  int                      rts;                  /* Socket used for route changes on BSDs */
 };
 
 #if defined __cplusplus

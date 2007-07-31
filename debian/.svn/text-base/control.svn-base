@@ -1,0 +1,36 @@
+Source: olsrd
+Section: net
+Priority: extra
+Maintainer: Holger Levsen <debian@layer-acht.org>
+Build-Depends: debhelper (>= 5), quilt
+Standards-Version: 3.7.2
+
+Package: olsrd
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: optimized link-state routing daemon (unik-olsrd)
+ unik-olsrd is an implementation of the Optimized Link State Routing protocol 
+ for Mobile Ad-Hoc networks(MANET). The protocol is described in RFC3626. It 
+ is designed to be run as a standalone server process - but as it is still in 
+ an experimental stage most users will prefer running it with some debug 
+ output which is directed to STDOUT.
+ .
+ OLSR operates as a table driven, proactive protocol, i.e., it exchanges 
+ topology information with other nodes of the network regularly. It is 
+ developed to work independently from other protocols. Likewise, OLSR makes no
+ assumptions about the underlying link-layer.
+
+Package: olsrd-plugins
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, olsrd (= ${binary:Version}), libpthread20 | libpthread2 
+Description: various plugins to enhance olsrd
+ olsrd is an implementation of the Optimized Link State Routing protocol
+ for Mobile Ad-Hoc networks(MANET)
+ .
+ The following plugins are available:
+ .
+  * httpinfo      - tiny webserver for information purposes 
+  * dyn_gw        - dynamically announce uplinks
+  * dot_draw      - generates output (over a TCP socket) in the dot format
+  * secure        - secure OLSR routing with a shared key
+  * nameservice   - announce hostnames and dns servers

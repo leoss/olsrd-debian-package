@@ -2,8 +2,8 @@
 # WINDOWS CE SPECIFIC CONFIGURATION
 #
 
-INSTALL_PREFIX ?=
-LIBDIR =	$(INSTALL_PREFIX)/usr/lib
+DESTDIR ?=
+LIBDIR =	$(DESTDIR)/usr/lib
 
 SRCS +=		$(wildcard src/win32/*.c)
 HDRS +=		$(wildcard src/win32/*.h)
@@ -20,3 +20,7 @@ endif
 
 OS_LIB_PTHREAD =
 OS_LIB_DYNLOAD =
+
+# Local Variables:
+# mode: makefile
+# End:

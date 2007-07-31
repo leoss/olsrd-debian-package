@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: interfaces.h,v 1.30 2005/06/03 08:00:55 kattemat Exp $
+ * $Id: interfaces.h,v 1.40 2007/05/13 22:23:55 bernd67 Exp $
  */
 
 
@@ -45,6 +45,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <time.h>
 
 #include "olsr_types.h"
 
@@ -106,6 +107,18 @@ struct vtimes
   olsr_u8_t hna;
 };
 
+/* Output buffer structure. This should actually be in net_olsr.h but we have circular references then.
+ */
+struct olsr_netbuf
+{
+  olsr_u8_t *buff;     /* Pointer to the allocated buffer */
+  int bufsize;    /* Size of the buffer */
+  int maxsize;    /* Max bytes of payload that can be added to the buffer */
+  int pending;    /* How much data is currently pending in the buffer */
+  int reserved;   /* Plugins can reserve space in buffers */
+};
+
+
 /**
  *A struct containing all necessary information about each
  *interface participating in the OLSD routing
@@ -128,14 +141,28 @@ struct interface
   int	        int_flags;			/* see below */
   char	        *int_name;			/* from kernel if structure */
   int           if_index;                       /* Kernels index of this interface */
-  int           if_nr;                          /* This interfaces index internally*/
   int           is_wireless;                    /* wireless interface or not*/
   olsr_u16_t    olsr_seqnum;                    /* Olsr message seqno */
 
   float         hello_etime;
   struct        vtimes valtimes;
 
+  clock_t       fwdtimer;                       /* Timeout for OLSR forwarding on this if */
+
+  struct olsr_netbuf netbuf;                    /* the buffer to construct the packet data */
+
   struct        if_gen_property *gen_properties;/* Generic interface properties */
+  
+  int           ttl_index; /* index in TTL array for fish-eye */
+
+#ifdef linux
+/* Struct uesd to store original redirect/ingress setting */
+  struct nic_state
+  {
+    char redirect; /* The original state of icmp redirect */
+    char spoof; /* The original state of the IP spoof filter */
+  } nic_state;
+#endif
 
   struct	interface *int_next;
 };
@@ -148,10 +175,6 @@ struct interface
 #define IFCHG_IF_ADD           1
 #define IFCHG_IF_REMOVE        2
 #define IFCHG_IF_UPDATE        3
-
-/* The rate to poll for interface changes at */
-#define IFCHANGES_POLL_INT     2.5
-
 
 /* The interface linked-list */
 extern struct interface *ifnet;
