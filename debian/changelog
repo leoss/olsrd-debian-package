@@ -1,6 +1,13 @@
+olsrd (0.5.3-1) unstable; urgency=low
+
+  * new upstream version (Closes: #404899, #405331)
+  * include bmf, quagga and txtinfo plugins in binary package
+
+ -- Holger Levsen <holger@debian.org>  Sun,  5 Aug 2007 01:49:19 +0200
+
 olsrd (0.5.2-1) unstable; urgency=low
 
-  * new upstream release (Closes: #426580, #404899, #405331)
+  * new upstream release (Closes: #426580)
   * added build-dependency on bison and flex
   * removed dependency on libpthread2 (Closes: #412752)
   * maintainer address updated

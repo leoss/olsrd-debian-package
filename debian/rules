@@ -16,7 +16,7 @@
 #
 # you dont need to edit this file. export PLUGIS=foo ; fakeroot ./debian/rules binary
 # is enough for a rebuild :)
-PLUGINS ?= dyn_gw httpinfo dot_draw nameservice secure
+PLUGINS ?= dyn_gw httpinfo dot_draw nameservice secure txtinfo bmf quagga
 
 
 CFLAGS = -Wall -g
@@ -42,8 +42,7 @@ build-stamp: configure-stamp
 	dh_testdir
 
 	# Add here commands to compile the package.
-	# DEFINES='-DSUPPORT_OLD_PLUGIN_VERSIONS=1' from sven-ola, fixed upstream
-	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd DEFINES='-DSUPPORT_OLD_PLUGIN_VERSIONS=1'
+	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd 
 
 	touch $@
 
@@ -79,6 +78,8 @@ binary-arch: build install
 	dh_testroot
 	dh_installchangelogs 
 	dh_installchangelogs -polsrd CHANGELOG
+	# rename to fit the naming scheme of the other plugin READMEs
+	cp $(CURDIR)/lib/bmf/README_BMF.txt $(CURDIR)/lib/bmf/README_BMF
 	dh_installdocs
 	dh_installinit
 	dh_installman
@@ -90,7 +91,7 @@ binary-arch: build install
 	gunzip $(CURDIR)/debian/olsrd/usr/share/man/man5/olsrd.conf.5.gz
 	gzip --best $(CURDIR)/debian/olsrd/usr/share/man/man5/olsrd.conf.5
 	# compress, but don't compress README_NAMESERVICE, for consistency reasons
-	dh_compress -XREADME_NAMESERVICE  
+	dh_compress -XREADME_NAMESERVICE -XREADME_BMF
 	# install linda+lintian for olsrd-plugins as explained in README.Debian
 	cp $(CURDIR)/debian/olsrd-plugins.lintian $(CURDIR)/debian/olsrd-plugins/usr/share/lintian/overrides/olsrd-plugins
 	cp $(CURDIR)/debian/olsrd-plugins.linda $(CURDIR)/debian/olsrd-plugins/usr/share/linda/overrides/olsrd-plugins

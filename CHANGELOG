@@ -1,10 +1,40 @@
 This file states changes as of version 0.2.4:
-$Id: CHANGELOG,v 1.65 2007/07/17 09:52:01 bernd67 Exp $
+$Id: CHANGELOG,v 1.73 2007/08/02 20:57:21 bernd67 Exp $
+
+0.5.3 ---------------------------------------------------------------------
+
+URGENT BUG FIX
+Ignacio García Pérez <iggarpe@terra.es> found a serious bug in the dot-draw
+plugin and identified it's source.
+
+BUG FIX
+The bmf plugin wanted to kill a not-started thread and this causes a segmentation
+violation. This happens if the old plugin interface support is not compiled in
+and one uses - or more asccurate: wants to use - the bmf plugin which uses that
+ATM. Thanks to Cédric Krier <ced@ced.homedns.org> for reporting this.
+
+DEPENDENCIES FIXED
+The dependencies (*.d files) are now properly generated and used. Nd they also
+dependen on the Makefile in the current directory and the Makefile.inc so that
+changes there also lead to new compilation.
+Remember: We support "ccache" so install it to save lot of meaningless recompiles
+if nothing (as seen by the real C compiler, i.e. after the C preprocessor) has
+changed.
+
+BUILD FIX
+Linux/IA64 and Linux/HPPA also need "-fPIC".
+
+CLEANUPS
+- olsr_switch does no longer generate warnings
+- olsr_switch is also built with "build_all" and cleaned with "uberclean"
+- More "const" all over the place.
+- More "static" for local functions and variables.
+- Killed an unnecessary "static" variable.
 
 0.5.2 ---------------------------------------------------------------------
 
 URGENT BUG FIX
-Sven-Ole Tuecke found a serious bug of the class "show stopper" and sent a patch.
+Sven-Ola Tuecke found a serious bug of the class "show stopper" and sent a patch.
 
 PLUGIN CLEANUP
 Plugins handle parameters quite individually (case-sensitive vs case-insensitive,
@@ -21,7 +51,7 @@ latitude/longitude support is now in the nameservice plugin done by
 Sven-Ola Tuecke <mail2news@commando.de>
 
 added the spf refactoring patch from  Hannes Gredler <hannes@gredler.at> whicht saves
-a noteworthy amount of CPU time. To quite him:
+a noteworthy amount of CPU time. To quote him:
 ----  snip  ----
 1. use of an AVL tree as a min-heap implementation
 

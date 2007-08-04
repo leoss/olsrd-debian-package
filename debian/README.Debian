@@ -42,6 +42,9 @@ explained in detail in /usr/share/doc/olsrd-plugins:
 - dot_draw	- generates output (over a TCP socket) in the dot format
 - secure	- secure OLSR routing with a shared key
 - nameservice	- announce hostnames and dns servers
+- bmf 		- basic multicast forwarding plugin for olsrd
+- quagga	- quagga plugin
+- txtinfo
 
 The following plugins are not included in the olsrd-plugins binary package:
 
@@ -49,8 +52,6 @@ The following plugins are not included in the olsrd-plugins binary package:
 - powerinfo	- displays /proc/apm on 127.0.0.1:8888
 - pgraph	- obsoleted by httpinfo and dot-draw
 - mini		- minimal example plugin, useful as a howto for writing plugins
-- bmf 		- basic multicast forwarding plugin for olsrd
-- quagga	- quagga plugin
 
 If you need them, you can easily build them from the debian source package 
 yourself: define which (additional) plugins you want in debian/rules, and 
