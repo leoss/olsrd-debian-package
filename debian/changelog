@@ -1,3 +1,9 @@
+olsrd (0.5.3-2) unstable; urgency=low
+
+  * improved olsrd.conf settings and made olsrd quite on default
+
+ -- Holger Levsen <holger@debian.org>  Sun, 12 Aug 2007 19:38:19 +0200
+
 olsrd (0.5.3-1) unstable; urgency=low
 
   * new upstream version (Closes: #404899, #405331)
