@@ -65,8 +65,8 @@ install: build
 	dh_installdirs
 
 	# Add here commands to install the package into debian/olsrd.
-	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd install 
-	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd-plugins $(PLUGINS)
+	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd install STRIP=: 
+	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd-plugins $(PLUGINS) STRIP=:
 
 # Build architecture-independent files here.
 binary-indep: build install
