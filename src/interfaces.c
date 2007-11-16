@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: interfaces.c,v 1.32 2007/05/13 22:23:55 bernd67 Exp $
+ * $Id: interfaces.c,v 1.35 2007/10/13 12:09:11 bernd67 Exp $
  */
 
 #include "defs.h"
@@ -226,7 +226,7 @@ run_ifchg_cbs(struct interface *ifp, int flag)
  */
 
 struct interface *
-if_ifwithaddr(union olsr_ip_addr *addr)
+if_ifwithaddr(const union olsr_ip_addr * const addr)
 {
   struct interface *ifp;
 
@@ -306,6 +306,43 @@ if_ifwithname(const char *if_name)
     }
   
   return NULL;
+}
+
+
+/**
+ *Find the interface with a given interface index.
+ *
+ *@param iif_index of the interface to find.
+ *
+ *@return return the interface struct representing the interface
+ *that matched the iif_index.
+ */
+struct interface *
+if_ifwithindex(const int if_index)
+{
+  struct interface *ifp = ifnet;
+  while (ifp) 
+    {
+      if (ifp->if_index == if_index)
+        return ifp;
+      ifp = ifp->int_next;
+    }
+  return NULL;
+}
+
+
+/**
+ *Get an interface name for a given interface index
+ *
+ *@param iif_index of the interface to find.
+ *
+ *@return "" or interface name.
+ */
+const char *
+if_ifwithindex_name(const int if_index)
+{
+  const struct interface * const ifp = if_ifwithindex(if_index);
+  return ifp == NULL ? "void" : ifp->int_name;
 }
 
 

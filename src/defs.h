@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: defs.h,v 1.60 2007/05/02 08:06:28 bernd67 Exp $
+ * $Id: defs.h,v 1.64 2007/10/13 12:31:04 bernd67 Exp $
  */
 
 
@@ -59,8 +59,9 @@
 #include "net_olsr.h" /* IPaddr -> string conversions is used by everyone */
 #include "olsr_cfg.h"
 
-#define SOFTWARE_VERSION	"olsr.org - " VERSION
-#define OLSRD_VERSION_DATE	"       *** " SOFTWARE_VERSION " (" __DATE__ ") ***\n"
+extern const char olsrd_version[];
+extern const char build_date[]; 
+extern const char build_host[];
 
 #ifndef OLSRD_GLOBAL_CONF_FILE
 #define OLSRD_CONF_FILE_NAME	"olsrd.conf"
@@ -72,6 +73,7 @@
 #define UDP_IPV6_HDRSIZE        62
 
 #define MIN_PACKET_SIZE(ver)	((int)(sizeof(olsr_u8_t) * (((ver) == AF_INET) ? 4 : 7)))
+
 /* Debug helper macro */
 #ifdef DEBUG
 #define olsr_debug(lvl, format, args...) do {                           \
@@ -107,15 +109,15 @@ extern FILE *debug_handle;
 /* First "argument" is NOT a pointer! */
 
 #define QUEUE_ELEM(pre, new) do { \
-    pre.next->prev = new;         \
-    new->next = pre.next;         \
-    new->prev = &pre;             \
-    pre.next = new;               \
+    (pre).next->prev = (new);         \
+    (new)->next = (pre).next;         \
+    (new)->prev = &(pre);             \
+    (pre).next = (new);               \
   } while (0)
 
 #define DEQUEUE_ELEM(elem) do { \
-    elem->prev->next = elem->next;     \
-    elem->next->prev = elem->prev;     \
+    (elem)->prev->next = (elem)->next;     \
+    (elem)->next->prev = (elem)->prev;     \
   } while (0)
 
 
@@ -131,6 +133,11 @@ extern struct olsrd_config *olsr_cnf;
 extern clock_t now_times;              /* current idea of times(2) reported uptime */
 extern struct timeval now;	       /* current idea of time */
 extern struct tm *nowtm;	       /* current idea of time (in tm) */
+
+#if defined WIN32
+extern olsr_bool olsr_win32_end_request;
+extern olsr_bool olsr_win32_end_flag;
+#endif
 
 /*
  *IPC functions
@@ -151,8 +158,5 @@ shutdown_ipc(void);
 
 int
 ipc_output(struct olsr *);
-
-int
-ipc_route_send_rtentry(union olsr_ip_addr*, union olsr_ip_addr *, int, int, char *);
 
 #endif

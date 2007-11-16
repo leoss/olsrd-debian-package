@@ -1,5 +1,5 @@
 # programs
-CCACHE ?=       $(shell sh -c "type -path ccache")
+CCACHE ?=       $(shell which ccache 2> /dev/null)
 ifeq ($(origin CC),default)
 CC = 		$(CCACHE) gcc
 else
@@ -17,10 +17,11 @@ ETCDIR  ?= $(DESTDIR)/etc
 LIBDIR  ?= $(DESTDIR)/usr/lib
 DOCDIR  ?= $(DESTDIR)/usr/share/doc
 MANDIR  ?= $(DESTDIR)/usr/share/man
-CFGFILE ?= $(ETCDIR)/olsrd.conf
 EXENAME ?= olsrd
+CFGNAME ?= $(EXENAME).conf
+CFGFILE ?= $(ETCDIR)/$(CFGNAME)
 
-CPPFLAGS =	-Isrc -I$(TOPDIR)/src 
+CPPFLAGS =	-Isrc -I$(TOPDIR)/src
 
 # add gcc warnings and optimizations if CFLAGS not set
 ifndef CFLAGS
@@ -40,15 +41,24 @@ WARNINGS +=	-Wno-multichar
 WARNINGS +=	-Wno-deprecated-declarations
 #WARNINGS +=	-Wredundant-decls
 WARNINGS +=	-Wnested-externs
+# Alas, htons() triggers this so we can't seriously activate it.
 #WARNINGS +=	-Wunreachable-code
 WARNINGS +=	-Winline
 WARNINGS +=	-Wdisabled-optimization
 #WARNINGS +=	-Werror
+WARNINGS +=	-finline-functions-called-once
+WARNINGS +=	-fearly-inlining
+# we have small inline functions in src/lq_route.c which should always be inlined
+WARNINGS +=	-finline-limit=50
 WARNINGS :=	$(shell CC="$(CC)" $(TOPDIR)/gcc-warnings $(WARNINGS))
 endif
 CFLAGS +=	$(WARNINGS)
 CFLAGS +=	-O2
-CFLAGS +=	-g
+#CFLAGS +=	-g
+CFLAGS +=	$(EXTRA_CFLAGS)
+
+# Must be specified along with -lpthread on linux
+CPPFLAGS +=	$(OS_CFLAG_PTHREAD)
 endif
 
 ifdef OLSRD_PLUGIN
@@ -72,8 +82,6 @@ CPPFLAGS +=	-DSUPPORT_OLD_PLUGIN_VERSIONS=1
 SRCS +=		$(wildcard src/*.c *.c)
 HDRS +=		$(wildcard src/*.h *.h)
 
-all: default_target
-
 # OS detection
 ifeq ($(OS),Windows_NT)
 OS := win32
@@ -85,8 +93,8 @@ ifeq ($(OS),UNKNOWN)
 all: help
 else
 # include OS specifics
-include $(TOPDIR)/make/Makefile.$(OS)
 all: default_target
+include $(TOPDIR)/make/Makefile.$(OS)
 endif
 
 # one object for each source file
@@ -102,7 +110,7 @@ endif
 
 # fully automatic and working dependency generation
 %.d: %.c
-	@$(CC) -M $(CPPFLAGS) "$<" | sed -e '1s|\($(*F)\)\.o[ :]*|$(*D)/\1.o $@: Makefile $(TOPDIR)$(if $(TOPDIR),/)Makefile.inc \\\n  |g' >"$@"
+	@$(CC) -M $(CPPFLAGS) "$<" | sed -e '1s|\($(*F)\)\.o[ :]*|$(*D)/\1.o $@: Makefile $(TOPDIR)$(if $(TOPDIR),/)Makefile.inc |g' >"$@"
 
 # we always need the includes and defines
 # for legacy since now

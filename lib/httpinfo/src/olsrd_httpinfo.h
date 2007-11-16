@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: olsrd_httpinfo.h,v 1.30 2007/07/15 19:29:38 bernd67 Exp $
+ * $Id: olsrd_httpinfo.h,v 1.32 2007/08/25 19:48:42 bernd67 Exp $
  */
 
 /*
@@ -81,8 +81,10 @@ extern struct olsrd_config *olsr_cfg;
 /* Destructor function */
 void olsr_plugin_exit(void);
 void olsr_plugin_exit(void);
-void olsrd_get_plugin_parameters(const struct olsrd_plugin_parameters **params, int *size);
 
+#if 0
+extern int netsprintf(char *str, const char* format, ...);
+#endif
 
 #endif
 
