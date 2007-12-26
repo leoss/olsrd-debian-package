@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: net.c,v 1.22 2007/04/25 22:24:09 bernd67 Exp $
  */
 
 #if defined WINCE
@@ -54,6 +53,8 @@
 #include <stdlib.h>
 #include "defs.h"
 #include "net_os.h"
+#include "net_olsr.h"
+#include "ipcalc.h"
 
 #if defined WINCE
 #define WIDE_STRING(s) L##s
@@ -61,8 +62,8 @@
 #define WIDE_STRING(s) s
 #endif
 
-void WinSockPError(char *Str);
-void PError(char *);
+void WinSockPError(const char *Str);
+void PError(const char *);
 
 void DisableIcmpRedirects(void);
 int disable_ip_forwarding(int Ver);
@@ -97,14 +98,12 @@ gethemusocket(struct sockaddr_in *pin)
   return (sock);
 }
 
-int getsocket(struct sockaddr *Addr, int BuffSize, char *Int __attribute__((unused)))
+int getsocket(int BuffSize, char *Int __attribute__((unused)))
 {
-  int Sock;
+  struct sockaddr_in Addr;
   int On = 1;
   unsigned long Len;
-
-  Sock = socket(AF_INET, SOCK_DGRAM, 0);
-
+  int Sock = socket(AF_INET, SOCK_DGRAM, 0);
   if (Sock < 0)
   {
     WinSockPError("getsocket/socket()");
@@ -131,7 +130,11 @@ int getsocket(struct sockaddr *Addr, int BuffSize, char *Int __attribute__((unus
   if (BuffSize <= 8192) 
     fprintf(stderr, "Cannot set IPv4 socket receive buffer.\n");
 
-  if (bind(Sock, Addr, sizeof (struct sockaddr_in)) < 0)
+  memset(&Addr, 0, sizeof (Addr));
+  Addr.sin_family = AF_INET;
+  Addr.sin_port = htons(OLSRPORT);
+  Addr.sin_addr.s_addr = INADDR_ANY;
+  if (bind(Sock, (struct sockaddr *)&Addr, sizeof (Addr)) < 0)
   {
     WinSockPError("getsocket/bind()");
     closesocket(Sock);
@@ -148,13 +151,11 @@ int getsocket(struct sockaddr *Addr, int BuffSize, char *Int __attribute__((unus
   return Sock;
 }
 
-int getsocket6(struct sockaddr_in6 *Addr, int BuffSize, char *Int __attribute__((unused)))
+int getsocket6(int BuffSize, char *Int __attribute__((unused)))
 {
-  int Sock;
+  struct sockaddr_in6 Addr6;
   int On = 1;
-
-  Sock = socket(AF_INET6, SOCK_DGRAM, 0);
-
+  int Sock = socket(AF_INET6, SOCK_DGRAM, 0);
   if (Sock < 0)
   {
     WinSockPError("getsocket6/socket()");
@@ -181,7 +182,11 @@ int getsocket6(struct sockaddr_in6 *Addr, int BuffSize, char *Int __attribute__(
   if (BuffSize <= 8192) 
     fprintf(stderr, "Cannot set IPv6 socket receive buffer.\n");
 
-  if (bind(Sock, (struct sockaddr *)Addr, sizeof (struct sockaddr_in6)) < 0)
+  memset(&Addr6, 0, sizeof (Addr6));
+  Addr6.sin6_family = AF_INET6;
+  Addr6.sin6_port = htons(OLSRPORT);
+  //Addr6.sin6_addr.s_addr = IN6ADDR_ANY_INIT;
+  if (bind(Sock, (struct sockaddr *)&Addr6, sizeof (Addr6)) < 0)
   {
     WinSockPError("getsocket6/bind()");
     closesocket(Sock);
@@ -337,13 +342,13 @@ void DisableIcmpRedirects(void)
 int join_mcast(struct interface *Nic, int Sock)
 {
   /* See linux/in6.h */
-
+  struct ipaddr_str buf;
   struct ipv6_mreq McastReq;
 
-  COPY_IP(&McastReq.ipv6mr_multiaddr, &Nic->int6_multaddr.sin6_addr);
+  McastReq.ipv6mr_multiaddr = Nic->int6_multaddr.sin6_addr;
   McastReq.ipv6mr_interface = Nic->if_index;
 
-  OLSR_PRINTF(3, "Interface %s joining multicast %s...", Nic->int_name, olsr_ip_to_string((union olsr_ip_addr *)&Nic->int6_multaddr.sin6_addr));
+  OLSR_PRINTF(3, "Interface %s joining multicast %s...", Nic->int_name, olsr_ip_to_string(&buf, (union olsr_ip_addr *)&Nic->int6_multaddr.sin6_addr));
   /* Send multicast */
   if(setsockopt(Sock, 
 		IPPROTO_IPV6, 

@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2003, Andreas Tønnesen (andreto@olsr.org)
+ * Copyright (c) 2003, Andreas TÃ¸nnesen (andreto@olsr.org)
  *               2004, Thomas Lopatic (thomas@lopatic.de)
  *               2006, for some fixups, sven-ola(gmx.de)
  * All rights reserved.
@@ -38,9 +38,9 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: lq_packet.c,v 1.28 2007/08/29 23:08:54 bernd67 Exp $
  */
 
+#include "ipcalc.h"
 #include "olsr_protocol.h"
 #include "defs.h"
 #include "lq_packet.h"
@@ -55,41 +55,12 @@
 #include "hysteresis.h"
 #include "olsr.h"
 #include "build_msg.h"
+#include "net_olsr.h"
 
 
 olsr_bool lq_tc_pending = OLSR_FALSE;
 
 static unsigned char msg_buffer[MAXMESSAGESIZE - OLSR_HEADERSIZE];
-
-static inline void        pkt_get_u8(const olsr_u8_t **p, olsr_u8_t  *var)         { *var =       *(olsr_u8_t *)(*p);   *p += sizeof(olsr_u8_t); }
-static inline void       pkt_get_u16(const olsr_u8_t **p, olsr_u16_t *var)         { *var = ntohs(*(olsr_u16_t *)(*p)); *p += sizeof(olsr_u16_t); }
-static inline void       pkt_get_u32(const olsr_u8_t **p, olsr_u32_t *var)         { *var = ntohl(*(olsr_u32_t *)(p));  *p += sizeof(olsr_u32_t); }
-static inline void        pkt_get_s8(const olsr_u8_t **p, olsr_8_t  *var)          { *var =       *(olsr_8_t *)(*p);    *p += sizeof(olsr_8_t); }
-static inline void       pkt_get_s16(const olsr_u8_t **p, olsr_16_t *var)          { *var = ntohs(*(olsr_16_t *)(*p));  *p += sizeof(olsr_16_t); }
-static inline void       pkt_get_s32(const olsr_u8_t **p, olsr_32_t *var)          { *var = ntohl(*(olsr_32_t *)(*p));  *p += sizeof(olsr_32_t); }
-static inline void    pkt_get_double(const olsr_u8_t **p, double *var)             { *var = me_to_double(**p);          *p += sizeof(olsr_u8_t); }
-static inline void pkt_get_ipaddress(const olsr_u8_t **p, union olsr_ip_addr *var) { COPY_IP(var, *p);                  *p += olsr_cnf->ipsize; }
-static inline void        pkt_get_lq(const olsr_u8_t **p, double *var)             { *var = (double)**p / 255.0;        *p += sizeof(olsr_u8_t); }
-
-static inline void        pkt_ignore_u8(const olsr_u8_t **p) { *p += sizeof(olsr_u8_t); }
-static inline void       pkt_ignore_u16(const olsr_u8_t **p) { *p += sizeof(olsr_u16_t); }
-static inline void       pkt_ignore_u32(const olsr_u8_t **p) { *p += sizeof(olsr_u32_t); }
-static inline void        pkt_ignore_s8(const olsr_u8_t **p) { *p += sizeof(olsr_8_t); }
-static inline void       pkt_ignore_s16(const olsr_u8_t **p) { *p += sizeof(olsr_16_t); }
-static inline void       pkt_ignore_s32(const olsr_u8_t **p) { *p += sizeof(olsr_32_t); }
-static inline void pkt_ignore_ipaddress(const olsr_u8_t **p) { *p += olsr_cnf->ipsize; }
-
-static inline void        pkt_put_u8(olsr_u8_t **p, const olsr_u8_t  var)         { *(olsr_u8_t *)(*p)  = var;        *p += sizeof(olsr_u8_t); }
-static inline void       pkt_put_u16(olsr_u8_t **p, const olsr_u16_t var)         { *(olsr_u16_t *)(*p) = htons(var); *p += sizeof(olsr_u16_t); }
-static inline void       pkt_put_u32(olsr_u8_t **p, const olsr_u32_t var)         { *(olsr_u32_t *)(*p) = htonl(var); *p += sizeof(olsr_u32_t); }
-static inline void        pkt_put_s8(olsr_u8_t **p, const olsr_8_t  var)          { *(olsr_8_t *)(*p)   = var;        *p += sizeof(olsr_8_t); }
-static inline void       pkt_put_s16(olsr_u8_t **p, const olsr_16_t var)          { *(olsr_16_t *)(*p)  = htons(var); *p += sizeof(olsr_16_t); }
-static inline void       pkt_put_s32(olsr_u8_t **p, const olsr_32_t var)          { *(olsr_32_t *)(*p)  = htonl(var); *p += sizeof(olsr_32_t); }
-static inline void    pkt_put_double(olsr_u8_t **p, const double var)             { **p = double_to_me(var);          *p += sizeof(olsr_u8_t); }
-static inline void pkt_put_ipaddress(olsr_u8_t **p, const union olsr_ip_addr var) { COPY_IP(*p, &var);                *p += olsr_cnf->ipsize; }
-static inline void        pkt_put_lq(olsr_u8_t **p, const double var)             { **p  = var * 255.0;               *p += sizeof(olsr_u8_t); }
-
-
 
 static void
 create_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
@@ -102,7 +73,7 @@ create_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
   lq_hello->comm.vtime = me_to_double(outif->valtimes.hello);
   lq_hello->comm.size = 0;
 
-  COPY_IP(&lq_hello->comm.orig, &olsr_cnf->main_addr);
+  lq_hello->comm.orig = olsr_cnf->main_addr;
 
   lq_hello->comm.ttl = 1;
   lq_hello->comm.hops = 0;
@@ -121,7 +92,7 @@ create_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
       struct lq_hello_neighbor *neigh = olsr_malloc(sizeof (struct lq_hello_neighbor), "Build LQ_HELLO");
 
       // a) this neighbor interface IS NOT visible via the output interface
-      if(!COMP_IP(&walker->local_iface_addr, &outif->ip_addr))
+      if(!ipequal(&walker->local_iface_addr, &outif->ip_addr))
         neigh->link_type = UNSPEC_LINK;
       
       // b) this neighbor interface IS visible via the output interface
@@ -147,7 +118,7 @@ create_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
   
       // set the entry's neighbour interface address
 
-      COPY_IP(&neigh->addr, &walker->neighbor_iface_addr);
+      neigh->addr = walker->neighbor_iface_addr;
       
       // queue the neighbour entry
 
@@ -176,7 +147,7 @@ static void
 create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
 {
   int i;
-  static int ttl_list[] = { 1, 2, 1, 4, 1, 2, 1, 8, 1, 2, 1, 4, 1, 2, 1, MAX_TTL-1, 0};
+  static int ttl_list[] = { 2, 8, 2, 16, 2, 8, 2, MAX_TTL};
 
   // remember that we have generated an LQ TC message; this is
   // checked in net_output()
@@ -189,7 +160,7 @@ create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
   lq_tc->comm.vtime = me_to_double(outif->valtimes.tc);
   lq_tc->comm.size = 0;
 
-  COPY_IP(&lq_tc->comm.orig, &olsr_cnf->main_addr);
+  lq_tc->comm.orig = olsr_cnf->main_addr;
 
   if (olsr_cnf->lq_fish > 0)
   {
@@ -197,9 +168,6 @@ create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
     if (outif->ttl_index >= (int)(sizeof(ttl_list) / sizeof(ttl_list[0])))
       outif->ttl_index = 0;
     
-    if (ttl_list[outif->ttl_index] == 0)
-      outif->ttl_index = 0;
-  
     lq_tc->comm.ttl = ttl_list[outif->ttl_index++];
 
     OLSR_PRINTF(3, "Creating LQ TC with TTL %d.\n", lq_tc->comm.ttl);
@@ -211,7 +179,7 @@ create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
   lq_tc->comm.hops = 0;
   lq_tc->comm.seqno = get_msg_seqno();
 
-  COPY_IP(&lq_tc->from, &olsr_cnf->main_addr);
+  lq_tc->from = olsr_cnf->main_addr;
 
   lq_tc->ansn = get_local_ansn();
 
@@ -248,7 +216,7 @@ create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
 
           // set the entry's main address
 
-          COPY_IP(&neigh->address, &walker->neighbor_main_addr);
+          neigh->address = walker->neighbor_main_addr;
 
           // set the entry's link quality
           lnk = get_best_link_to_neighbor(&neigh->address);
@@ -299,7 +267,7 @@ static void serialize_common(struct olsr_common *comm)
       olsr_head_v4->vtime = double_to_me(comm->vtime);
       olsr_head_v4->size = htons(comm->size);
 
-      COPY_IP(&olsr_head_v4->orig, &comm->orig);
+      olsr_head_v4->orig = comm->orig.v4.s_addr;
 
       olsr_head_v4->ttl = comm->ttl;
       olsr_head_v4->hops = comm->hops;
@@ -314,7 +282,7 @@ static void serialize_common(struct olsr_common *comm)
       olsr_head_v6->vtime = double_to_me(comm->vtime);
       olsr_head_v6->size = htons(comm->size);
 
-      COPY_IP(&olsr_head_v6->orig, &comm->orig);
+      memcpy(&olsr_head_v6->orig, &comm->orig.v6.s6_addr, sizeof(olsr_head_v6->orig));
 
       olsr_head_v6->ttl = comm->ttl;
       olsr_head_v6->hops = comm->hops;
@@ -325,11 +293,12 @@ static void serialize_common(struct olsr_common *comm)
 static void
 serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
 {
-  int rem, size, req;
+  static const int LINK_ORDER[] = {SYM_LINK, UNSPEC_LINK, ASYM_LINK, LOST_LINK};
+  int rem, size, req, expected_size = 0;
   struct lq_hello_info_header *info_head;
   struct lq_hello_neighbor *neigh;
   unsigned char *buff;
-  int is_first;
+  olsr_bool is_first;
   int i;
 
   // leave space for the OLSR header
@@ -357,15 +326,32 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
   size = 0;
   rem = net_outbuffer_bytes_left(outif) - off;
 
-  // initially, we want to put at least an info header, an IP address,
-  // and the corresponding link quality into the message
+  /*
+   * Initially, we want to put the complete lq_hello into the message.
+   * For this flush the output buffer (if there are some bytes in).
+   * This is a hack/fix, which prevents message fragementation resulting
+   * in instable links. The ugly lq/genmsg code should be reworked anyhow.
+   */
+  if (0 < net_output_pending(outif)) {
+    for (i = 0; i <= MAX_NEIGH; i++) {
+      unsigned int j;
+      for(j = 0; j < sizeof(LINK_ORDER) / sizeof(LINK_ORDER[0]); j++) {
+        is_first = OLSR_TRUE;
+        for (neigh = lq_hello->neigh; neigh != NULL; neigh = neigh->next) {
+          if (0 == i && 0 == j) expected_size += olsr_cnf->ipsize + 4;
+          if (neigh->neigh_type == i && neigh->link_type == LINK_ORDER[j]) {
+            if (is_first) {
+              expected_size += sizeof(struct lq_hello_info_header);
+              is_first = OLSR_FALSE;
+            }
+          }
+        }
+      }
+    }
+  }
 
-  // force signed comparison
-
-  if (rem < (int)(sizeof (struct lq_hello_info_header) + olsr_cnf->ipsize + 4))
-  {
+  if (rem < expected_size) {
     net_output(outif);
-
     rem = net_outbuffer_bytes_left(outif) - off;
   }
 
@@ -375,11 +361,10 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
 
   for (i = 0; i <= MAX_NEIGH; i++) 
     {
-      static const int LINK_ORDER[] = {SYM_LINK, UNSPEC_LINK, ASYM_LINK, LOST_LINK};
       unsigned int j;
       for(j = 0; j < sizeof(LINK_ORDER) / sizeof(LINK_ORDER[0]); j++)
         {
-          is_first = 1;
+          is_first = OLSR_TRUE;
 
           // loop through neighbors
 
@@ -396,7 +381,7 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
               // no, we also need space for an info header, as this is the
               // first neighbor with the current neighor type and link type
 
-              if (is_first != 0)
+              if (is_first)
                 req += sizeof (struct lq_hello_info_header);
 
               // we do not have enough space left
@@ -429,12 +414,12 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
 
                   // we need a new info header
 
-                  is_first = 1;
+                  is_first = OLSR_TRUE;
                 }
 
               // create a new info header
 
-              if (is_first != 0)
+              if (is_first)
                 {
                   info_head = (struct lq_hello_info_header *)(buff + size);
                   size += sizeof (struct lq_hello_info_header);
@@ -445,7 +430,7 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
 
               // add the current neighbor's IP address
 
-              COPY_IP(buff + size, &neigh->addr);
+              genipcopy(buff + size, &neigh->addr);
               size += olsr_cnf->ipsize;
 
               // add the corresponding link quality
@@ -458,13 +443,13 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
               buff[size++] = 0;
               buff[size++] = 0;
 
-              is_first = 0;
+              is_first = OLSR_FALSE;
             }
 
           // finalize the info header, if there are any neighbors with the
           // current neighbor type and link type
 
-          if (is_first == 0)
+          if (!is_first)
             info_head->size = ntohs(buff + size - (unsigned char *)info_head);
         }
     }
@@ -483,7 +468,7 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
 static void
 serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
 {
-  int off, rem, size;
+  int off, rem, size, expected_size = 0;
   struct lq_tc_header *head;
   struct tc_mpr_addr *neigh;
   unsigned char *buff;
@@ -513,15 +498,20 @@ serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
   size = 0;
   rem = net_outbuffer_bytes_left(outif) - off;
 
-  // initially, we want to put at least an IP address and the corresponding
-  // link quality into the message
+  /*
+   * Initially, we want to put the complete lq_tc into the message.
+   * For this flush the output buffer (if there are some bytes in).
+   * This is a hack/fix, which prevents message fragementation resulting
+   * in instable links. The ugly lq/genmsg code should be reworked anyhow.
+   */
+  if (0 < net_output_pending(outif)) {
+    for (neigh = lq_tc->neigh; neigh != NULL; neigh = neigh->next) {
+      expected_size += olsr_cnf->ipsize + 4;
+    }
+  }
 
-  // force signed comparison
-
-  if (rem < (int)(olsr_cnf->ipsize + 4))
-  {
+  if (rem < expected_size) {
     net_output(outif);
-
     rem = net_outbuffer_bytes_left(outif) - off;
   }
 
@@ -555,7 +545,7 @@ serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
         }
 
       // add the current neighbor's IP address
-      COPY_IP(buff + size, &neigh->address);
+      genipcopy(buff + size, &neigh->address);
       size += olsr_cnf->ipsize;
 
       // add the corresponding link quality
@@ -610,12 +600,12 @@ deserialize_lq_hello(struct hello_message *hello,
     pkt_get_u8(&curr, &hello->willingness);
 
     hello->neighbors = NULL;
-    limit = ser + size;
+    limit = ((const unsigned char *)ser) + size;
     while (curr < limit) {
-        struct lq_hello_info_header *info_head = (struct lq_hello_info_header *)curr;
+        const struct lq_hello_info_header *info_head = (const struct lq_hello_info_header *)curr;
         const unsigned char *limit2 = curr + ntohs(info_head->size);
 
-        curr = (unsigned char *)(info_head + 1);      
+        curr = (const unsigned char *)(info_head + 1);      
         while (curr < limit2) {
             struct hello_neighbor *neigh = olsr_malloc(sizeof (struct hello_neighbor),
                                                        "LQ_HELLO deserialization");
@@ -631,76 +621,6 @@ deserialize_lq_hello(struct hello_message *hello,
             neigh->next = hello->neighbors;
             hello->neighbors = neigh;
         }
-    }
-    return 0;
-}
-
-static int
-deserialize_lq_tc(struct tc_message *tc,
-                  const void *ser,
-                  union olsr_ip_addr *from)
-{
-    const union olsr_ip_addr *addr;
-    olsr_u8_t type;
-    olsr_u16_t size;
-    const unsigned char *limit;
-
-    // convert received packet from transmission format into internal format
-    const unsigned char *curr = ser;
-    pkt_get_u8(&curr, &type);
-    if (type != LQ_TC_MESSAGE) {
-        /* No need to do anything more */
-        return 1;
-    }
-    pkt_get_double(&curr, &tc->vtime);
-    pkt_get_u16(&curr, &size);
-    // Sven-Ola: Check the message source addr
-    if (!olsr_validate_address((const union olsr_ip_addr *)curr)) {
-        /* No need to do anything more */
-        return 1;
-    }
-    pkt_get_ipaddress(&curr, &tc->originator);
-
-    addr = mid_lookup_main_addr(from);
-    if (addr == NULL) {
-        addr = from;
-    }
-    // Sven-Ola: Check the message source addr
-    if (!olsr_validate_address(addr)) {
-        return 1;
-    }
-    COPY_IP(&tc->source_addr, addr);
-
-    pkt_get_u8(&curr, &tc->ttl);
-    pkt_get_u8(&curr, &tc->hop_count);
-    pkt_get_u16(&curr, &tc->packet_seq_number);
-    pkt_get_u16(&curr, &tc->ansn);
-    pkt_ignore_u16(&curr);
-
-    tc->multipoint_relay_selector_address = NULL;
-    limit = ser + size;
-    while (curr < limit) {
-        struct tc_mpr_addr *neigh;
-
-        if (!olsr_validate_address((const union olsr_ip_addr *)curr)) {
-            /* Ignore the same amount as below  */
-            pkt_ignore_ipaddress(&curr);
-            pkt_ignore_u8(&curr);
-            pkt_ignore_u8(&curr);
-            pkt_ignore_u16(&curr);
-            continue;
-        }
-
-        neigh = olsr_malloc(sizeof (struct tc_mpr_addr), "LQ_TC deserialization");
-
-        pkt_get_ipaddress(&curr, &neigh->address);
-
-        pkt_get_lq(&curr, &neigh->link_quality);
-        pkt_get_lq(&curr, &neigh->neigh_link_quality);
-        pkt_ignore_u16(&curr);
-
-        neigh->next = tc->multipoint_relay_selector_address;
-        tc->multipoint_relay_selector_address = neigh;
     }
     return 0;
 }
@@ -790,20 +710,4 @@ olsr_input_lq_hello(union olsr_message *ser,
     return;
   }
   olsr_hello_tap(&hello, inif, from);
-}
-
-void
-olsr_input_lq_tc(union olsr_message *ser,
-                 struct interface *inif,
-                 union olsr_ip_addr *from)
-{
-  struct tc_message tc;
-
-  if (ser == NULL) {
-    return;
-  }
-  if (deserialize_lq_tc(&tc, ser, from) != 0) {
-    return;
-  }
-  olsr_tc_tap(&tc, inif, from, ser);
 }

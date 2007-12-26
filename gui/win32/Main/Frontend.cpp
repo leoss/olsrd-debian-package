@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: Frontend.cpp,v 1.8 2007/03/27 03:01:06 tlopatic Exp $
  */
 
 #include "stdafx.h"
@@ -256,8 +255,6 @@ struct IoInfo
 };
 
 extern "C" struct IoInfo *__pioinfo[];
-
-extern "C" void win32_stdio_hack(unsigned int handle);
 
 int CFrontendApp::RedirectStdHandles(void)
 {

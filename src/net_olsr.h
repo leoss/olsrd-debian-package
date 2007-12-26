@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: net_olsr.h,v 1.13 2007/09/16 21:20:16 bernd67 Exp $
  */
 
 
@@ -44,9 +43,10 @@
 #ifndef _NET_OLSR
 #define _NET_OLSR
 
-#include "defs.h"
+#include "olsr_types.h"
 #include "interfaces.h"
 #include "process_routes.h"
+
 #include <arpa/inet.h>
 #include <net/if.h>
 
@@ -68,7 +68,7 @@ int
 net_outbuffer_bytes_left(const struct interface *);
 
 olsr_u16_t
-net_output_pending(struct interface *);
+net_output_pending(const struct interface *);
 
 int
 net_reserve_bufspace(struct interface *, int);
@@ -84,24 +84,6 @@ net_output(struct interface *);
 
 int
 net_sendroute(struct rt_entry *, struct sockaddr *);
-
-int
-olsr_prefix_to_netmask(union olsr_ip_addr *, olsr_u16_t);
-
-olsr_u16_t
-olsr_netmask_to_prefix(const union olsr_ip_addr *);
-
-char *
-sockaddr_to_string(const struct sockaddr *);
-
-const char *
-ip_to_string(const olsr_u32_t *);
-
-const char *
-ip6_to_string(const struct in6_addr *);
-
-const char *
-olsr_ip_to_string(const union olsr_ip_addr *);
 
 int
 add_ptf(packet_transform_function);

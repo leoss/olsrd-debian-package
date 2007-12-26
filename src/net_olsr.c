@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,10 +36,10 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: net_olsr.c,v 1.30 2007/09/16 21:20:16 bernd67 Exp $
  */
 
 #include "net_olsr.h"
+#include "ipcalc.h"
 #include "log.h"
 #include "olsr.h"
 #include "net_os.h"
@@ -49,6 +49,7 @@
 
 #include <stdlib.h>
 #include <assert.h>
+#include <limits.h>
 
 static olsr_bool disp_pack_out = OLSR_FALSE;
 
@@ -56,7 +57,7 @@ static olsr_bool disp_pack_out = OLSR_FALSE;
 #ifdef WIN32
 #define perror(x) WinSockPError(x)
 void
-WinSockPError(char *);
+WinSockPError(const char *);
 #endif
 
 
@@ -206,7 +207,7 @@ net_reserve_bufspace(struct interface *ifp, int size)
  * @return the number of bytes currently pending
  */
 olsr_u16_t
-net_output_pending(struct interface *ifp)
+net_output_pending(const struct interface *ifp)
 {
   return ifp->netbuf.pending;
 }
@@ -310,11 +311,8 @@ add_ptf(packet_transform_function f)
 int
 del_ptf(packet_transform_function f)
 {
-  struct ptf *tmp_ptf, *prev;
-
-  tmp_ptf = ptf_list;
-  prev = NULL;
-
+  struct ptf *prev = NULL;
+  struct ptf *tmp_ptf = ptf_list;
   while(tmp_ptf)
     {
       if(tmp_ptf->function == f)
@@ -344,16 +342,11 @@ del_ptf(packet_transform_function f)
 int
 net_output(struct interface *ifp)
 {
-  struct sockaddr_in *sin;  
-  struct sockaddr_in dst;
-  struct sockaddr_in6 *sin6;  
-  struct sockaddr_in6 dst6;
+  struct sockaddr_in *sin = NULL;
+  struct sockaddr_in6 *sin6 = NULL;
   struct ptf *tmp_ptf_list;
   union olsr_packet *outmsg;
   int retval;
-
-  sin = NULL;
-  sin6 = NULL;
 
   if(!ifp->netbuf.pending)
     return 0;
@@ -370,6 +363,7 @@ net_output(struct interface *ifp)
 
   if(olsr_cnf->ip_version == AF_INET)
     {
+      struct sockaddr_in dst;
       /* IP version 4 */
       sin = (struct sockaddr_in *)&ifp->int_broadaddr;
 
@@ -382,6 +376,7 @@ net_output(struct interface *ifp)
     }
   else
     {
+      struct sockaddr_in6 dst6;
       /* IP version 6 */
       sin6 = (struct sockaddr_in6 *)&ifp->int6_multaddr;
       /* Copy sin */
@@ -432,10 +427,11 @@ net_output(struct interface *ifp)
 		     sizeof (*sin6))
 	 < 0)
 	{
+          struct ipaddr_str buf;
 	  perror("sendto(v6)");
 	  olsr_syslog(OLSR_LOG_ERR, "OLSR: sendto IPv6 %m");
 	  fprintf(stderr, "Socket: %d interface: %d\n", ifp->olsr_socket, ifp->if_index);
-	  fprintf(stderr, "To: %s (size: %d)\n", ip6_to_string(&sin6->sin6_addr), (int)sizeof(*sin6));
+	  fprintf(stderr, "To: %s (size: %u)\n", ip6_to_string(&buf, &sin6->sin6_addr), (unsigned int)sizeof(*sin6));
 	  fprintf(stderr, "Outputsize: %d\n", ifp->netbuf.pending);
 	  retval = -1;
 	}
@@ -452,211 +448,35 @@ net_output(struct interface *ifp)
   return retval;
 }
 
-
-/**
- * Create a IPv6 netmask based on a prefix length
- *
- * @param allocated address to build the netmask in
- * @param prefix the prefix length
- *
- * @returns 1 on success 0 on failure
- */
-int
-olsr_prefix_to_netmask(union olsr_ip_addr *adr, olsr_u16_t prefix)
-{
-  int p, i;
-
-  if(adr == NULL)
-    return 0;
-
-  p = prefix;
-  i = 0;
-
-  memset(adr, 0, olsr_cnf->ipsize);
-
-  for(;p > 0; p -= 8)
-    {
-      adr->v6.s6_addr[i] = (p < 8) ? 0xff ^ (0xff >> p) : 0xff;
-      i++;
-    }
-
-#ifdef DEBUG
-  OLSR_PRINTF(3, "Prefix %d = Netmask: %s\n", prefix, olsr_ip_to_string(adr));
-#endif
-
-  return 1;
-}
-
-
-
-/**
- * Calculate prefix length based on a netmask
- *
- * @param adr the address to use to calculate the prefix length
- *
- * @return the prefix length
- */
-olsr_u16_t
-olsr_netmask_to_prefix(const union olsr_ip_addr *adr)
-{
-  olsr_u16_t prefix = 0;
-  unsigned int i;
-
-  prefix = 0;
-
-  for(i = 0; i < olsr_cnf->ipsize; i++)
-    {
-      if(adr->v6.s6_addr[i] == 0xff)
-	{
-	  prefix += 8;
-	}
-      else
-	{
-          int tmp;
-	  for(tmp = adr->v6.s6_addr[i];
-	      tmp > 0;
-	      tmp = (tmp << 1) & 0xff)
-	    prefix++;
-	}
-    }
-
-#ifdef DEBUG
-  OLSR_PRINTF(3, "Netmask: %s = Prefix %d\n", olsr_ip_to_string(adr), prefix);
-#endif
-
-  return prefix;
-}
-
-
-/**
- *Converts a sockaddr struct to a string representing
- *the IP address from the sockaddr struct
- *
- *<b>NON REENTRANT!!!!</b>
- *
- *@param address_to_convert the sockaddr struct to "convert"
- *@return a char pointer to the string containing the IP
- */
-char *
-sockaddr_to_string(const struct sockaddr *address_to_convert)
-{
-  const struct sockaddr_in *address = (const struct sockaddr_in *)address_to_convert; 
-  return inet_ntoa(address->sin_addr);
-  
-}
-
-
-/**
- *Converts the 32bit olsr_u32_t datatype to
- *a char array.
- *
- *<b>NON REENTRANT!!!!</b>
- *
- *@param address the olsr_u32_t to "convert"
- *@return a char pointer to the string containing the IP
- */
-
-const char *
-ip_to_string(const olsr_u32_t *address)
-{
-  struct in_addr in;
-  in.s_addr=*address;
-  return(inet_ntoa(in));
-  
-}
-
-/**
- *Converts the 32bit olsr_u32_t datatype to
- *a char array.
- *
- *<b>NON REENTRANT</b>
- *
- *@param addr6 the address to "convert"
- *@return a char pointer to the string containing the IP
- */
-
-const char *
-ip6_to_string(const struct in6_addr *addr6)
-{
-  static char ipv6_buf[INET6_ADDRSTRLEN]; /* for address coversion */
-  return inet_ntop(AF_INET6, addr6, ipv6_buf, sizeof(ipv6_buf));
-}
-
-
-const char *
-olsr_ip_to_string(const union olsr_ip_addr *addr)
-{
-  static int idx = 0;
-  static char buff[4][INET6_ADDRSTRLEN > INET_ADDRSTRLEN ? INET6_ADDRSTRLEN : INET_ADDRSTRLEN];
-  const char *ret;
-
-  if (!addr) {
-      return "null";
-  }
-  
-  if(olsr_cnf->ip_version == AF_INET)
-    {
-#if 0
-      struct in_addr in;
-      in.s_addr = addr->v4;
-      ret = inet_ntop(AF_INET, &in, buff[idx], sizeof(buff[idx]));
-#else
-      ret = inet_ntop(AF_INET, &addr->v4, buff[idx], sizeof(buff[idx]));
-#endif
-    }
-  else
-    {
-      /* IPv6 */
-      ret = inet_ntop(AF_INET6, &addr->v6, buff[idx], sizeof(buff[idx]));
-    }
-  idx = (idx + 1) & 3;
-
-  return ret;
-}
-
-
 void
 olsr_add_invalid_address(const union olsr_ip_addr *adr)
 {
-  struct deny_address_entry *new_entry;
+#ifndef NODEBUG
+  struct ipaddr_str buf;
+#endif
+  struct deny_address_entry *new_entry = olsr_malloc(sizeof(struct deny_address_entry), "Add deny address");
 
-  new_entry = olsr_malloc(sizeof(struct deny_address_entry), "Add deny address");
-
+  new_entry->addr = *adr;
   new_entry->next = deny_entries;
-  COPY_IP(&new_entry->addr, adr);
-
   deny_entries = new_entry;
-
-  OLSR_PRINTF(1, "Added %s to IP deny set\n", olsr_ip_to_string(&new_entry->addr));
-  return;
+  OLSR_PRINTF(1, "Added %s to IP deny set\n", olsr_ip_to_string(&buf, &new_entry->addr));
 }
 
-/**
- *Converts the 32bit olsr_u32_t datatype to
- *a char array.
- *
- *<b>NON REENTRANT</b>
- *
- *@param addr6 the address to "convert"
- *@return a char pointer to the string containing the IP
- */
+
 olsr_bool
 olsr_validate_address(const union olsr_ip_addr *adr)
 {
-  const struct deny_address_entry *deny_entry = deny_entries;
+  const struct deny_address_entry *deny_entry;
 
-  while(deny_entry)
-    {
-      if(COMP_IP(adr, &deny_entry->addr))
-	{
-	  OLSR_PRINTF(1, "Validation of address %s failed!\n",
-		      olsr_ip_to_string(adr));
-	  return OLSR_FALSE;
-	}
-
-      deny_entry = deny_entry->next;
+  for (deny_entry = deny_entries; deny_entry != NULL; deny_entry = deny_entry->next) {
+    if(ipequal(adr, &deny_entry->addr))	{
+#ifndef NODEBUG
+      struct ipaddr_str buf;
+#endif
+      OLSR_PRINTF(1, "Validation of address %s failed!\n", olsr_ip_to_string(&buf, adr));
+      return OLSR_FALSE;
     }
-
+  }
   return OLSR_TRUE;
 }
 

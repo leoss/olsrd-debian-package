@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: apm.c,v 1.18 2007/04/25 22:08:17 bernd67 Exp $
  */
 
 /*
@@ -70,10 +69,7 @@ struct linux_apm_info
 
 
 /* ACPI related stuff */
-
-#define ACPI_PROC "/proc/acpi/info"
-
-static const char * acpi_info[] = 
+static const char * const acpi_info[] = 
   {
     "/proc/acpi/battery/0/info",
     "/proc/acpi/battery/1/info",
@@ -82,7 +78,7 @@ static const char * acpi_info[] =
     "/proc/acpi/battery/BAT1/info" 
   };
 
-static const char * acpi_state[] =
+static const char * const acpi_state[] =
   {    
     "/proc/acpi/battery/0/status",
     "/proc/acpi/battery/1/status",
@@ -92,17 +88,17 @@ static const char * acpi_state[] =
   };
 
 
-#define ACPI_BT_CNT  (sizeof(acpi_state) / sizeof(char *))
+#define ACPI_BT_CNT  ARRAYSIZE(acpi_state)
 
 
-static const char * acpi_ac[] = 
+static const char * const acpi_ac[] = 
   {    
     "/proc/acpi/ac_adapter/0/status",
     "/proc/acpi/ac_adapter/AC/state",
     "/proc/acpi/ac_adapter/ACAD/state" 
   };
 
-#define ACPI_AC_CNT  (sizeof(acpi_ac) / sizeof(char *))
+#define ACPI_AC_CNT  ARRAYSIZE(acpi_ac)
 
 
 #define USE_APM    1
@@ -143,7 +139,7 @@ apm_init(void)
 
 
 void
-apm_printinfo(struct olsr_apm_info *ainfo)
+apm_printinfo(struct olsr_apm_info *ainfo __attribute__((unused)))
 {
   OLSR_PRINTF(5, "APM info:\n\tAC status %d\n\tBattery percentage %d%%\n\tBattery time left %d mins\n\n",
 	      ainfo->ac_line_status,
@@ -155,15 +151,11 @@ apm_printinfo(struct olsr_apm_info *ainfo)
 int
 apm_read(struct olsr_apm_info *ainfo)
 {
-  switch(method)
-    {
-    case(USE_APM):
-      return apm_read_apm(ainfo);
-    case(USE_ACPI):
-      return apm_read_acpi(ainfo);
-    default:
-      break;
-    }
+  switch(method) {
+  case USE_APM:  return apm_read_apm(ainfo);
+  case USE_ACPI: return apm_read_acpi(ainfo);
+  default:       break;
+  }
   return 0;
 }
 
@@ -213,7 +205,7 @@ apm_read_apm(struct olsr_apm_info *ainfo)
 	 &lainfo.battery_time,
 	 units);
 
-  lainfo.using_minutes = !strncmp(units, "min", 3) ? 1 : 0;
+  lainfo.using_minutes = strncmp(units, "min", 3) ? 0 : 1;
 
   /*
    * Should take care of old APM type info here
@@ -247,7 +239,6 @@ apm_read_acpi(struct olsr_apm_info *ainfo)
   int bat_val = 0;
   
   printf("READING ACPI\n");
-
 
   if(fd_index < 0)
     {

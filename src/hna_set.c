@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,17 +36,17 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: hna_set.c,v 1.22 2007/09/17 22:24:22 bernd67 Exp $
  */
 
+#include "ipcalc.h"
 #include "defs.h"
 #include "olsr.h"
 #include "scheduler.h"
+#include "net_olsr.h"
+#include "tc_set.h"
 
 
 struct hna_entry hna_set[HASHSIZE];
-size_t netmask_size;
-
 
 /**
  *Initialize the HNA set
@@ -54,17 +54,7 @@ size_t netmask_size;
 int
 olsr_init_hna_set(void)
 {
-
   int idx;
-
-  if(olsr_cnf->ip_version == AF_INET)
-    {
-      netmask_size = sizeof(olsr_u32_t);
-    }
-  else
-    {
-      netmask_size = sizeof(olsr_u16_t);
-    }
 
   /* Since the holdingtime is assumed to be rather large for 
    * HNA entries, the timeoutfunction is only ran once every second
@@ -80,17 +70,6 @@ olsr_init_hna_set(void)
   return 1;
 }
 
-int
-olsr_get_hna_prefix_len(struct hna_net *hna)
-{
-  if (olsr_cnf->ip_version == AF_INET) {
-    return olsr_netmask_to_prefix((union olsr_ip_addr *)&hna->A_netmask.v4);
-  } else {
-    return hna->A_netmask.v6;
-  }
-}
-
-
 /**
  *Lookup a network entry in a networkentry list
  *
@@ -101,26 +80,18 @@ olsr_get_hna_prefix_len(struct hna_net *hna)
  *@return the localted entry or NULL of not found
  */
 struct hna_net *
-olsr_lookup_hna_net(struct hna_net *nets, union olsr_ip_addr *net, union hna_netmask *mask)
+olsr_lookup_hna_net(const struct hna_net *nets, const union olsr_ip_addr *net, olsr_u8_t prefixlen)
 {
-  struct hna_net *tmp_net;
-
-
+  struct hna_net *tmp;
   /* Loop trough entrys */
-  for(tmp_net = nets->next;
-      tmp_net != nets;
-      tmp_net = tmp_net->next)
-    { 
-      if(COMP_IP(&tmp_net->A_network_addr, net) &&
-	 (memcmp(&tmp_net->A_netmask, mask, netmask_size) == 0))
-	return tmp_net;
+  for (tmp = nets->next; tmp != nets; tmp = tmp->next) { 
+    if (tmp->prefixlen == prefixlen && ipequal(&tmp->A_network_addr, net)) {
+      return tmp;
     }
-  
+  }
   /* Not found */
   return NULL;
 }
-
-
 
 
 /**
@@ -131,21 +102,21 @@ olsr_lookup_hna_net(struct hna_net *nets, union olsr_ip_addr *net, union hna_net
  *@return the located entry or NULL if not found
  */
 struct hna_entry *
-olsr_lookup_hna_gw(union olsr_ip_addr *gw)
+olsr_lookup_hna_gw(const union olsr_ip_addr *gw)
 {
   struct hna_entry *tmp_hna;
-  olsr_u32_t hash;
+  olsr_u32_t hash = olsr_hashing(gw);
 
-  //OLSR_PRINTF(5, "TC: lookup entry\n");
-
-  hash = olsr_hashing(gw);
+#if 0
+  OLSR_PRINTF(5, "HNA: lookup entry\n");
+#endif
   
   /* Check for registered entry */
   for(tmp_hna = hna_set[hash].next;
       tmp_hna != &hna_set[hash];
       tmp_hna = tmp_hna->next)
     {
-      if(COMP_IP(&tmp_hna->A_gateway_addr, gw))
+      if(ipequal(&tmp_hna->A_gateway_addr, gw))
 	return tmp_hna;
     }
   
@@ -163,7 +134,7 @@ olsr_lookup_hna_gw(union olsr_ip_addr *gw)
  *@return the created entry
  */
 struct hna_entry *
-olsr_add_hna_entry(union olsr_ip_addr *addr)
+olsr_add_hna_entry(const union olsr_ip_addr *addr)
 {
   struct hna_entry *new_entry;
   olsr_u32_t hash;
@@ -171,7 +142,7 @@ olsr_add_hna_entry(union olsr_ip_addr *addr)
   new_entry = olsr_malloc(sizeof(struct hna_entry), "New HNA entry");
 
   /* Fill struct */
-  COPY_IP(&new_entry->A_gateway_addr, addr);
+  new_entry->A_gateway_addr = *addr;
 
   /* Link nets */
   new_entry->networks.next = &new_entry->networks;
@@ -202,23 +173,29 @@ olsr_add_hna_entry(union olsr_ip_addr *addr)
  *@return the newly created entry
  */
 struct hna_net *
-olsr_add_hna_net(struct hna_entry *hna_gw, union olsr_ip_addr *net, union hna_netmask *mask)
+olsr_add_hna_net(struct hna_entry *hna_gw, const union olsr_ip_addr *net, olsr_u8_t prefixlen)
 {
-  struct hna_net *new_net;
-
-
   /* Add the net */
-  new_net = olsr_malloc(sizeof(struct hna_net), "Add HNA net");
+  struct hna_net *new_net = olsr_malloc(sizeof(struct hna_net), "Add HNA net");
   
   /* Fill struct */
-  COPY_IP(&new_net->A_network_addr, net);
-  memcpy(&new_net->A_netmask, mask, netmask_size);
+  memset(new_net, 0, sizeof(struct hna_net));
+  new_net->A_network_addr = *net;
+  new_net->prefixlen = prefixlen;
 
   /* Queue */
   hna_gw->networks.next->prev = new_net;
   new_net->next = hna_gw->networks.next;
   hna_gw->networks.next = new_net;
   new_net->prev = &hna_gw->networks;
+
+  /*
+   * Add the rt_path for the entry.
+   */
+  olsr_insert_routing_table(&new_net->A_network_addr,
+                            new_net->prefixlen,
+                            &hna_gw->A_gateway_addr,
+                            OLSR_RT_ORIGIN_HNA);
 
   return new_net;
 }
@@ -240,25 +217,24 @@ olsr_add_hna_net(struct hna_entry *hna_gw, union olsr_ip_addr *net, union hna_ne
  *@return nada
  */
 void
-olsr_update_hna_entry(union olsr_ip_addr *gw, union olsr_ip_addr *net, union hna_netmask *mask, float vtime)
+olsr_update_hna_entry(const union olsr_ip_addr *gw, const union olsr_ip_addr *net, olsr_u8_t prefixlen, const float vtime)
 {
-  struct hna_entry *gw_entry;
+  struct hna_entry *gw_entry = olsr_lookup_hna_gw(gw);
   struct hna_net *net_entry;
 
-  if((gw_entry = olsr_lookup_hna_gw(gw)) == NULL)
+  if (gw_entry == NULL) {
     /* Need to add the entry */
     gw_entry = olsr_add_hna_entry(gw);
-  
-  if((net_entry = olsr_lookup_hna_net(&gw_entry->networks, net, mask)) == NULL)
-    {
-      /* Need to add the net */
-      net_entry = olsr_add_hna_net(gw_entry, net, mask);
-      changes_hna = OLSR_TRUE;
-    }
+  }
+  net_entry = olsr_lookup_hna_net(&gw_entry->networks, net, prefixlen);
+  if (net_entry == NULL)  {
+    /* Need to add the net */
+    net_entry = olsr_add_hna_net(gw_entry, net, prefixlen);
+    changes_hna = OLSR_TRUE;
+  }
 
   /* Update holdingtime */
   net_entry->A_time = GET_TIMESTAMP(vtime*1000);
-
 }
 
 
@@ -293,6 +269,13 @@ olsr_time_out_hna_set(void *foo __attribute__((unused)))
 		  struct hna_net *net_to_delete = tmp_net;
 		  tmp_net = tmp_net->next;
 		  DEQUEUE_ELEM(net_to_delete);
+
+                  /*
+                   * Delete the rt_path for the entry.
+                   */
+                  olsr_delete_routing_table(&net_to_delete->A_network_addr,
+                                            net_to_delete->prefixlen,
+                                            &tmp_hna->A_gateway_addr);
 		  free(net_to_delete);
 		  changes_hna = OLSR_TRUE;
 		}
@@ -329,6 +312,8 @@ olsr_time_out_hna_set(void *foo __attribute__((unused)))
 void
 olsr_print_hna_set(void)
 {
+#ifdef NODEBUG
+  /* The whole function doesn't do anything else. */
   int idx;
 
   OLSR_PRINTF(1, "\n--- %02d:%02d:%02d.%02d ------------------------------------------------- HNA SET\n\n",
@@ -355,14 +340,20 @@ olsr_print_hna_set(void)
 	    {
 	      if(olsr_cnf->ip_version == AF_INET)
 		{
-		  OLSR_PRINTF(1, "%-15s ", olsr_ip_to_string(&tmp_net->A_network_addr));
-		  OLSR_PRINTF(1, "%-15s ", olsr_ip_to_string((union olsr_ip_addr *)&tmp_net->A_netmask.v4));
-		  OLSR_PRINTF(1, "%-15s\n", olsr_ip_to_string(&tmp_hna->A_gateway_addr));
+#ifndef NODEBUG
+                  struct ipaddr_str buf;
+#endif
+		  OLSR_PRINTF(1, "%-15s ", olsr_ip_to_string(&buf, &tmp_net->A_network_addr));
+		  OLSR_PRINTF(1, "%-15d ", tmp_net->prefix_len);
+		  OLSR_PRINTF(1, "%-15s\n", olsr_ip_to_string(&buf, &tmp_hna->A_gateway_addr));
 		}
 	      else
 		{
-		  OLSR_PRINTF(1, "%-27s/%d", olsr_ip_to_string(&tmp_net->A_network_addr), tmp_net->A_netmask.v6);
-		  OLSR_PRINTF(1, "%s\n", olsr_ip_to_string(&tmp_hna->A_gateway_addr));
+#ifndef NODEBUG
+                  struct ipaddr_str buf;
+#endif
+		  OLSR_PRINTF(1, "%-27s/%d", olsr_ip_to_string(&buf, &tmp_net->A_network_addr), tmp_net->A_netmask.v6);
+		  OLSR_PRINTF(1, "%s\n", olsr_ip_to_string(&buf, &tmp_hna->A_gateway_addr));
 		}
 
 	      tmp_net = tmp_net->next;
@@ -370,7 +361,7 @@ olsr_print_hna_set(void)
 	  tmp_hna = tmp_hna->next;
 	}
     }
-
+#endif
 }
 
 /*

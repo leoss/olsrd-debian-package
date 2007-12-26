@@ -1,5 +1,167 @@
 This file states changes as of version 0.2.4:
-$Id: CHANGELOG,v 1.100 2007/10/17 10:22:49 bernd67 Exp $
+
+0.5.5 ---------------------------------------------------------------------
+
+BUGFIXES and PATCHES by Hannes Gredler <hannes@gredler.at>
+- fix not deleted tc entry.
+- avoid setting routes with an invalid/impossible netmask.
+- refactoring of TC parsing to kill another pile of malloc()/free()s
+  saving (again) code and especially run.time performance.
+- RIB Refactoring, Part 2:
+  - avoid the periodical rib-tree insertion
+  - add a FOR_ALL_HNA_RT_ENTRIES() macro for the snmp folks
+    (or any parties who want to walk HNA entries).
+  - add an olsr_cnf option 'flat_fib_metrics' which defaults to TRUE.
+
+PATCH by John Hay <jhay@meraka.org.za>:
+- also printout our own HNAs in the dotdraw plugin.
+
+PATCH by Patrick McCarty <mccartyp@gmail.com>:
+- fixed compile errors in the BSD port
+
+PATCHES by Sven-Ola Tuecke <mail2news@commando.de>:
+- 102-olsrd-cvs-fixes.patch: use different buffers in the same printf()
+- 103-olsrd-rt-exportroute-cleanup.patch: avoid a malloc()ed list of functions
+- 132-save-the-fish.patch: really save the fish and avoid to forward invalid
+  messages from older olsrd versions
+- 135-georss-map-for-nameservice.patch: fixes and extensions for the namesaervice plugin
+- 138-olsrd-fixdotdraw.patch: fix the dot_draw plugin
+(all to be found on http://download-master.berlin.freifunk.net/sven-ola/nylon/packages/olsrd/files/)
+- Replaced "which" with a /bin/sh script snippet
+
+PATCHES and CLEANUPS by Bernd Petrovitsch <bernd@firmix.at>
+- Jens Nachtigall <nachtigall@web.de> suggested (and reminded) to use
+  olsrd.conf.default.lq as the default installed one.
+  It makes much more sense as - to the best of my(bernd's) knowledge - all
+  larger networks uses the LQ extensions. And new customers should better
+  be pushed in that direction.
+- with the help of Patrick McCarty <mccartyp@gmail.com>, we got olsr to build
+  on OpenBSD again:
+  * OpenBSD'd `sed` is pretty conservative and doesn't understand 's|re|sub|'.
+    So we fall back to the old 's/re/sub/' and quote all '/' and '.' correctly
+    (which was the main reason to use '|').
+    And while I'm at it: Remove the useless $(CCACHE) from the $(CC) for
+    dependency generation and beautify (read: "$(strip)") $(CPPFLAGS).
+  * OpenBSD needs an explicit "#include <sys/types.h>" before
+    "#include <netinet/in.h>".
+- fixed lib/secure/src/md5.h: This was broken as it had
+  "typedef unsigned long int UINT4;". "unsigned long int" is 8 bytes on x86_64.
+  We are using now the standardized types from <inttypes.h>.
+- fixed warnings and improved lib/secure/src/md5.c:
+  * we are using memcpy() and memset() instead of the open-coded loops as
+    suggested 
+  * const'ified
+  * added function prototypes for static functions
+  * moved static functions to the top so that their declaration is before
+    their use to allow gcc to inline if only used once.
+  It remains ugly - God knows why there are that so many useless
+  type-casts.
+- Some minor and trivial cleanup: Added two functions to calculate the ETX
+  value from a struct tc_edge_entry and a struct link_entry, respectively.
+  And use them everywhere.
+- added http://meshcube.org/nylon/utils/olsr-topology-view.pl into
+  lib/httpinfo/misc as suggested by Jens Nachtigall <nachtigall@web.de>
+- Killed "struct olsrd_config *cnf" in src/cfgparser/olsrd_conf.h and replaced
+  it's usage with "olsr_cnf" from src/defs.h.
+  Serious cleanup: olsrd_get_default_cnf() does no longer initialize the global
+  "cnf" variable" but uses a local one which is returned as before. And
+  olsrd_parse_cnf() does no longer return the global variable it is working on.
+- Merged "struct hna4_entry" and "struct hna6_entry" into
+  "struct local_hna_entry" (as "struct hna_entry" is a different thing)
+  Both have almost the same data (IP address + netmask/prefix) so we use
+  the quite new "struct olsr_ip_prefix" to store it.
+  Also merged the "hna4" and "hna6" pointer in "struct olsr_config" -
+  look at the global "olsr_cnf->ip_version".
+- added a olsr_ip_prefix_to_string() function
+- .h file cleanup: def.h does not longer include net_olsr.h because it 
+  doesn't needs it.
+- more type safety: the macros COPY_IP() and COMP_IP are gone and replaced
+  with "=" or similar "normal" C operations. There are also now the inline
+  functions ip4cmp() and ip4equal() to work on "struct in_addr", ip6cmp()
+  and ip6equal() to work on "struct in6_addr" and ipcmp() and ip6equal()
+  to work on "union olsr_ip_addr".
+  Most (or even more precise: almost all) uses of COPY_IP() and COMP_IP()
+  are in "if (olsr_cnf->ip_version) { ... } else { ... }" anyway to
+  there is no reson to copy an IPv4 address effectively with
+  "memcpy(&dst, &src, 4)" or compare with memcmp(&a, &b, 4)" wher the
+  always "4" is stored in a variable inhibiting compiler optimization.
+  There is also the deprecated function genipcopy() mimicking the old
+  typeless COPY_IP() macro for the last few places where a cleanup is
+  needed anyways.
+  There also lots of old macros left over (commented out of course) until
+  we are confident that everything works. And then I will kill them too.
+- Fixed the misleading definition of "v4" in "struct olsr_ip_addr" fom
+  "olsr_u32_t" (in network-byteorder!) to "struct in_addr". Lots of
+  temporary variables to call inet_ntoa()/inet_ptoa() vanished .....
+- We have now ip4_to_string(), ip6_to_string() and olsr_ip_to_string()
+  to print a "struct in_addr", "struct in6_addr" and "union olsr_ip_addr"
+  into a string buffer.
+- cleanup: olsr_ip_to_string() and similar non-reentrant functions now must
+  get a target buffer. To ease that, there is the "struct ipaddr_str"
+  which is large enough for all of them (read: for an IPv6 address). This
+  also removes the cyclic buffer there.
+  All of these function return a "const char *" which can be directly used
+  for printf(3) and friends.
+- const'ified more functions
+- converted the source to UTF-8.
+- "struct sig_msg" uses an olsr_u8_t for a byte array (and not "char")
+- force the few inline function to always be inlined.
+- #ifdef the body of the olsr_print_hna_set() and olsr_print_neighbor_table()
+  if nothing is done
+- declare "int_addr", "int_netmask" and "int_broadaddr" in "struct interface"
+  as "struct sockaddr_in" since it is that what we actually want there (and
+  it is similar to the IPv6 code).
+- updated the olsrd.conf.default.lq-fisheye to the Debian-deliverd version
+  after recent discussions olsr-dev@olsr.org
+- use "inline_avl_comp_ipv4()" in "avl_comp_ipv4()"
+- clean up the routes on more signals. Basically we want to do this on all
+  signals which terminate the program.
+- killed a superflous global buffer in src/main.c
+- made inline functions from avl_walk_{first,last,next,prev} and created
+  "const" versions of it. inline_avl_comp_ipv4() is now also an inline function
+  (and not a macro)
+- created a typedef's for various function pointers - much easier to read.
+- cleanup: compare tree->comp (adn other pointers)) to NULL (and not 0)
+- killed superflous "return"s at the end of void functions
+- const'ified more parameters in many more functions in the .h and
+  .c files
+- init-functions with constant or ignored return values are "void"
+- created a typedef fro the callback in "struct export_route_entry"
+  and using it!
+- moved the initialization of the {add,chg,del}_kernel_list variables
+  into process_routes.c. So they are now "static" there.
+- olsr_export_{add,del}_route{,6} are now static in process_routes.c
+  since they are not used elsewhere.
+- olsr_addroute_add_function() and olsr_deldroute_add_function() were
+  almost identical - made one function out of it.
+  Same for olsr_addroute_del_function() and olsr_deldroute_del_function().
+- fixed the sort order in avl_comp_ipv4_prefix(): We compare now the IPv4
+  values in host byte order (and not network byte order). So the route
+  list in the e.g. httpinfo plugin is now nicely sorted.
+- fixed and improved the `gcc-warnings` script:
+  * support older gcc's (as on Debian/Sarge) as they have slightly different
+    error messages
+  * removed superflous lines
+  * replaced the call of `sed` with shell built-in features fixing syntax
+    errors on Debian/Sarge
+  * set all locale-relevant variables to "C" (just to be sure)
+- consolidated ip{4,6,}{cmp,equal}: all are nwo inline functions using only
+  the minimal necessary operations. Thanks to Hannes Gredler
+  <hannes@gedler.at> and Sven-Ola Tuecke <mail2news@commando.de> for pointing
+  that out and suggesting the `inline`, respectively.
+  use ip{4,}cmp in lq_avl.[ch] to resue the code. inline_avl_comp_ipv4
+  is superflous now (and replaced by ip4cmp) and use the global MIN and MAX
+  macro instead of AVLMIN and AVLMAX
+- killed netmasks from the IPv4 part of the code and use the prefixlen there
+  (similar to thte IPv6 part). Manymore details on
+  http://lists.olsr.org/pipermail/olsr-dev/2007-November/001464.html
+- removed the superflous "open_ipc" field from the "struct olsrd_config" as
+  it contains only the equivalent of "olsr_cnf->debug_level > 1".
+- inspired by Sven-Ola Tuecke: avoid a bash'ism (i.e. "OPTS="${OPTS//$opt}") in
+  gcc-warnings and ld-warnings. But we do not replace it with `sed` (since it
+  costs a fork(2) and an exec(3)) but also with shell code which doesn't use
+  any external program.
+- added configuration file support for "flat fib metrics".
 
 0.5.4 ---------------------------------------------------------------------
 
@@ -94,13 +256,13 @@ To quote him (more):
   load of the route calculation path between 60%-80%.
 ----  snip  ----
 
-PATCHES by Sven-Ola Tücke <mail2news@commando.de> to be found on from
+PATCHES by Sven-Ola Tuecke <mail2news@commando.de> to be found on from
 http://download-master.berlin.freifunk.net/sven-ola/nylon/packages/olsrd/files/
 - 102-olsrd-rt-refactoring-fixes.patch
   Because you changed a lot of basics: It's time to handle a general
   flaw in the routing system. Plase take a look at chk_if_changed(). This
   will free() any "struct interface" pointer without warning at any time.
-  This is why it's possile to SEGV olsrd with a simple "ifdown xxx". 
+  This is why it's possile to SEGV olsrd with a simple "ifdown xxx".
   The patch replaces the (maybe) invalid pointer with an index reference
   "iif_index". You can always ask the OS for a name. Please note, that I do
   not have a working BSD toolchain, so I've placed an #error in the IPv6
@@ -131,7 +293,7 @@ http://download-master.berlin.freifunk.net/sven-ola/nylon/packages/olsrd/files/
   Reworked this one to discard GPL helper functions. Also checked IPv6 and
   re-included the IPC hookup. The patch adds a "RtTable [number]" for
   /etc/olsrd.conf which is simply the Linux
-  policy routing table to use. Defaults to 254 (== main). 
+  policy routing table to use. Defaults to 254 (== main).
   This patch was modified/clenaed up by <bernd@firmix.at> to use "#if"
   instead of "#ifdef" as it's more robust against typos.
 - 110-olsrd-fixpacketprint.patch, 112-olsrd-nameservice-fixemptyname.patch,
@@ -167,7 +329,7 @@ PATCH by David Cornejo <dcornejo@gmail.com>
 - fixed an "+=" of an uninitialized variable (detected with/by the
   scan.coverty.com).
 
-BUG erported by Aaron Kaplan <aaron@lo-res.org>
+BUG reported by Aaron Kaplan <aaron@lo-res.org>
 - BSD-xargs doesn't know "-r".
 
 PATCHES and CLEANUPS by Bernd Petrovitsch <bernd@firmix.at>
@@ -214,7 +376,7 @@ BUG FIX
 The bmf plugin wanted to kill a not-started thread and this causes a segmentation
 violation. This happens if the old plugin interface support is not compiled in
 and one uses - or more asccurate: wants to use - the bmf plugin which uses that
-ATM. Thanks to Cédric Krier <ced@ced.homedns.org> for reporting this.
+ATM. Thanks to Cedric Krier <ced@ced.homedns.org> for reporting this.
 
 DEPENDENCIES FIXED
 The dependencies (*.d files) are now properly generated and used. And they also
@@ -281,7 +443,7 @@ CLEANUPS
 
 APPLIED PATCHES FROM FREIFUNK-FIRMWARE
 libsmake, dyngwplain, nameservices+services, tzxtinfo, quagga, quagga-routehandler,
-optimize, fixes from Eric Tromp and Sven-Ola Tücke, CPU-optimize, secure key, HNA-IP
+optimize, fixes from Eric Tromp and Sven-Ola Tuecke, CPU-optimize, secure key, HNA-IP
 
 CLEANUPS
 removed hardcoded limit on the number of interfaces (at least in the Unix part)
@@ -300,12 +462,12 @@ BUGFIXES
 
 OLSR NETWORK SIMULATOR
 
-An application called olsr_switch(sorry for the nameclash with the win32 
+An application called olsr_switch(sorry for the nameclash with the win32
 GUI) has been added. If olsrd is ran using the -hint option it can now
 connect to olsr_switch and be part of a virtual network. This means
 that multiple instances can be ran at the same host! The olsr_switch
 application allows the user to define link variables on all viritual
-links in the network, creating all possible topologies. Read more in 
+links in the network, creating all possible topologies. Read more in
 the readme file.
 
 EXPERIMENTAL FISH EYE ALGORITHM
@@ -316,7 +478,7 @@ been added. Read more in the corresponding README file.
 OPENBSD SUPPORT
 
 olsrd now also compiles on OpenBSD systems. Thanks a lot to Holger
-Mauermann for the patches! 
+Mauermann for the patches!
 
 BUILDSYSTEM REWRITE
 
@@ -332,14 +494,14 @@ be updated dynamically.
 
 PLUGIN INTERFACE
 
-Updated interface version to 3 and added more noticeable warning 
+Updated interface version to 3 and added more noticeable warning
 for version missmatch.
 
 MATH LIB DEPENDENCY
 
 The dependency on the math lib came from the use of pow(3) in the
-mantissa/exponent calculation. The calls to pow in this long forgotten 
-code, was very unnessecarry. The pow calls are replaced with bitwise 
+mantissa/exponent calculation. The calls to pow in this long forgotten
+code, was very unnessecarry. The pow calls are replaced with bitwise
 shifts and -lm is no longer needed.
 
 ICMP REDIRECTS ON LINUX
@@ -380,7 +542,7 @@ trees instead of linked lists, which makes look-ups much faster.
 The debug output function olsr_printf() is not used by olsrd
 internals any more. Instead the macro OLSR_PRINTF is to be used.
 This macro does debug level testing _before_ doing any function
-calls(both printf itself and parameters to printf). This is a much 
+calls(both printf itself and parameters to printf). This is a much
 more optimized way of doing debug output. In addition olsrd can
 be built without any debug output code if doing 'make NODEBUG=1'.
 
@@ -469,7 +631,7 @@ PLUGINS
 
 The httpinfo, dyn_gw and dot_draw plugins now all include olsrd
 headerfiles directly. A plugin should define OLSR_PLUGIN before
-including olsrd headers. Doing things this way removed the 
+including olsrd headers. Doing things this way removed the
 redundant datatype definitions that has so often caused trouble
 when things has been updated in olsrd.
 
@@ -524,7 +686,7 @@ LICENSE CHANGE
 Olsrd is now distributed under a BSD style license. We believe olsrd will
 be better off using this license as it opens up for commercial players
 to use olsrd freely in their products. In the end this will lead to
-this kind of users doing serious testing and bug fixing of olsrd. 
+this kind of users doing serious testing and bug fixing of olsrd.
 
 ETX-LIKE LINK QUALITY DETECTION
 
@@ -568,7 +730,7 @@ between 3 and 128 are legal.
 NEW CONFIGFILE PARSER/FORMAT/SCHEME
 
 A whole new config file syntax and parser is introduced with this
-release. The parser is generated using flex and bison and it is 
+release. The parser is generated using flex and bison and it is
 designed to be very modular. The parser can be compiled as either
 a standalone binary, a shared library or as part of olsrd. This way
 other applications can parse and generate olsrd configuration files
@@ -599,9 +761,9 @@ dependency file generation using makedep.
 
 DEBUG OUTPUT
 
-Tables are now only printed if changes occur, so there are no longer 
-any periodical output when using a debuglevel >0. A "heartbeat" is 
-now printed to STDOUT(if it is a terminal) in the form of a rotating 
+Tables are now only printed if changes occur, so there are no longer
+any periodical output when using a debuglevel >0. A "heartbeat" is
+now printed to STDOUT(if it is a terminal) in the form of a rotating
 line to show that olsrd is actually operating.
 Adding "ClearScreen yes" to the configuration file clears the screen
 each time before the debug output shows updated information. This
@@ -612,7 +774,7 @@ configuration file.
 PLUGIN INTERFACE
 
 There are some changes in the plugin interface. It is now at
-version 2. Plugin specific parameters from the configfile 
+version 2. Plugin specific parameters from the configfile
 using the PlParam option, will now be passed on to plugins.
 To receive such parameters a plugin must implement a function:
 int
@@ -633,14 +795,14 @@ tested and feedback is appreciated!
 
 IPC OPTIONS
 
-Various options regarding IPC connections can now be set in the 
+Various options regarding IPC connections can now be set in the
 configfile. The options are max connections, allowed unicast
 hosts and allowed net-ranges.
 
 CODE REWRITES
 
 Much of the message generation and net output code is rewritten.
-Sending of partial messages should now work 100%. Also TC, MID 
+Sending of partial messages should now work 100%. Also TC, MID
 and HNA messages are now cached for a random amount of time
 before transmitted - this often leads to the situation where these
 messages are sent together with an HELLO message, which is highly
@@ -669,7 +831,7 @@ being increased when a change in the MPR selector set was detected
 has been fixed. Another TC related bug that caused timed out TC
 entries not to be deleted from the routing table in certain cases
 has also been fixed. These bugs could cause unstable routes.
-A bug that in many cases caused the wrong routes to be deleted 
+A bug that in many cases caused the wrong routes to be deleted
 when using IPv6 has been fixed.
 
 
@@ -721,7 +883,7 @@ Read the README-WIN32.txt file!
 DYNAMIC NETWORK INTERFACE UPDATES
 
 Network interfaces can now be updated and removed/added at
-runtime. Olsrd will check all interfaces specified in the config 
+runtime. Olsrd will check all interfaces specified in the config
 file or on the command-line, every 5 seconds. If updates
 occur, olsrd will register this and update the necessary data.
 If interfaces are removed or added, olsrd will detect this
@@ -735,7 +897,7 @@ Note that olsrd will now run even if no interfaces are detected.
 ROUTE CALCULATION UPDATE
 
 All 1 hop neighbor addresses that are not directly reachable trough
-a symmetric link in the link set will now be added with a GW in the 
+a symmetric link in the link set will now be added with a GW in the
 routing table. this GW will be an interface address from a registered
 symmetric link to the neighbor.
 
@@ -744,10 +906,10 @@ MID UPDATE
 Alias addresses are now registered in the link set processing
 if available. This is not to pretty(since the vtime has to
 be a mere guess) but it gives faster initial route updates.
-If a HELLO is received(at initial registration) from an IP 
-that is not the same as the one set as main address in the 
-received HELLO header, then the IP from which the HELLO was 
-received will be registered as an alias of the main address 
+If a HELLO is received(at initial registration) from an IP
+that is not the same as the one set as main address in the
+received HELLO header, then the IP from which the HELLO was
+received will be registered as an alias of the main address
 set in the HELLO header. The default vtime is set to 15 secs.
 
 CODE RESTRUCTURING
@@ -772,8 +934,8 @@ CODE CLEANUPS
 
 PLUGIN INTERFCAE
 
-A new set of functions that are called whenever a change in the 
-interface configuration(update, addition, removal) is made is 
+A new set of functions that are called whenever a change in the
+interface configuration(update, addition, removal) is made is
 introduced.
 These functions are added and removed very much like the ptf
 functions. Available trough the functions add_ifchgf and del_ifchgf.
@@ -865,7 +1027,7 @@ validity time in the configfile added.
 
 IPv6 ADDRESS SCOPE
 
-Option to set what IPv6 address type(scope) to use in the 
+Option to set what IPv6 address type(scope) to use in the
 configfile added. It can be set to either global or site-local.
 
 IPv6 MULTICAST
@@ -912,9 +1074,9 @@ when using 'make install'.
 PLUGIN SUPPORT
 
 Olsrd now supports runtime-loadable plugins! A couple of example plugins
-are located in the lib/ directory. Read the README files in the various 
+are located in the lib/ directory. Read the README files in the various
 plugin directories for more info. A directive to load plugins have been
-added to the configfile as well. 
+added to the configfile as well.
 Documentation of the plugin interface can be fount at http://www.olsr.org.
 
 The plugin interface is designed to be extendable. But it should _always_
@@ -1052,8 +1214,8 @@ sets use.
 CODE RESTRUCTURING
 
 Some code restructuring which resulted in the new files: timer.h,
-mantissa.c, mantissa.h, hashing.c, hashing.h, linux/net.c 
-linux/net.h, linux/kernel_routes.c, linux/kernel_routes.h and some 
+mantissa.c, mantissa.h, hashing.c, hashing.h, linux/net.c
+linux/net.h, linux/kernel_routes.c, linux/kernel_routes.h and some
 renamed files
 
 BUG FIXES
@@ -1152,19 +1314,19 @@ A small HNA bug fixed.
 
 Forwarding jitter
 
-Forwarding jitter added. Messages are piggybacked if they arrive(and are to 
+Forwarding jitter added. Messages are piggybacked if they arrive(and are to
 be forwarded) while there is data to be forwarded buffered.
 Added some bugfixes to support parsing of piggybacked messages as well.
 
 Route calculation
 
 Fixed route calculation so that 2 hop neighbors are added. This smooths
-changes from 1 hop to 2 hop neighbor out. The old way one had to wait for 
+changes from 1 hop to 2 hop neighbor out. The old way one had to wait for
 a TC before the 2 hop neighbors were added.
 
 2 hop neighbor set
 
-All neighbors received in HELLO messages are added to the two hop 
+All neighbors received in HELLO messages are added to the two hop
 neighborhood. This helps smoothing out the 1-to-2 hop transition as well.
 
 MID calculation
@@ -1260,7 +1422,7 @@ all the changes introduced in 0.3.0.
 Bugs
 
 Fixed a nasty bug concerning the sequence numbering of TC packets.
-Fixed some bugs regarding MPR calculation - and probably introduced 
+Fixed some bugs regarding MPR calculation - and probably introduced
 a whole new species when implementing the willingness-based calculation ;-)
 
 
@@ -1279,7 +1441,7 @@ Link sensing and neighbor processing
 
 Link sensing and neighbor processing was done in the same operation in the
 old code. Link sensing is now a mechanism of its own which is 100% RFC
-compliant. Neighbor processing and HELLO generation has been partly 
+compliant. Neighbor processing and HELLO generation has been partly
 rewritten to be RFC compliant. Neighbors are now registered as either
 SYN or NOT_SYM. The NOT_NEIGH, SYM_NEIGH and MPR_NEIGH values are only
 used when building HELLO messages. Links are in one of the following states:
@@ -1316,13 +1478,13 @@ A bugs in the TC processing fixed.
 
 HNA
 
-Some serious HNA bugs fixed. These bugs caused a node to always choos the 
+Some serious HNA bugs fixed. These bugs caused a node to always choos the
 gateway with the larges hopcout :) More seriously - a bug caused looping
 of HNA messages in certain scenarios.
 
 Package sequence numbers
 
-These were added. Not much use as of now - but they're there(as specified 
+These were added. Not much use as of now - but they're there(as specified
 in the RFC).
 
 Broadcast address
@@ -1336,7 +1498,7 @@ use the 255.255.255.255 broadcast.
 
 Htime and Vtime
 
-Htime and Vtime processing and handling added. Holding times used to be 
+Htime and Vtime processing and handling added. Holding times used to be
 a static value for all nodes. Now every node can signal its vlidity time
 to others.
 To achieve this mantissa/exponent calculation functionality was added.
@@ -1354,7 +1516,7 @@ The use of jitter in message generation intervals vere fixed.
 
 Seqno bugs
 
-Some bugs concerning sequence numbers in HELLO and MID message handling 
+Some bugs concerning sequence numbers in HELLO and MID message handling
 was fixed. Newly registered nodes in the neighbor and MID sets were
 initialized with a seqno of 0. When using a "wraparound" sequencenumber
 check(as defined in olsr_protocol.h) this can produce errors if a new

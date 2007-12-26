@@ -1,11 +1,40 @@
+######################
+#
+# Highlevel configuration options for all
+#
+#
+
+# activate debugging with 1 or deactivate with 0
+DEBUG ?= 0
+
+# compile OLSR_PRINTF out
+NO_DEBUG_MESSAGES ?= 0
+
+# the optimize option to be set for gcc
+OPTIMIZE ?= -O2
+
+# enable mudflap with 1 or deactivate with 0
+# you need a recent enough gcc and the libmudflap installed
+MUDFLAP ?= 0
+
+
+######################
+#
+# Lowlevel options and rules
+#
+
 # programs
-CCACHE ?=       $(shell which ccache 2> /dev/null)
+CCACHE ?=       $(shell IFS=:; for i in $$PATH;do test -x "$$i/ccache" && echo "$$i/ccache" && break; done)
 ifeq ($(origin CC),default)
 CC = 		$(CCACHE) gcc
 else
 CC ?= 		$(CCACHE) gcc
 endif
+ifeq ($(DEBUG),0)
 STRIP ?=	strip
+else
+STRIP ?=	:
+endif
 BISON ?=	bison
 FLEX ?=		flex
 TAGCMD ?=	etags
@@ -21,7 +50,10 @@ EXENAME ?= olsrd
 CFGNAME ?= $(EXENAME).conf
 CFGFILE ?= $(ETCDIR)/$(CFGNAME)
 
-CPPFLAGS =	-Isrc -I$(TOPDIR)/src
+CPPFLAGS =	-Isrc
+ifneq ($(TOPDIR),.)
+CPPFLAGS +=	-I$(TOPDIR)/src
+endif
 
 # add gcc warnings and optimizations if CFLAGS not set
 ifndef CFLAGS
@@ -39,8 +71,21 @@ WARNINGS +=	-Wmissing-noreturn
 WARNINGS +=	-Wmissing-format-attribute
 WARNINGS +=	-Wno-multichar
 WARNINGS +=	-Wno-deprecated-declarations
+WARNINGS +=	-Wendif-labels
+WARNINGS +=	-Wwrite-strings
+WARNINGS +=	-Wbad-function-cast
+WARNINGS +=	-Wpointer-arith
+WARNINGS +=	-Wcast-qual
+# the following 5 do not work yet and need more work on it
+#WARNINGS +=	-Wshadow
+#WARNINGS +=	-Wpointer-arith
+#WARNINGS +=	-Wcast-align
+#WARNINGS +=	-Wconversion
 #WARNINGS +=	-Wredundant-decls
+ifeq ($(MUDFLAP),0)
+# work around a bug in gcc-4.*
 WARNINGS +=	-Wnested-externs
+endif
 # Alas, htons() triggers this so we can't seriously activate it.
 #WARNINGS +=	-Wunreachable-code
 WARNINGS +=	-Winline
@@ -48,35 +93,62 @@ WARNINGS +=	-Wdisabled-optimization
 #WARNINGS +=	-Werror
 WARNINGS +=	-finline-functions-called-once
 WARNINGS +=	-fearly-inlining
-# we have small inline functions in src/lq_route.c which should always be inlined
+ifeq ($(DEBUG),0)
+WARNINGS +=	-fomit-frame-pointer
+endif
+# we have small inline functions in src/lq_route.h which should always be inlined
 WARNINGS +=	-finline-limit=50
+# These tell gcc to put each function and global variable in a separate section.
+# The linker can than remove all unreferenced section. But in the olsrd binary
+# unused doesn't imply unused at all since the function may be used by plugins,
+# e.g. the ones in src/plugin_utils.c.
+# So we can use that featuer at most to identify unused functions and remove them
+# from the source by hand.
+#WARNINGS +=	-ffunction-sections
+#WARNINGS +=	-fdata-sections
 WARNINGS :=	$(shell CC="$(CC)" $(TOPDIR)/gcc-warnings $(WARNINGS))
 endif
 CFLAGS +=	$(WARNINGS)
-CFLAGS +=	-O2
-#CFLAGS +=	-g
+CFLAGS +=	$(OPTIMIZE)
 CFLAGS +=	$(EXTRA_CFLAGS)
 
 # Must be specified along with -lpthread on linux
 CPPFLAGS +=	$(OS_CFLAG_PTHREAD)
 endif
+ifneq ($(MUDFLAP),0)
+CFLAGS +=	-fmudflapth
+endif
 
 ifdef OLSRD_PLUGIN
 # c and ld flags for libraries (plugins)
 CPPFLAGS +=	-DOLSR_PLUGIN
-LDFLAGS +=	-shared -Wl,-soname,$(PLUGIN_NAME)
+LDFLAGS +=	-shared
+LDFLAGS +=	-Wl,-soname,$(PLUGIN_NAME)
 LDFLAGS +=	-Wl,--version-script=version-script.txt 
 else
 # c and ld flags for main
 LDFLAGS +=	-Wl,-export-dynamic 
 endif
+# LDFLAGS for all 
+LDFLAGS +=	-Wl,--warn-common
+# See above at "-ffunction-sections" for an explanation (and why it is disabled).
+#LDOPTS +=	-Wl,--gc-sections
+#LDOPTS +=	-Wl,--print-gc-sections
+#LDFLAGS +=	$(shell CC="$(CC)" $(TOPDIR)/ld-warnings $(LDOPTS))
+ifneq ($(MUDFLAP),0)
+LIBS +=		-lmudflapth
+endif
+LIBS +=		$(OS_LIB_PTHREAD)
+
+# extra options from the outside
+CPPFLAGS +=	$(EXTRA_CPPFLAGS)
 
 ###################################
 #
 # options to save space on small systems
 
 # we have plugins with the old interface
-CPPFLAGS +=	-DSUPPORT_OLD_PLUGIN_VERSIONS=1
+#CPPFLAGS +=	-DSUPPORT_OLD_PLUGIN_VERSIONS=1
 
 # search sources and headers in current dir and in src/
 SRCS +=		$(wildcard src/*.c *.c)
@@ -101,16 +173,22 @@ endif
 OBJS +=		$(SRCS:%.c=%.o)
 
 # debugging or non-debugging flags
-ifdef DEBUG
+ifeq ($(DEBUG),1)
 CPPFLAGS +=	-DDEBUG
+CFLAGS +=	-g
+else
+CPPFLAGS +=	-DNDEBUG
 endif
-ifdef NODEBUG
+ifeq ($(NO_DEBUG_MESSAGES),1)
 CPPFLAGS +=	-DNODEBUG
 endif
 
+# a make function to quote "/" and "."
+quote = $(subst .,\.,$(subst /,\/,$1))
+
 # fully automatic and working dependency generation
 %.d: %.c
-	@$(CC) -M $(CPPFLAGS) "$<" | sed -e '1s|\($(*F)\)\.o[ :]*|$(*D)/\1.o $@: Makefile $(TOPDIR)$(if $(TOPDIR),/)Makefile.inc |g' >"$@"
+	@$(filter-out $(CCACHE),$(CC)) -M $(strip $(CPPFLAGS)) "$<" | sed -e '1s/\($(call quote,$(*F))\.o\)[ :]*/$(call quote,$(*D)/\1 $@: Makefile $(TOPDIR)$(if $(TOPDIR),/)Makefile.inc) /g' >"$@"
 
 # we always need the includes and defines
 # for legacy since now
@@ -149,8 +227,8 @@ help:
 	@echo
 
 ifeq ($(filter clean% %clean, $(MAKECMDGOALS)),)
-# include dependencies
--include $(SRCS:%.c=%.d)
+# include dependencies - we don't need any dependency for a everytime generated files
+-include $(filter-out src/builddata.%,$(SRCS:%.c=%.d))
 endif
 
 # Local Variables:

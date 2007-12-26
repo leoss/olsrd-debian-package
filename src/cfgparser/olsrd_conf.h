@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: olsrd_conf.h,v 1.13 2007/04/28 20:46:32 bernd67 Exp $
  */
 
 
@@ -49,9 +48,7 @@
 #define PARSER_VERSION "0.1.2"
 
 
-int current_line;
-
-struct olsrd_config *cnf;
+extern int current_line;
 
 struct conf_token
 {
@@ -63,12 +60,5 @@ struct conf_token
 
 void
 set_default_cnf(struct olsrd_config *);
-
-#if defined WIN32_STDIO_HACK
-void 
-win32_stdio_hack(unsigned int);
-#else
-#define win32_stdio_hack(handle) do { } while(0)
-#endif
 
 #endif

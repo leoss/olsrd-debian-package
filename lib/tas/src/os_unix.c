@@ -37,7 +37,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: os_unix.c,v 1.6 2007/04/19 23:01:32 bernd67 Exp $
  */
 
 #if defined linux
@@ -434,8 +433,8 @@ static int createSockAddr(struct sockaddr *sockAddr,
 
 static int addrFromSockAddr(struct ipAddr *addr, const struct sockaddr *sockAddr)
 {
-  struct sockaddr_in *sockAddr4 = (struct sockaddr_in *)sockAddr;
-  struct sockaddr_in6 *sockAddr6 = (struct sockaddr_in6 *)sockAddr;
+  const struct sockaddr_in *sockAddr4 = (const struct sockaddr_in *)sockAddr;
+  const struct sockaddr_in6 *sockAddr6 = (const struct sockaddr_in6 *)sockAddr;
 
   memset(addr, 0, sizeof (struct ipAddr));
 

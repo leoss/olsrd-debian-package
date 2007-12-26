@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * Copyright (c) 2007, Sven-Ola for the policy routing stuff
  * All rights reserved.
  *
@@ -37,7 +37,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: kernel_routes.c,v 1.29 2007/10/13 12:31:04 bernd67 Exp $
  */
 
 #include "kernel_routes.h"
@@ -61,7 +60,7 @@ struct olsr_rtreq
 	char			buf[512];
 };
 
-static void olsr_netlink_addreq(struct olsr_rtreq *req, int type, void *data, int len)
+static void olsr_netlink_addreq(struct olsr_rtreq *req, int type, const void *data, int len)
 {
 	struct rtattr *rta = (struct rtattr*)(((char*)req) + NLMSG_ALIGN(req->n.nlmsg_len));
 	req->n.nlmsg_len = NLMSG_ALIGN(req->n.nlmsg_len) + RTA_LENGTH(len);
@@ -71,7 +70,7 @@ static void olsr_netlink_addreq(struct olsr_rtreq *req, int type, void *data, in
 	memcpy(RTA_DATA(rta), data, len);
 }
 
-static int olsr_netlink_route(struct rt_entry *rt, olsr_u8_t family, olsr_u8_t rttable, __u16 cmd)
+static int olsr_netlink_route(const struct rt_entry *rt, olsr_u8_t family, olsr_u8_t rttable, __u16 cmd)
 {
 	int ret = 0;
 	struct olsr_rtreq req;
@@ -87,9 +86,11 @@ static int olsr_netlink_route(struct rt_entry *rt, olsr_u8_t family, olsr_u8_t r
 		0,
 		0
 	};
-	olsr_u32_t metric = 1;
-	struct rt_nexthop* nexthop = (RTM_NEWROUTE == cmd) ?
+        olsr_u32_t metric = RT_METRIC_DEFAULT;
+	const struct rt_nexthop* nexthop = (RTM_NEWROUTE == cmd) ?
 		&rt->rt_best->rtp_nexthop : &rt->rt_nexthop;
+	const struct rt_metric* met = (RTM_NEWROUTE == cmd) ?
+		&rt->rt_best->rtp_metric : &rt->rt_metric;
 
 	memset(&req, 0, sizeof(req));
 	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
@@ -104,11 +105,11 @@ static int olsr_netlink_route(struct rt_entry *rt, olsr_u8_t family, olsr_u8_t r
 
 	if (AF_INET == family)
 	{
-		if (rt->rt_dst.prefix.v4 != nexthop->gateway.v4)
+		if (rt->rt_dst.prefix.v4.s_addr != nexthop->gateway.v4.s_addr)
 		{
 			olsr_netlink_addreq(&req, RTA_GATEWAY, &nexthop->gateway.v4, sizeof(nexthop->gateway.v4));
 			req.r.rtm_scope = RT_SCOPE_UNIVERSE;
-			metric = RT_METRIC_DEFAULT;
+			metric = olsr_fib_metric(met);
 		}
 		olsr_netlink_addreq(&req, RTA_DST, &rt->rt_dst.prefix.v4, sizeof(rt->rt_dst.prefix.v4));
 	}
@@ -118,7 +119,7 @@ static int olsr_netlink_route(struct rt_entry *rt, olsr_u8_t family, olsr_u8_t r
 		{
 			olsr_netlink_addreq(&req, RTA_GATEWAY, &nexthop->gateway.v6, sizeof(nexthop->gateway.v6));
 			req.r.rtm_scope = RT_SCOPE_UNIVERSE;
-			metric = RT_METRIC_DEFAULT;
+			metric = olsr_fib_metric(met);
 		}
 		olsr_netlink_addreq(&req, RTA_DST, &rt->rt_dst.prefix.v6, sizeof(rt->rt_dst.prefix.v6));
 	}
@@ -151,7 +152,7 @@ static int olsr_netlink_route(struct rt_entry *rt, olsr_u8_t family, olsr_u8_t r
 				h = NLMSG_NEXT(h, ret);
 			}
 		}
-		if (0 <= ret && olsr_cnf->open_ipc)
+		if (0 <= ret && olsr_cnf->ipc_connections > 0)
 		{
 			ipc_route_send_rtentry(
 				&rt->rt_dst.prefix,
@@ -173,7 +174,7 @@ static int olsr_netlink_route(struct rt_entry *rt, olsr_u8_t family, olsr_u8_t r
  * @return negative on error
  */
 int
-olsr_ioctl_add_route(struct rt_entry *rt)
+olsr_ioctl_add_route(const struct rt_entry *rt)
 {
 #if !LINUX_POLICY_ROUTING
   struct rtentry kernel_route;
@@ -190,21 +191,20 @@ olsr_ioctl_add_route(struct rt_entry *rt)
   ((struct sockaddr_in*)&kernel_route.rt_gateway)->sin_family = AF_INET;
   ((struct sockaddr_in*)&kernel_route.rt_genmask)->sin_family = AF_INET;
 
-  ((struct sockaddr_in *)&kernel_route.rt_dst)->sin_addr.s_addr =
-    rt->rt_dst.prefix.v4;
+  ((struct sockaddr_in *)&kernel_route.rt_dst)->sin_addr = rt->rt_dst.prefix.v4;
 
   if (!olsr_prefix_to_netmask(&mask, rt->rt_dst.prefix_len)) {
     return -1;
   }
-  ((struct sockaddr_in *)&kernel_route.rt_genmask)->sin_addr.s_addr = mask.v4;
+  ((struct sockaddr_in *)&kernel_route.rt_genmask)->sin_addr = mask.v4;
 
-  if (rt->rt_dst.prefix.v4 != rt->rt_best->rtp_nexthop.gateway.v4) {
-    ((struct sockaddr_in *)&kernel_route.rt_gateway)->sin_addr.s_addr =
+  if (rt->rt_dst.prefix.v4.s_addr != rt->rt_best->rtp_nexthop.gateway.v4.s_addr) {
+    ((struct sockaddr_in *)&kernel_route.rt_gateway)->sin_addr =
       rt->rt_best->rtp_nexthop.gateway.v4;
   }
 
   kernel_route.rt_flags = olsr_rt_flags(rt);
-  kernel_route.rt_metric = RT_METRIC_DEFAULT;
+  kernel_route.rt_metric = olsr_fib_metric(&rt->rt_best->rtp_metric.hops);
 
   /*
    * Set interface
@@ -213,7 +213,7 @@ olsr_ioctl_add_route(struct rt_entry *rt)
 
   /* delete existing default route before ? */
   if((olsr_cnf->del_gws) &&
-     (rt->rt_dst.prefix.v4 == INADDR_ANY) &&
+     (rt->rt_dst.prefix.v4.s_addr == INADDR_ANY) &&
      (rt->rt_dst.prefix_len == INADDR_ANY)) {
     delete_all_inet_gws();
     olsr_cnf->del_gws = OLSR_FALSE;
@@ -253,7 +253,7 @@ olsr_ioctl_add_route(struct rt_entry *rt)
  *@return negative on error
  */
 int
-olsr_ioctl_add_route6(struct rt_entry *rt)
+olsr_ioctl_add_route6(const struct rt_entry *rt)
 {
 #if !LINUX_POLICY_ROUTING
   struct in6_rtmsg kernel_route;
@@ -263,13 +263,13 @@ olsr_ioctl_add_route6(struct rt_entry *rt)
 
   memset(&kernel_route, 0, sizeof(struct in6_rtmsg));
 
-  COPY_IP(&kernel_route.rtmsg_dst, &rt->rt_dst.prefix);
+  kernel_route.rtmsg_dst     = rt->rt_dst.prefix.v6;
   kernel_route.rtmsg_dst_len = rt->rt_dst.prefix_len;
 
-  COPY_IP(&kernel_route.rtmsg_gateway, &rt->rt_best->rtp_nexthop.gateway);
+  kernel_route.rtmsg_gateway = rt->rt_best->rtp_nexthop.gateway.v6;
 
   kernel_route.rtmsg_flags = olsr_rt_flags(rt);
-  kernel_route.rtmsg_metric = RT_METRIC_DEFAULT;
+  kernel_route.rtmsg_metric = olsr_fib_metric(&rt->rt_best->rtp_metric.hops);
   
   /*
    * set interface
@@ -303,7 +303,7 @@ olsr_ioctl_add_route6(struct rt_entry *rt)
  *@return negative on error
  */
 int
-olsr_ioctl_del_route(struct rt_entry *rt)
+olsr_ioctl_del_route(const struct rt_entry *rt)
 {
 #if !LINUX_POLICY_ROUTING
   struct rtentry kernel_route;
@@ -320,22 +320,20 @@ olsr_ioctl_del_route(struct rt_entry *rt)
   ((struct sockaddr_in*)&kernel_route.rt_gateway)->sin_family = AF_INET;
   ((struct sockaddr_in*)&kernel_route.rt_genmask)->sin_family = AF_INET;
 
-  ((struct sockaddr_in *)&kernel_route.rt_dst)->sin_addr.s_addr =
-    rt->rt_dst.prefix.v4;
+  ((struct sockaddr_in *)&kernel_route.rt_dst)->sin_addr = rt->rt_dst.prefix.v4;
 
-  if (rt->rt_dst.prefix.v4 != rt->rt_nexthop.gateway.v4) {
-    ((struct sockaddr_in *)&kernel_route.rt_gateway)->sin_addr.s_addr =
-      rt->rt_nexthop.gateway.v4;
+  if (rt->rt_dst.prefix.v4.s_addr != rt->rt_nexthop.gateway.v4.s_addr) {
+    ((struct sockaddr_in *)&kernel_route.rt_gateway)->sin_addr = rt->rt_nexthop.gateway.v4;
   }
 
   if (!olsr_prefix_to_netmask(&mask, rt->rt_dst.prefix_len)) {
     return -1;
   } else {
-    ((struct sockaddr_in *)&kernel_route.rt_genmask)->sin_addr.s_addr = mask.v4;
+    ((struct sockaddr_in *)&kernel_route.rt_genmask)->sin_addr = mask.v4;
   }
 
   kernel_route.rt_flags = olsr_rt_flags(rt);
-  kernel_route.rt_metric = RT_METRIC_DEFAULT;
+  kernel_route.rt_metric = olsr_fib_metric(&rt->rt_metric.hops);
 
   /*
    * Set interface
@@ -372,7 +370,7 @@ olsr_ioctl_del_route(struct rt_entry *rt)
  *@return negative on error
  */
 int
-olsr_ioctl_del_route6(struct rt_entry *rt)
+olsr_ioctl_del_route6(const struct rt_entry *rt)
 {
 #if !LINUX_POLICY_ROUTING
   struct in6_rtmsg kernel_route;
@@ -384,13 +382,14 @@ olsr_ioctl_del_route6(struct rt_entry *rt)
 #if !LINUX_POLICY_ROUTING
   memset(&kernel_route,0,sizeof(struct in6_rtmsg));
 
-  COPY_IP(&kernel_route.rtmsg_dst, &rt->rt_dst.prefix);
+
+  kernel_route.rtmsg_dst     = rt->rt_dst.prefix.v6;
   kernel_route.rtmsg_dst_len = rt->rt_dst.prefix_len;
 
-  COPY_IP(&kernel_route.rtmsg_gateway, &rt->rt_best->rtp_nexthop.gateway);
+  kernel_route.rtmsg_gateway = rt->rt_best->rtp_nexthop.gateway.v6;
 
   kernel_route.rtmsg_flags = olsr_rt_flags(rt);
-  kernel_route.rtmsg_metric = RT_METRIC_DEFAULT;
+  kernel_route.rtmsg_metric = olsr_fib_metric(&rt->rt_best->rtp_metric.hops);
 
   if ((rslt = ioctl(olsr_cnf->ioctl_s, SIOCDELRT, &kernel_route) >= 0)) {
 

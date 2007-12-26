@@ -1,6 +1,6 @@
 /*
  * HTTP Info plugin for the olsr.org OLSR daemon
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: admin_interface.h,v 1.3 2007/07/15 17:54:07 bernd67 Exp $
  */
 
 /*

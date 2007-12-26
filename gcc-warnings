@@ -1,23 +1,25 @@
 #!/bin/sh
 #
-# We expect warning options for gcc as argumenst and return the ones which are accepted
-# by the given gcc.
+# We expect warning options for gcc as arguments and return the ones which are
+# accepted by the given gcc.
 #
-# $Id: gcc-warnings,v 1.4 2007/10/13 14:51:32 bernd67 Exp $
 
 set -ue
 #set -vx
 
+# make sure we do not use some locale ....
+export LANG=C LC_ALL=C LC_COLLATE=C LC_CTYPE=C LC_MESSAGES=C LC_NUMERIC=C
+
 OPTS=""
 for param; do
     case "$param" in
-    -[fW]?*) OPTS="$OPTS $param";;
-    *)    echo "Ignoring $param" >&2
+    -[fWm]?*) OPTS="$OPTS $param";;
+    *)        echo "Ignoring $param" >&2
     esac
 done
 
 testcompile() {
-    $CC $OPTS -E - 2>&1 <<- EOF
+    $CC $OPTS -x c -o /dev/null - 2>&1 <<- EOF
        int main(void) {
            return 0;
        }
@@ -26,15 +28,28 @@ EOF
 
 parsetest() {
     while read error; do 
-       case "$error" in
-       *error:\ unrecognized\ *option*)
-                                       opt="${error#*\`}"
-                                       opt="${opt%\'*}"
-                                       opt="${error#*\"}"
-                                       opt="${opt%\"*}"
-                                       OPTS=`echo $OPTS | sed -e s/$opt//g`
-                                       ;;
+        case "$error" in
+        *:\ unrecognized\ *option\ \"*)
+            opt="${error#*\"}"
+            opt="${opt%\"*}"
+            ;;
+        *:\ unrecognized\ *option\ \`*)
+            opt="${error#*\`}"
+            opt="${opt%\'*}"
+            ;;
+        *) continue
+            ;;
        esac
+       # if we come here, we have in $opt the option to remove. and
+       # we remove all instances. And we save agoinst leading "-"
+       NEW_OPTS=""
+       for o in $OPTS; do
+           case "$o" in
+               $opt) : echo "Removed $o" >&2;;
+               *)    NEW_OPTS="$NEW_OPTS $o";;
+           esac
+       done
+       OPTS="$NEW_OPTS"
     done
     echo $OPTS
 }

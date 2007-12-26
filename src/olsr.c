@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: olsr.c,v 1.60 2007/10/16 10:01:29 bernd67 Exp $
  */
 
 /**
@@ -61,6 +60,7 @@
 #include "log.h"
 #include "lq_packet.h"
 #include "lq_avl.h"
+#include "net_olsr.h"
 
 #include <stdarg.h>
 #include <signal.h>
@@ -159,31 +159,18 @@ olsr_process_changes(void)
       printf("       *** %s (%s on %s) ***\n", olsrd_version, build_date, build_host);
   }
 
-  if (changes_neighborhood)
-    {
-      /* Calculate new mprs, HNA and routing table */
-      if (olsr_cnf->lq_level < 1)
-        {
-          olsr_calculate_mpr();
-        }
-
-      else
-        {
-          olsr_calculate_lq_mpr();
-        }
-
-      olsr_calculate_routing_table();
-      olsr_calculate_hna_routes();
+  if (changes_neighborhood) {
+    if (olsr_cnf->lq_level < 1) {
+      olsr_calculate_mpr();
+    } else {
+      olsr_calculate_lq_mpr();
     }
-  
-  else if (changes_topology || changes_hna)
-    {
-      /* calculate the routing table and HNA */
+  }
 
-        olsr_calculate_routing_table();
-        olsr_calculate_hna_routes();
-    }
-
+  /* calculate the routing table */
+  if (changes_neighborhood || changes_topology || changes_hna) {
+    olsr_calculate_routing_table();
+  }
   
   if (olsr_cnf->debug_level > 0)
     {      
@@ -200,11 +187,13 @@ olsr_process_changes(void)
               olsr_print_hna_set();
             }
         }
-      
+
+#if 1     
       olsr_print_link_set();
       olsr_print_neighbor_table();
       olsr_print_two_hop_neighbor_table();
       olsr_print_tc_table();
+#endif
     }
 
   for(tmp_pc_list = pcf_list; 
@@ -220,9 +209,6 @@ olsr_process_changes(void)
   changes_topology = OLSR_FALSE;
   changes_hna = OLSR_FALSE;
   changes_force = OLSR_FALSE;
-
-
-  return;
 }
 
 
@@ -299,11 +285,21 @@ olsr_forward_message(union olsr_message *m,
   struct neighbor_entry *neighbor;
   int msgsize;
   struct interface *ifn;
-  const int ttl = olsr_cnf->ip_version == AF_INET ? m->v4.ttl : m->v6.ttl;
 
-  if (ttl < 2) {
-    return 0;
+  /*
+   * Sven-Ola: We should not flood the mesh with overdue messages. Because
+   * of a bug in parser.c:parse_packet, we have a lot of messages because
+   * all older olsrd's have lq_fish enabled.
+   */
+  if (AF_INET == olsr_cnf->ip_version)
+  {
+    if (2 > m->v4.ttl || 255 < (int)m->v4.hopcnt + (int)m->v4.ttl) return 0;
   }
+  else
+  {
+    if (2 > m->v6.ttl || 255 < (int)m->v6.hopcnt + (int)m->v6.ttl) return 0;
+  }
+
   if(!olsr_check_dup_table_fwd(originator, seqno, &in_if->ip_addr))
     {
 #ifdef DEBUG
@@ -332,7 +328,10 @@ olsr_forward_message(union olsr_message *m,
   if(olsr_lookup_mprs_set(src) == NULL)
     {
 #ifdef DEBUG
-      OLSR_PRINTF(5, "Forward - sender %s not MPR selector\n", olsr_ip_to_string(src));
+#ifndef NODEBUG
+      struct ipaddr_str buf;
+#endif
+      OLSR_PRINTF(5, "Forward - sender %s not MPR selector\n", olsr_ip_to_string(&buf, src));
 #endif
       return 0;
     }
@@ -586,7 +585,7 @@ olsr_malloc(size_t size, const char *id)
  */
 
 int
-olsr_printf(int loglevel, char *format, ...)
+olsr_printf(int loglevel, const char *format, ...)
 {
   if((loglevel <= olsr_cnf->debug_level) && debug_handle)
     {
@@ -597,3 +596,9 @@ olsr_printf(int loglevel, char *format, ...)
     }
   return 0;
 }
+
+/*
+ * Local Variables:
+ * c-basic-offset: 2
+ * End:
+ */

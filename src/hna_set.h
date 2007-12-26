@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: hna_set.h,v 1.15 2007/09/05 16:11:10 bernd67 Exp $
  */
 
 
@@ -46,12 +45,14 @@
 #include "hashing.h"
 #include "olsr_types.h"
 
+#include <time.h>
+
 /* hna_netmask declared in packet.h */
 
 struct hna_net
 {
   union olsr_ip_addr A_network_addr;
-  union hna_netmask  A_netmask;
+  olsr_u8_t          prefixlen;
   clock_t            A_time;
   struct hna_net     *next;
   struct hna_net     *prev;
@@ -67,29 +68,25 @@ struct hna_entry
 
 
 extern struct hna_entry hna_set[HASHSIZE];
-extern size_t netmask_size;
 
 
 int
 olsr_init_hna_set(void);
 
-int
-olsr_get_hna_prefix_len(struct hna_net *);
-
 struct hna_net *
-olsr_lookup_hna_net(struct hna_net *, union olsr_ip_addr *, union hna_netmask *);
+olsr_lookup_hna_net(const struct hna_net *, const union olsr_ip_addr *, olsr_u8_t);
 
 struct hna_entry *
-olsr_lookup_hna_gw(union olsr_ip_addr *);
+olsr_lookup_hna_gw(const union olsr_ip_addr *);
 
 struct hna_entry *
-olsr_add_hna_entry(union olsr_ip_addr *);
+olsr_add_hna_entry(const union olsr_ip_addr *);
 
 struct hna_net *
-olsr_add_hna_net(struct hna_entry *, union olsr_ip_addr *, union hna_netmask *);
+olsr_add_hna_net(struct hna_entry *, const union olsr_ip_addr *, olsr_u8_t);
 
 void
-olsr_update_hna_entry(union olsr_ip_addr *, union olsr_ip_addr *, union hna_netmask *, float);
+olsr_update_hna_entry(const union olsr_ip_addr *, const union olsr_ip_addr *, olsr_u8_t, const float);
 
 void
 olsr_time_out_hna_set(void *);

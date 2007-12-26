@@ -1,3 +1,11 @@
+olsrd (0.5.5~pre20071226) experimental; urgency=low
+
+  * new upstream version (current bzr head)
+  * upgraded to policy 3.7.3, no changes requiered
+  * convert debian/copyright to utf8
+
+ -- Holger Levsen <holger@debian.org>  Wed, 26 Dec 2007 20:57:55 +0000
+
 olsrd (0.5.4-2) unstable; urgency=low
 
   * clean up olsrd makefile, fix a very annoying dependency bug in the olsrd

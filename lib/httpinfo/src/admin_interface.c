@@ -1,7 +1,7 @@
 
 /*
  * HTTP Info plugin for the olsr.org OLSR daemon
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -37,7 +37,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: admin_interface.c,v 1.9 2007/08/19 23:00:22 bernd67 Exp $
  */
 
 /*
@@ -48,9 +47,9 @@
 #include "olsr.h"
 #include "olsrd_httpinfo.h"
 #include "olsr_cfg.h"
-#include "admin_html.h"
 #include "admin_interface.h"
-#include "local_hna_set.h" /* add_local_hna4_entry() */
+#include "net_olsr.h"
+#include "ipcalc.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -61,21 +60,43 @@
 #define NETDIRECT
 #endif
 
+static const char admin_basic_setting_int[] = "<td><strong>%s</strong></td><td><input type=\"text\" name=\"%s\" maxlength=\"%d\" class=\"input_text\" value=\"%d\"></td>\n";
+static const char admin_basic_setting_float[] = "<td><strong>%s</strong></td><td><input type=\"text\" name=\"%s\" maxlength=\"%d\" class=\"input_text\" value=\"%0.2f\"></td>\n";
+static const char admin_basic_setting_string[] = "<td><strong>%s</strong></td><td><input type=\"text\" name=\"%s\" maxlength=\"%d\" class=\"input_text\" value=\"%s\"></td>\n";
+
+static const char admin_frame_prolog[] =
+    "<strong>Administrator interface</strong><hr>\n"
+    "<h2>Change basic settings</h2>\n"
+    "<form action=\"set_values\" method=\"post\">\n"
+    "<table width=\"100%%\">\n";
+
+static const char admin_frame_mid[] =
+    "</table>\n<br>\n"
+    "<center><input type=\"submit\" value=\"Submit\" class=\"input_button\">\n"
+    "<input type=\"reset\" value=\"Reset\" class=\"input_button\"></center>\n"
+    "</form>\n"
+    "<h2>Add/remove local HNA entries</h2>\n"
+    "<form action=\"set_values\" method=\"post\">\n"
+    "<table width=\"100%%\"><tr><td><strong>Network:</strong></td>\n"
+    "<td><input type=\"text\" name=\"hna_new_net\" maxlength=\"16\" class=\"input_text\" value=\"0.0.0.0\"></td>\n"
+    "<td><strong>Netmask/Prefix:</strong></td>\n"
+    "<td><input type=\"text\" name=\"hna_new_netmask\" maxlength=\"16\" class=\"input_text\" value=\"0.0.0.0\"></td>\n"
+    "<td><input type=\"submit\" value=\"Add entry\" class=\"input_button\"></td></form>\n"
+    "</table><hr>\n"
+    "<form action=\"set_values\" method=\"post\">\n"
+    "<table width=\"100%%\">\n"
+  "<tr><th width=50 halign=\"middle\">Delete</th><th>Network</th><th>Netmask</th></tr>\n";
+
+static const char admin_frame_epilog[] =
+    "</table>\n<br>\n"
+    "<center><input type=\"submit\" value=\"Delete selected\" class=\"input_button\"></center>\n"
+    "</form>\n";
 
 int
 build_admin_body(char *buf, olsr_u32_t bufsize __attribute__((unused)))
 {
-  int size = 0, i = 0;
-
-  while(admin_frame[i] && strcmp(admin_frame[i], "<!-- BASICSETTINGS -->\n"))
-    {
-      size += snprintf(&buf[size], bufsize-size, admin_frame[i]);
-      i++;
-    }
-  
-  if(!admin_frame[i])
-    return size;
-
+  int size = 0;
+  size += snprintf(&buf[size], bufsize-size, admin_frame_prolog);
 
   size += snprintf(&buf[size], bufsize-size, "<tr>\n");
 
@@ -86,8 +107,8 @@ build_admin_body(char *buf, olsr_u32_t bufsize __attribute__((unused)))
   size += snprintf(&buf[size], bufsize-size, admin_basic_setting_string,
 		  "TOS:", "tos", 6, "TBD");
 
-  size += snprintf(&buf[size], bufsize-size, "</tr>\n");
-  size += snprintf(&buf[size], bufsize-size, "<tr>\n");
+  size += snprintf(&buf[size], bufsize-size, "</tr>\n"
+                                             "<tr>\n");
 
   size += snprintf(&buf[size], bufsize-size, admin_basic_setting_int,
 		  "TC redundancy:", "tc_redundancy", 1, olsr_cnf->tc_redundancy);
@@ -96,91 +117,53 @@ build_admin_body(char *buf, olsr_u32_t bufsize __attribute__((unused)))
   size += snprintf(&buf[size], bufsize-size, admin_basic_setting_int,
 		  "Willingness:", "willingness", 1, olsr_cnf->willingness);
 
-  size += snprintf(&buf[size], bufsize-size, "</tr>\n");
-  size += snprintf(&buf[size], bufsize-size, "<tr>\n");
+  size += snprintf(&buf[size], bufsize-size, "</tr>\n"
+                                             "<tr>\n");
 
-  if(olsr_cnf->use_hysteresis)
-    {
-      size += snprintf(&buf[size], bufsize-size, admin_basic_setting_float,
-		      "Hyst scaling:", "hyst_scaling", 4, olsr_cnf->hysteresis_param.scaling);
+  if(olsr_cnf->use_hysteresis) {
+    size += snprintf(&buf[size], bufsize-size, admin_basic_setting_float,
+                     "Hyst scaling:", "hyst_scaling", 4, olsr_cnf->hysteresis_param.scaling);
 
-      size += snprintf(&buf[size], bufsize-size, admin_basic_setting_float,
-		      "Lower thr:", "hyst_lower", 4, olsr_cnf->hysteresis_param.thr_low);
-      size += snprintf(&buf[size], bufsize-size, admin_basic_setting_float,
-		      "Upper thr:", "hyst_upper", 4, olsr_cnf->hysteresis_param.thr_high);
-    }
-  else
-    {
-      size += snprintf(&buf[size], bufsize-size, "<td>Hysteresis disabled</td>\n");
-    }
+    size += snprintf(&buf[size], bufsize-size, admin_basic_setting_float,
+                     "Lower thr:", "hyst_lower", 4, olsr_cnf->hysteresis_param.thr_low);
+    size += snprintf(&buf[size], bufsize-size, admin_basic_setting_float,
+                     "Upper thr:", "hyst_upper", 4, olsr_cnf->hysteresis_param.thr_high);
+  } else {
+    size += snprintf(&buf[size], bufsize-size, "<td>Hysteresis disabled</td>\n");
+  }
 
-  size += snprintf(&buf[size], bufsize-size, "</tr>\n");
-  size += snprintf(&buf[size], bufsize-size, "<tr>\n");
+  size += snprintf(&buf[size], bufsize-size, "</tr>\n"
+                                             "<tr>\n");
   
-  if(olsr_cnf->lq_level)
-    {
-      size += snprintf(&buf[size], bufsize-size, admin_basic_setting_int,
-		      "LQ level:", "lq_level", 1, olsr_cnf->lq_level);
-      size += snprintf(&buf[size], bufsize-size, admin_basic_setting_int,
-		      "LQ winsize:", "lq_wsize", 2, olsr_cnf->lq_wsize);
-    }
-  else
-    {
-      size += snprintf(&buf[size], bufsize-size, "<td>LQ disabled</td>\n");
-    }
+  if(olsr_cnf->lq_level) {
+    size += snprintf(&buf[size], bufsize-size, admin_basic_setting_int,
+                     "LQ level:", "lq_level", 1, olsr_cnf->lq_level);
+    size += snprintf(&buf[size], bufsize-size, admin_basic_setting_int,
+                     "LQ winsize:", "lq_wsize", 2, olsr_cnf->lq_wsize);
+  } else {
+    size += snprintf(&buf[size], bufsize-size, "<td>LQ disabled</td>\n");
+  }
 
-
-  size += snprintf(&buf[size], bufsize-size, "</tr>\n");
-  size += snprintf(&buf[size], bufsize-size, "<tr>\n");
-
+  size += snprintf(&buf[size], bufsize-size, "</tr>\n"
+                                             "<tr>\n");
   size += snprintf(&buf[size], bufsize-size, "</tr>\n");
   
-  i++;
+  size += snprintf(&buf[size], bufsize-size, admin_frame_mid);
 
-  while(admin_frame[i] && strcmp(admin_frame[i], "<!-- HNAENTRIES -->\n"))
-    {
-      size += snprintf(&buf[size], bufsize-size, admin_frame[i]);
-      i++;
+  if(olsr_cnf->hna_entries) {
+    struct ip_prefix_list *hna;
+    for(hna = olsr_cnf->hna_entries; hna; hna = hna->next) {
+      struct ipaddr_str netbuf;
+      olsr_ip_to_string(&netbuf, &hna->net.prefix);
+      size += snprintf(&buf[size], bufsize-size,
+                       "<tr><td halign=\"middle\"><input type=\"checkbox\" name=\"del_hna%s*%d\" class=\"input_checkbox\"></td><td>%s</td><td>%d</td></tr>\n",
+                       netbuf.buf,
+                       hna->net.prefix_len,
+                       netbuf.buf,
+                       hna->net.prefix_len);
     }
-
-  if(!admin_frame[i] || !admin_frame[i+1])
-    return size;
-
-  i++;
-
-  if((olsr_cnf->ip_version == AF_INET) && (olsr_cnf->hna4_entries))
-    {
-      struct hna4_entry *hna4;
-      
-      for(hna4 = olsr_cnf->hna4_entries; hna4; hna4 = hna4->next)
-	{
-	  size += snprintf(&buf[size], bufsize-size, admin_frame[i], 
-			  olsr_ip_to_string((union olsr_ip_addr *)&hna4->net),
-			  olsr_ip_to_string((union olsr_ip_addr *)&hna4->netmask),
-			  olsr_ip_to_string((union olsr_ip_addr *)&hna4->net),
-			  olsr_ip_to_string((union olsr_ip_addr *)&hna4->netmask));
-	}
-    }
-  else if((olsr_cnf->ip_version == AF_INET6) && (olsr_cnf->hna6_entries))
-    {
-      struct hna6_entry *hna6;
-	
-      for(hna6 = olsr_cnf->hna6_entries; hna6; hna6 = hna6->next)
-	{
-	  size += snprintf(&buf[size], bufsize-size, admin_frame[i], 
-			  olsr_ip_to_string((union olsr_ip_addr *)&hna6->net),
-			  "TBD"/*hna6->prefix_len*/);
-	}
-    }
-  
-  i++;
-
-  while(admin_frame[i])
-    {
-      size += snprintf(&buf[size], bufsize-size, admin_frame[i]);
-      i++;
-    }
-  
+  }
+  size += snprintf(&buf[size], bufsize-size, admin_frame_epilog);
   return size;
 }
 
@@ -190,7 +173,7 @@ build_admin_body(char *buf, olsr_u32_t bufsize __attribute__((unused)))
 int
 process_param(char *key, char *value)
 {
-  static olsr_u32_t curr_hna_net;
+  static union olsr_ip_addr curr_hna_net;
   static olsr_bool curr_hna_ok = OLSR_FALSE;
 
   if(!strcmp(key, "debug_level"))
@@ -312,35 +295,35 @@ process_param(char *key, char *value)
 
   if(!strcmp(key, "hna_new_net"))
     {
-      struct in_addr in;
-
-      if(inet_aton(value, &in) == 0)
+      if(inet_pton(olsr_cnf->ipsize, value, &curr_hna_net.v4) == 0)
 	{
 	  fprintf(stderr, "Failed converting new HNA net %s\n", value);
 	  return -1;
 	}
       curr_hna_ok = OLSR_TRUE;
-      curr_hna_net = in.s_addr;
       return 1;
     }
 
   if(!strcmp(key, "hna_new_netmask"))
     {
       struct in_addr in;
+      olsr_u8_t prefixlen;
 
       if(!curr_hna_ok)
 	return -1;
 
       curr_hna_ok = OLSR_FALSE;
 
-      if(inet_aton(value, &in) == 0)
-	{
-	  fprintf(stderr, "Failed converting new HNA netmask %s\n", value);
-	  return -1;
-	}
-      add_local_hna4_entry((union olsr_ip_addr *)&curr_hna_net,
-			   (union olsr_ip_addr *)&in.s_addr);
-      
+      if(inet_aton(value, &in) == 0) {
+        fprintf(stderr, "Failed converting new HNA netmask %s\n", value);
+        return -1;
+      }
+      prefixlen = netmask_to_prefix((olsr_u8_t *)&in, olsr_cnf->ipsize);
+      if(prefixlen == UCHAR_MAX) {
+        fprintf(stderr, "Failed converting new HNA netmask %s\n", value);
+        return -1;
+      }
+      ip_prefix_list_add(&olsr_cnf->hna_entries, &curr_hna_net, prefixlen);
       return 1;
     }
 
@@ -349,10 +332,11 @@ process_param(char *key, char *value)
       struct in_addr net, mask;
       char ip_net[16], ip_mask[16];
       int seperator = 0;
+      olsr_u8_t prefixlen;
 
-      while(key[7 + seperator] != '*')
+      while(key[7 + seperator] != '*') {
 	seperator++;
-
+      }
       strncpy(ip_net, &key[7], seperator);
       ip_net[seperator] = 0;
       strncpy(ip_mask, &key[7 + seperator + 1], 16);
@@ -364,15 +348,16 @@ process_param(char *key, char *value)
 	  return -1;
 	}
 
-      if(inet_aton(ip_mask, &mask) == 0)
-	{
-	  fprintf(stderr, "Failed converting HNA netmask %s for deletion\n", ip_mask);
-	  return -1;
-	}
-
-      remove_local_hna4_entry((union olsr_ip_addr *)&net.s_addr,
-			      (union olsr_ip_addr *)&mask.s_addr);
-
+      if(inet_aton(ip_mask, &mask) == 0) {
+        fprintf(stderr, "Failed converting HNA netmask %s for deletion\n", ip_mask);
+        return -1;
+      }
+      prefixlen = netmask_to_prefix((olsr_u8_t *)&mask, olsr_cnf->ipsize);
+      if(prefixlen == UCHAR_MAX) {
+        fprintf(stderr, "Failed converting new HNA netmask %s\n", value);
+        return -1;
+      }
+      ip_prefix_list_add(&olsr_cnf->hna_entries, &curr_hna_net, prefixlen);
       return 1;
     }
 

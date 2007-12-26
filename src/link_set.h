@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas T�nnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃÂ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: link_set.h,v 1.32 2007/10/05 20:10:24 bernd67 Exp $
  */
 
 
@@ -55,12 +54,15 @@ struct link_entry
 {
   union olsr_ip_addr local_iface_addr;
   union olsr_ip_addr neighbor_iface_addr;
+  const struct interface *inter;
   char *if_name;
   clock_t SYM_time;
   clock_t ASYM_time;
   clock_t time;
+  unsigned int vtime;
   struct neighbor_entry *neighbor;
   olsr_u8_t prev_status;
+
   /*
    *Hysteresis
    */
@@ -69,24 +71,24 @@ struct link_entry
   clock_t L_LOST_LINK_time;
   clock_t hello_timeout; /* When we should receive a new HELLO */
   double last_htime;
-  olsr_u16_t olsr_seqno;
   olsr_bool olsr_seqno_valid;
+  olsr_u16_t olsr_seqno;
 
   /*
    * packet loss
    */
-
-  double loss_hello_int;
-  clock_t loss_timeout;
-
   olsr_u16_t loss_seqno;
   int loss_seqno_valid;
   int loss_missed_hellos;
 
+  double loss_hello_int;
+  clock_t loss_timeout;
+
   unsigned int lost_packets;
   unsigned int total_packets;
 
-  double loss_link_quality, loss_link_quality2;
+  double loss_link_quality;
+  double loss_link_quality2;
   double loss_link_multiplier;
 
   unsigned int loss_index;
@@ -150,4 +152,12 @@ olsr_print_link_set(void);
 void
 olsr_update_dijkstra_link_qualities(void);
 
+float olsr_calc_link_etx(const struct link_entry *);
+
 #endif
+
+/*
+ * Local Variables:
+ * c-basic-offset: 2
+ * End:
+ */

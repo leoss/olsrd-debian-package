@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: net.c,v 1.34 2007/04/25 22:08:18 bernd67 Exp $
  */
 
 
@@ -44,11 +43,24 @@
  * Linux spesific code
  */
 
-#include "net.h"
-#include "../defs.h"
 #include "../net_os.h"
-#include "../parser.h"
+#include "../ipcalc.h"
 
+#include <net/if.h>
+
+#include <sys/ioctl.h>
+
+#include <fcntl.h>
+#include <string.h>
+#include <stdio.h>
+#include <syslog.h>
+
+
+/* Redirect proc entry */
+#define REDIRECT_PROC "/proc/sys/net/ipv4/conf/%s/send_redirects"
+
+/* IP spoof proc entry */
+#define SPOOF_PROC "/proc/sys/net/ipv4/conf/%s/rp_filter"
 
 /*
  *Wireless definitions for ioctl calls
@@ -392,18 +404,19 @@ gethemusocket(struct sockaddr_in *pin)
  *@return the FD of the socket or -1 on error.
  */
 int
-getsocket(struct sockaddr *sa, int bufspace, char *int_name)
+getsocket(int bufspace, char *int_name)
 {
-  struct sockaddr_in *sin=(struct sockaddr_in *)sa;
-  int sock, on = 1;
-
-  if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) 
+  struct sockaddr_in sin;
+  int on;
+  int sock = socket(AF_INET, SOCK_DGRAM, 0);
+  if (sock < 0) 
     {
       perror("socket");
       syslog(LOG_ERR, "socket: %m");
       return -1;
     }
 
+  on = 1;
 #ifdef SO_BROADCAST
   if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &on, sizeof (on)) < 0)
     {
@@ -448,20 +461,25 @@ getsocket(struct sockaddr *sa, int bufspace, char *int_name)
       return -1;
     }
 
-  if (bind(sock, (struct sockaddr *)sin, sizeof (*sin)) < 0) 
-    {
+  memset(&sin, 0, sizeof (sin));
+  sin.sin_family = AF_INET;
+  sin.sin_port = htons(OLSRPORT);
+  sin.sin_addr.s_addr = INADDR_ANY;
+  if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
       perror("bind");
       syslog(LOG_ERR, "bind: %m");
       close(sock);
       return -1;
-    }
-  /*
-   *FIXME: One should probably fetch the flags first
-   *using F_GETFL....
-   */
-  if (fcntl(sock, F_SETFL, O_NONBLOCK) == -1)
-    syslog(LOG_ERR, "fcntl O_NONBLOCK: %m\n");
+  }
 
+  on = fcntl(sock, F_GETFL);
+  if (on == -1) {
+      syslog(LOG_ERR, "fcntl (F_GETFL): %m\n");
+  } else {
+      if (fcntl(sock, F_SETFL, on|O_NONBLOCK) == -1) {
+          syslog(LOG_ERR, "fcntl O_NONBLOCK: %m\n");
+      }
+  }
   return sock;
 }
 
@@ -472,22 +490,23 @@ getsocket(struct sockaddr *sa, int bufspace, char *int_name)
  *@return the FD of the socket or -1 on error.
  */
 int
-getsocket6(struct sockaddr_in6 *sin, int bufspace, char *int_name)
+getsocket6(int bufspace, char *int_name)
 {
-  int sock, on = 1;
-  if ((sock = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) 
-    {
-      perror("socket");
-      syslog(LOG_ERR, "socket: %m");
-      return (-1);
-    }
+  struct sockaddr_in6 sin;
+  int on;
+  int sock = socket(AF_INET6, SOCK_DGRAM, 0);
+  if (sock < 0) {
+    perror("socket");
+    syslog(LOG_ERR, "socket: %m");
+    return (-1);
+  }
 
 #ifdef IPV6_V6ONLY
-  if (setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) < 0) 
-    {
-      perror("setsockopt(IPV6_V6ONLY)");
-      syslog(LOG_ERR, "setsockopt(IPV6_V6ONLY): %m");
-    }
+  on = 1;
+  if (setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) < 0) {
+    perror("setsockopt(IPV6_V6ONLY)");
+    syslog(LOG_ERR, "setsockopt(IPV6_V6ONLY): %m");
+  }
 #endif
 
 
@@ -537,20 +556,26 @@ getsocket6(struct sockaddr_in6 *sin, int bufspace, char *int_name)
       return -1;
     }
 
-  if (bind(sock, (struct sockaddr *)sin, sizeof (*sin)) < 0) 
+  memset(&sin, 0, sizeof(sin));
+  sin.sin6_family = AF_INET6;
+  sin.sin6_port = htons(OLSRPORT);
+  //(addrsock6.sin6_addr).s_addr = IN6ADDR_ANY_INIT;
+  if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) 
     {
       perror("bind");
       syslog(LOG_ERR, "bind: %m");
       close(sock);
       return (-1);
     }
-  /*
-   *One should probably fetch the flags first
-   *using F_GETFL....
-   */
-  if (fcntl(sock, F_SETFL, O_NONBLOCK) == -1)
-    syslog(LOG_ERR, "fcntl O_NONBLOCK: %m\n");
 
+  on = fcntl(sock, F_GETFL);
+  if (on == -1) {
+      syslog(LOG_ERR, "fcntl (F_GETFL): %m\n");
+  } else {
+      if (fcntl(sock, F_SETFL, on|O_NONBLOCK) == -1) {
+          syslog(LOG_ERR, "fcntl O_NONBLOCK: %m\n");
+      }
+  }
   return sock;
 }
 
@@ -558,14 +583,16 @@ int
 join_mcast(struct interface *ifs, int sock)
 {
   /* See linux/in6.h */
-
+#ifndef NODEBUG
+  struct ipaddr_str buf;
+#endif
   struct ipv6_mreq mcastreq;
 
-  COPY_IP(&mcastreq.ipv6mr_multiaddr, &ifs->int6_multaddr.sin6_addr);
+  mcastreq.ipv6mr_multiaddr = ifs->int6_multaddr.sin6_addr;
   mcastreq.ipv6mr_interface = ifs->if_index;
 
 #if !defined __FreeBSD__ && !defined __MacOSX__ && !defined __NetBSD__
-  OLSR_PRINTF(3, "Interface %s joining multicast %s...",	ifs->int_name, olsr_ip_to_string((union olsr_ip_addr *)&ifs->int6_multaddr.sin6_addr));
+  OLSR_PRINTF(3, "Interface %s joining multicast %s...", ifs->int_name, ip6_to_string(&buf, &ifs->int6_multaddr.sin6_addr));
   /* Send multicast */
   if(setsockopt(sock, 
 		IPPROTO_IPV6, 

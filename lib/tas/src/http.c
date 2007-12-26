@@ -37,7 +37,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: http.c,v 1.7 2007/09/17 21:57:06 bernd67 Exp $
  */
 
 #include "link.h"
@@ -68,13 +67,13 @@
 
 static struct ipAddr confAddr;
 static int confPort;
-static char *confRootDir;
-static char *confWorkDir;
-static char *confIndexFile;
+static const char *confRootDir;
+static const char *confWorkDir;
+static const char *confIndexFile;
 static char *confUser;
 static char *confPassword;
 static int confSessTime;
-static char *confPubDir;
+static const char *confPubDir;
 static int confQuantum;
 static int confMessTime;
 static int confMessLimit;
@@ -104,8 +103,8 @@ static struct sessInfo *sess[MAX_SESS];
 
 static struct extMap
 {
-  char *ext;
-  char *type;
+  const char *ext;
+  const char *type;
   int state;
 }
 extMap[] =
@@ -200,7 +199,7 @@ static int addHexDigit(int *val, int digit)
 
 static void encHexString(char *hexString, unsigned char *hex, int len)
 {
-  static char *map = "0123456789ABCDEF";
+  static const char map[] = "0123456789ABCDEF";
 
   while (len-- > 0)
   {
@@ -864,7 +863,7 @@ static char *getToken(char **point)
 
 static void writeBuffString(struct inOutBuff *write, const char *string)
 {
-  writeBuff(write, (unsigned char *)string, strlen(string));
+  writeBuff(write, (const unsigned char *)string, strlen(string));
 }
 
 static int cookieToSession(unsigned int *sessId, char *cookie)
@@ -948,13 +947,13 @@ static void printBuff(struct inOutBuff *buff, const char *form, ...)
       i++;
 
     if (i > start)
-      writeBuff(buff, (unsigned char *)(form + start), i - start);
+      writeBuff(buff, (const unsigned char *)(form + start), i - start);
 
     if (form[i] == 0)
       break;
 
     if (form[i + 1] == '%')
-      writeBuff(buff, (unsigned char *)"%", 1);
+      writeBuff(buff, (const unsigned char *)"%", 1);
 
     else if (form[i + 1] == 's')
     {
@@ -974,7 +973,7 @@ static void printBuff(struct inOutBuff *buff, const char *form, ...)
   va_end(args);
 }
 
-static char *errNoToErrStr(int errNo)
+static const char *errNoToErrStr(int errNo)
 {
   switch (errNo)
   {

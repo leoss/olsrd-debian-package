@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,9 +36,15 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: olsrd_conf.c,v 1.55 2007/09/13 16:08:13 bernd67 Exp $
  */
 
+
+#include "olsrd_conf.h"
+#include "ipcalc.h"
+#include "olsr_cfg.h"
+#include "defs.h"
+#include "net_olsr.h"
+#include "olsr.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -49,13 +55,17 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#include "olsrd_conf.h"
-
 
 extern FILE *yyin;
 extern int yyparse(void);
 
-static char copyright_string[] = "The olsr.org Optimized Link-State Routing daemon(olsrd) Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org) All rights reserved.";
+static char copyright_string[] __attribute__((unused)) = "The olsr.org Optimized Link-State Routing daemon(olsrd) Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org) All rights reserved.";
+
+int current_line;
+
+/* Global stuff externed in defs.h */
+FILE *debug_handle;             /* Where to send debug(defaults to stdout) */
+struct olsrd_config *olsr_cnf;  /* The global configuration */
 
 #ifdef MAKEBIN
 
@@ -100,71 +110,59 @@ main(int argc, char *argv[])
 struct olsrd_config *
 olsrd_parse_cnf(const char *filename)
 {
-  struct olsr_if *in, *new_ifqueue, *in_tmp;
+  struct olsr_if *in, *new_ifqueue;
+  int rc;
 
-  /* Stop the compiler from complaining */
-  (void)strlen(copyright_string);
+  /* Initialize the global varibles - oparse.y needs it there */
+  olsr_cnf = malloc(sizeof(*olsr_cnf));
+  if (olsr_cnf == NULL) {
+    fprintf(stderr, "Out of memory %s\n", __func__);
+    return NULL;
+  }
 
-  cnf = malloc(sizeof(struct olsrd_config));
-  if (cnf == NULL)
-    {
-      fprintf(stderr, "Out of memory %s\n", __func__);
-      return NULL;
-    }
-
-  set_default_cnf(cnf);
+  set_default_cnf(olsr_cnf);
 
   printf("Parsing file: \"%s\"\n", filename);
 
   yyin = fopen(filename, "r");
-  
-  if (yyin == NULL)
-    {
-      fprintf(stderr, "Cannot open configuration file '%s': %s.\n",
-	      filename, strerror(errno));
-      free(cnf);
-      return NULL;
-    }
+  if (yyin == NULL) {
+    fprintf(stderr, "Cannot open configuration file '%s': %s.\n",
+            filename, strerror(errno));
+    olsrd_free_cnf(olsr_cnf);
+    olsr_cnf = NULL;
+    return NULL;
+  }
 
   current_line = 1;
-
-  if (yyparse() != 0)
-    {
-      fclose(yyin);
-      olsrd_free_cnf(cnf);
-      return NULL;
-    }
-  
+  rc = yyparse();
   fclose(yyin);
+  if (rc != 0) {
+    olsrd_free_cnf(olsr_cnf);
+    olsr_cnf = NULL;
+    return NULL;
+  }
 
   /* Reverse the queue (added by user request) */
-  in = cnf->interfaces;
+  in = olsr_cnf->interfaces;
   new_ifqueue = NULL;
 
-  while(in)
-    {
-      in_tmp = in; 
-      in = in->next;
+  while(in) {
+    struct olsr_if *in_tmp = in; 
+    in = in->next;
 
-      in_tmp->next = new_ifqueue;
-      new_ifqueue = in_tmp;
-    }
+    in_tmp->next = new_ifqueue;
+    new_ifqueue = in_tmp;
+  }
 
-  cnf->interfaces = new_ifqueue;
+  olsr_cnf->interfaces = new_ifqueue;
 
-  in = cnf->interfaces;
-
-  while(in)
-    {
+  for (in = olsr_cnf->interfaces; in != NULL; in = in->next) {
       /* set various stuff */
       in->configured = OLSR_FALSE;
       in->interf = NULL;
       in->host_emul = OLSR_FALSE;
-      in = in->next;
-    }
-
-
-  return cnf;
+  }
+  return olsr_cnf;
 }
 
 
@@ -368,24 +366,16 @@ olsrd_sanity_check_cnf(struct olsrd_config *cnf)
 void
 olsrd_free_cnf(struct olsrd_config *cnf)
 {
-  struct hna4_entry        *h4d, *h4 = cnf->hna4_entries;
-  struct hna6_entry        *h6d, *h6 = cnf->hna6_entries;
+  struct ip_prefix_list   *hd,   *h = cnf->hna_entries;
   struct olsr_if           *ind, *in = cnf->interfaces;
   struct plugin_entry      *ped, *pe = cnf->plugins;
   struct olsr_lq_mult      *mult, *next_mult;
   
-  while(h4)
+  while(h)
     {
-      h4d = h4;
-      h4 = h4->next;
-      free(h4d);
-    }
-
-  while(h6)
-    {
-      h6d = h6;
-      h6 = h6->next;
-      free(h6d);
+      hd = h;
+      h = h->next;
+      free(hd);
     }
 
   while(in)
@@ -420,16 +410,14 @@ olsrd_free_cnf(struct olsrd_config *cnf)
 struct olsrd_config *
 olsrd_get_default_cnf(void)
 {
-  cnf = malloc(sizeof(struct olsrd_config));
-  if (cnf == NULL)
-    {
-      fprintf(stderr, "Out of memory %s\n", __func__);
-      return NULL;
-    }
+  struct olsrd_config *c = malloc(sizeof(struct olsrd_config));
+  if (c == NULL) {
+    fprintf(stderr, "Out of memory %s\n", __func__);
+    return NULL;
+  }
 
-  set_default_cnf(cnf);
-
-  return cnf;
+  set_default_cnf(c);
+  return c;
 }
 
 
@@ -438,18 +426,20 @@ olsrd_get_default_cnf(void)
 void
 set_default_cnf(struct olsrd_config *cnf)
 {
-    memset(cnf, 0, sizeof(struct olsrd_config));
+    memset(cnf, 0, sizeof(*cnf));
     
     cnf->debug_level = DEF_DEBUGLVL;
     cnf->no_fork = OLSR_FALSE;
     cnf->host_emul = OLSR_FALSE;
     cnf->ip_version  = AF_INET;
+    cnf->ipsize = sizeof(struct in_addr);
+    cnf->maxplen = 32;
     cnf->allow_no_interfaces = DEF_ALLOW_NO_INTS;
     cnf->tos = DEF_TOS;
     cnf->rttable = 254;
     cnf->willingness_auto = DEF_WILL_AUTO;
     cnf->ipc_connections = DEF_IPC_CONNECTIONS;
-    cnf->open_ipc = cnf->ipc_connections ? OLSR_TRUE : OLSR_FALSE;
+    cnf->flat_fib_metric = DEF_FLAT_FIB_METRIC;
 
     cnf->use_hysteresis = DEF_USE_HYST;
     cnf->hysteresis_param.scaling = HYST_SCALING;
@@ -476,7 +466,9 @@ set_default_cnf(struct olsrd_config *cnf)
     cnf->ioctl_s = 0;
 #if LINUX_POLICY_ROUTING
     cnf->rtnl_s = 0;
-#else
+#endif
+
+#if defined __FreeBSD__ || defined __MacOSX__ || defined __NetBSD__ || defined __OpenBSD__
     cnf->rts = 0;
 #endif
 }
@@ -487,24 +479,23 @@ set_default_cnf(struct olsrd_config *cnf)
 struct if_config_options *
 get_default_if_config(void)
 {
-  struct if_config_options *io = malloc(sizeof(struct if_config_options));
   struct in6_addr in6;
+  struct if_config_options *io = malloc(sizeof(*io));
 
-  if(io == NULL)
-    {
-      fprintf(stderr, "Out of memory %s\n", __func__);
-      return NULL;
-    }
+  if(io == NULL) {
+    fprintf(stderr, "Out of memory %s\n", __func__);
+    return NULL;
+  }
 
-  memset(io, 0, sizeof(struct if_config_options));
+  memset(io, 0, sizeof(*io));
 
   io->ipv6_addrtype = 1; /* XXX - FixMe */
 
   inet_pton(AF_INET6, OLSR_IPV6_MCAST_SITE_LOCAL, &in6);
-  memcpy(&io->ipv6_multi_site.v6, &in6, sizeof(struct in6_addr));
+  io->ipv6_multi_site.v6 = in6;
 
   inet_pton(AF_INET6, OLSR_IPV6_MCAST_GLOBAL, &in6);
-  memcpy(&io->ipv6_multi_glbl.v6, &in6, sizeof(struct in6_addr));
+  io->ipv6_multi_glbl.v6 = in6;
 
   io->lq_mult = NULL;
 
@@ -514,7 +505,7 @@ get_default_if_config(void)
   io->ipv6_addrtype = 0; /* global */
 
   io->hello_params.emission_interval = HELLO_INTERVAL;
-  io->hello_params.validity_time = -1.0;
+  io->hello_params.validity_time = NEIGHB_HOLD_TIME;
   io->tc_params.emission_interval = TC_INTERVAL;
   io->tc_params.validity_time = TOP_HOLD_TIME;
   io->mid_params.emission_interval = MID_INTERVAL;
@@ -532,15 +523,12 @@ get_default_if_config(void)
 void
 olsrd_print_cnf(struct olsrd_config *cnf)
 {
-  struct hna4_entry        *h4 = cnf->hna4_entries;
-  struct hna6_entry        *h6 = cnf->hna6_entries;
+  struct ip_prefix_list   *h  = cnf->hna_entries;
   struct olsr_if           *in = cnf->interfaces;
   struct plugin_entry      *pe = cnf->plugins;
-  struct ipc_host          *ih = cnf->ipc_hosts;
-  struct ipc_net           *ie = cnf->ipc_nets;
+  struct ip_prefix_list    *ie = cnf->ipc_nets;
   struct olsr_lq_mult      *mult;
   char ipv6_buf[100];             /* buffer for IPv6 inet_htop */
-  struct in_addr in4;
 
   printf(" *** olsrd configuration ***\n");
 
@@ -561,20 +549,14 @@ olsrd_print_cnf(struct olsrd_config *cnf)
     printf("Willingness      : %d\n", cnf->willingness);
 
   printf("IPC connections  : %d\n", cnf->ipc_connections);
-
-  while(ih)
-    {
-      in4.s_addr = ih->host.v4;
-      printf("\tHost %s\n", inet_ntoa(in4));
-      ih = ih->next;
-    }
-  
   while(ie)
     {
-      in4.s_addr = ie->net.v4;
-      printf("\tNet %s/", inet_ntoa(in4));
-      in4.s_addr = ie->mask.v4;
-      printf("%s\n", inet_ntoa(in4));
+      struct ipaddr_str strbuf;
+      if (ie->net.prefix_len == olsr_cnf->maxplen) {
+          printf("\tHost %s\n", olsr_ip_to_string(&strbuf, &ie->net.prefix));
+      } else {
+          printf("\tNet %s/%d\n", olsr_ip_to_string(&strbuf, &ie->net.prefix), ie->net.prefix_len);
+      }
       ie = ie->next;
     }
 
@@ -605,10 +587,9 @@ olsrd_print_cnf(struct olsrd_config *cnf)
 	{
 	  printf(" dev: \"%s\"\n", in->name);
 	  
-	  if(in->cnf->ipv4_broadcast.v4)
+	  if(in->cnf->ipv4_broadcast.v4.s_addr)
 	    {
-	      in4.s_addr = in->cnf->ipv4_broadcast.v4;
-	      printf("\tIPv4 broadcast           : %s\n", inet_ntoa(in4));
+	      printf("\tIPv4 broadcast           : %s\n", inet_ntoa(in->cnf->ipv4_broadcast.v4));
 	    }
 	  else
 	    {
@@ -619,8 +600,8 @@ olsrd_print_cnf(struct olsrd_config *cnf)
 	  
 	  //union olsr_ip_addr       ipv6_multi_site;
 	  //union olsr_ip_addr       ipv6_multi_glbl;
-	  printf("\tIPv6 multicast site/glbl : %s", (char *)inet_ntop(AF_INET6, &in->cnf->ipv6_multi_site.v6, ipv6_buf, sizeof(ipv6_buf)));
-	  printf("/%s\n", (char *)inet_ntop(AF_INET6, &in->cnf->ipv6_multi_glbl.v6, ipv6_buf, sizeof(ipv6_buf)));
+	  printf("\tIPv6 multicast site/glbl : %s", inet_ntop(AF_INET6, &in->cnf->ipv6_multi_site.v6, ipv6_buf, sizeof(ipv6_buf)));
+	  printf("/%s\n", inet_ntop(AF_INET6, &in->cnf->ipv6_multi_glbl.v6, ipv6_buf, sizeof(ipv6_buf)));
 	  
 	  printf("\tHELLO emission/validity  : %0.2f/%0.2f\n", in->cnf->hello_params.emission_interval, in->cnf->hello_params.validity_time);
 	  printf("\tTC emission/validity     : %0.2f/%0.2f\n", in->cnf->tc_params.emission_interval, in->cnf->tc_params.validity_time);
@@ -629,11 +610,7 @@ olsrd_print_cnf(struct olsrd_config *cnf)
 	  
           for (mult = in->cnf->lq_mult; mult != NULL; mult = mult->next)
           {
-            inet_ntop(cnf->ip_version, &mult->addr, ipv6_buf,
-                      sizeof (ipv6_buf));
-
-            printf("\tLinkQualityMult          : %s %0.2f\n",
-                   ipv6_buf, mult->val);
+            printf("\tLinkQualityMult          : %s %0.2f\n", inet_ntop(cnf->ip_version, &mult->addr, ipv6_buf, sizeof (ipv6_buf)), mult->val);
           }
 
           printf("\tAutodetetc changes       : %s\n", in->cnf->autodetect_chg ? "yes" : "no");
@@ -658,54 +635,33 @@ olsrd_print_cnf(struct olsrd_config *cnf)
     }
 
   /* Hysteresis */
-  if(cnf->use_hysteresis)
-    {
-      printf("Using hysteresis:\n");
-      printf("\tScaling      : %0.2f\n", cnf->hysteresis_param.scaling);
-      printf("\tThr high/low : %0.2f/%0.2f\n", cnf->hysteresis_param.thr_high, cnf->hysteresis_param.thr_low);
-    }
-  else
+  if(cnf->use_hysteresis) {
+    printf("Using hysteresis:\n");
+    printf("\tScaling      : %0.2f\n", cnf->hysteresis_param.scaling);
+    printf("\tThr high/low : %0.2f/%0.2f\n", cnf->hysteresis_param.thr_high, cnf->hysteresis_param.thr_low);
+  } else {
     printf("Not using hysteresis\n");
+  }
 
-  /* HNA IPv4 */
-  if(h4)
-    {
-
-      printf("HNA4 entries:\n");
-      while(h4)
-	{
-	  in4.s_addr = h4->net.v4;
-	  printf("\t%s/", inet_ntoa(in4));
-	  in4.s_addr = h4->netmask.v4;
-	  printf("%s\n", inet_ntoa(in4));
-
-	  h4 = h4->next;
-	}
+  /* HNA IPv4 and IPv6 */
+  if(h) {
+    printf("HNA%d entries:\n", cnf->ip_version == AF_INET ? 4 : 6);
+    while(h) {
+      struct ipaddr_str buf;
+      printf("\t%s/", olsr_ip_to_string(&buf, &h->net.prefix));
+      if (cnf->ip_version == AF_INET) {
+        union olsr_ip_addr ip;
+        olsr_prefix_to_netmask(&ip, h->net.prefix_len);
+        printf("%s\n", olsr_ip_to_string(&buf, &ip));
+      } else {
+        printf("%d\n", h->net.prefix_len);
+      }
+      h = h->next;
     }
-
-  /* HNA IPv6 */
-  if(h6)
-    {
-      printf("HNA6 entries:\n");
-      while(h6)
-	{
-	  printf("\t%s/%d\n", (char *)inet_ntop(AF_INET6, &h6->net.v6, ipv6_buf, sizeof(ipv6_buf)), h6->prefix_len);
-	  h6 = h6->next;
-	}
-    }
+  }
 }
 
-void *olsrd_cnf_malloc(unsigned int len)
-{
-  return malloc(len);
-}
-
-void olsrd_cnf_free(void *addr)
-{
-  free(addr);
-}
-
-#if defined WIN32_STDIO_HACK
+#if defined WIN32
 struct ioinfo
 {
 	unsigned int handle;
@@ -736,4 +692,66 @@ void win32_stdio_hack(unsigned int handle)
   // setbuf(stdout, NULL);
   setbuf(stderr, NULL);
 }
+
+void*
+win32_olsrd_malloc(size_t size)
+{
+	return malloc(size);
+}
+
+void
+win32_olsrd_free(void* ptr)
+{
+	free(ptr);
+}
 #endif
+
+void ip_prefix_list_add(struct ip_prefix_list **list,
+                        const union olsr_ip_addr *net,
+                        olsr_u8_t prefix_len)
+{
+  struct ip_prefix_list *new_entry = malloc(sizeof(*new_entry));
+  
+  new_entry->net.prefix = *net;
+  new_entry->net.prefix_len = prefix_len;
+
+  /* Queue */
+  new_entry->next = *list;
+  *list = new_entry;
+}
+
+int ip_prefix_list_remove(struct ip_prefix_list **list,
+                          const union olsr_ip_addr *net,
+                          olsr_u8_t prefix_len)
+{
+  struct ip_prefix_list *h = *list, *prev = NULL;
+
+  while (h != NULL) {
+    if (ipequal(net, &h->net.prefix) && h->net.prefix_len == prefix_len) {
+      /* Dequeue */
+      if (prev == NULL) {
+        *list = h->next;
+      } else {
+        prev->next = h->next;
+      }
+      free(h);
+      return 1;
+    }
+    prev = h;
+    h = h->next;
+  }
+  return 0;
+}
+
+struct ip_prefix_list *ip_prefix_list_find(struct ip_prefix_list *list,
+                                           const union olsr_ip_addr *net,
+                                           olsr_u8_t prefix_len)
+{
+  struct ip_prefix_list *h;
+  for (h = list; h != NULL; h = h->next) {
+    if (prefix_len == h->net.prefix_len && ipequal(net, &h->net.prefix)) {
+      return h;
+    }
+  }
+  return NULL;
+}

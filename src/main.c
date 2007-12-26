@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,13 +36,14 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: main.c,v 1.100 2007/09/17 22:24:22 bernd67 Exp $
  */
 
 #include <unistd.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <assert.h>
 
+#include "ipcalc.h"
 #include "defs.h"
 #include "olsr.h"
 #include "log.h"
@@ -54,16 +55,13 @@
 #include "apm.h"
 #include "net_os.h"
 #include "build_msg.h"
+#include "net_olsr.h"
 
 #if LINUX_POLICY_ROUTING
 #include <linux/types.h>
 #include <linux/rtnetlink.h>
 #include <fcntl.h>
 #endif
-
-/* Global stuff externed in defs.h */
-FILE *debug_handle;             /* Where to send debug(defaults to stdout) */
-struct olsrd_config *olsr_cnf;  /* The global configuration */
 
 #ifdef WIN32
 #define close(x) closesocket(x)
@@ -94,9 +92,11 @@ olsr_process_arguments(int, char *[],
 		       struct olsrd_config *, 
 		       struct if_config_options *);
 
+#ifndef WIN32
 static char **olsr_argv;
+#endif
 
-static char copyright_string[] = "The olsr.org Optimized Link-State Routing daemon(olsrd) Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org) All rights reserved.";
+static char copyright_string[] __attribute__((unused)) = "The olsr.org Optimized Link-State Routing daemon(olsrd) Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org) All rights reserved.";
 
 
 /**
@@ -109,18 +109,26 @@ main(int argc, char *argv[])
   struct if_config_options *default_ifcnf;
   char conf_file_name[FILENAME_MAX];
   struct tms tms_buf;
-
+#ifndef NODEBUG
+  struct ipaddr_str buf;
+#endif
 #ifdef WIN32
   WSADATA WsaData;
   int len;
 #endif
 
-  /* Stop the compiler from complaining */
-  (void)copyright_string;
+  /* paranoia checks */
+  assert(sizeof(olsr_u8_t) == 1);
+  assert(sizeof(olsr_u16_t) == 2);
+  assert(sizeof(olsr_u32_t) == 4);
+  assert(sizeof(olsr_8_t) == 1);
+  assert(sizeof(olsr_16_t) == 2);
+  assert(sizeof(olsr_32_t) == 4);
 
   debug_handle = stdout;
+#ifndef WIN32
   olsr_argv = argv;
-
+#endif
   setbuf(stdout, NULL);
   setbuf(stderr, NULL);
 
@@ -141,18 +149,15 @@ main(int argc, char *argv[])
     }
 #endif
 
-  /* Grab initial timestamp */
-  now_times = times(&tms_buf);
-
   /* Open syslog */
   olsr_openlog("olsrd");
 
-  /* Get initial timestep */
-  nowtm = NULL;
-  while (nowtm == NULL)
-    {
-      nowtm = localtime((time_t *)&now.tv_sec);
-    }
+  /* Grab initial timestamp */
+  now_times = times(&tms_buf);
+  do {
+    time_t t = now.tv_sec;
+    nowtm = localtime(&t);
+  } while (nowtm == NULL);
     
   printf("\n *** %s ***\n Build date: %s on %s\n http://www.olsr.org\n\n", 
 	 olsrd_version, 
@@ -209,16 +214,17 @@ main(int argc, char *argv[])
   /*
    * set up configuration prior to processing commandline options
    */
-  if((olsr_cnf = olsrd_parse_cnf(conf_file_name)) == NULL)
+  if(NULL == (olsr_cnf = olsrd_parse_cnf(conf_file_name)))
     {
       printf("Using default config values(no configfile)\n");
       olsr_cnf = olsrd_get_default_cnf();
     }
-  if((default_ifcnf = get_default_if_config()) == NULL)
-    {
-      fprintf(stderr, "No default ifconfig found!\n");
-      exit(EXIT_FAILURE);
-    }
+
+  default_ifcnf = get_default_if_config();
+  if (default_ifcnf == NULL) {
+    fprintf(stderr, "No default ifconfig found!\n");
+    exit(EXIT_FAILURE);
+  }
 
   /* Initialize tick resolution */
 #ifndef WIN32
@@ -254,9 +260,9 @@ main(int argc, char *argv[])
   /*
    * Print configuration 
    */
-  if(olsr_cnf->debug_level > 1)
+  if(olsr_cnf->debug_level > 1) {
     olsrd_print_cnf(olsr_cnf);
-
+  }
 #ifndef WIN32
   /* Disable redirects globally */
   disable_redirects_global(olsr_cnf->ip_version);
@@ -265,28 +271,27 @@ main(int argc, char *argv[])
   /*
    *socket for icotl calls
    */
-  if ((olsr_cnf->ioctl_s = socket(olsr_cnf->ip_version, SOCK_DGRAM, 0)) < 0) 
-
-    {
-      olsr_syslog(OLSR_LOG_ERR, "ioctl socket: %m");
-      olsr_exit(__func__, 0);
-    }
+  olsr_cnf->ioctl_s = socket(olsr_cnf->ip_version, SOCK_DGRAM, 0);
+  if (olsr_cnf->ioctl_s < 0) {
+    olsr_syslog(OLSR_LOG_ERR, "ioctl socket: %m");
+    olsr_exit(__func__, 0);
+  }
 
 #if LINUX_POLICY_ROUTING
-  if ((olsr_cnf->rtnl_s = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE)) < 0) 
-    {
-      olsr_syslog(OLSR_LOG_ERR, "rtnetlink socket: %m");
-      olsr_exit(__func__, 0);
-    }
+  olsr_cnf->rtnl_s = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE);
+  if (olsr_cnf->rtnl_s < 0) {
+    olsr_syslog(OLSR_LOG_ERR, "rtnetlink socket: %m");
+    olsr_exit(__func__, 0);
+  }
   fcntl(olsr_cnf->rtnl_s, F_SETFL, O_NONBLOCK);
 #endif
 
 #if defined __FreeBSD__ || defined __MacOSX__ || defined __NetBSD__ || defined __OpenBSD__
-  if ((olsr_cnf->rts = socket(PF_ROUTE, SOCK_RAW, 0)) < 0)
-    {
-      olsr_syslog(OLSR_LOG_ERR, "routing socket: %m");
-      olsr_exit(__func__, 0);
-    }
+  olsr_cnf->rts = socket(PF_ROUTE, SOCK_RAW, 0);
+  if (olsr_cnf->rts < 0) {
+    olsr_syslog(OLSR_LOG_ERR, "routing socket: %m");
+    olsr_exit(__func__, 0);
+  }
 #endif
 
   /* Init empty TC timer */
@@ -331,20 +336,6 @@ main(int argc, char *argv[])
 	}
     }
 
-  /* Set ipsize */
-  if(olsr_cnf->ip_version == AF_INET6)
-    {
-      OLSR_PRINTF(1, "Using IP version %d\n", 6);
-      olsr_cnf->ipsize = sizeof(struct in6_addr);
-      olsr_cnf->maxplen = 128;
-    }
-  else
-    {
-      OLSR_PRINTF(1, "Using IP version %d\n", 4);
-      olsr_cnf->ipsize = sizeof(struct in_addr);
-      olsr_cnf->maxplen = 32;
-    }
-
   /* Initialize net */
   init_net();
 
@@ -375,29 +366,27 @@ main(int argc, char *argv[])
 
   /* Initialize the IPC socket */
 
-  if(olsr_cnf->open_ipc)
+  if (olsr_cnf->ipc_connections > 0) {
       ipc_init();
-
+  }
   /* Initialisation of different tables to be used.*/
   olsr_init_tables();
 
   /* daemon mode */
 #ifndef WIN32
-  if((olsr_cnf->debug_level == 0) && (!olsr_cnf->no_fork))
-    {
-      printf("%s detaching from the current process...\n", olsrd_version);
-      if(daemon(0, 0) < 0)
-	{
-	  printf("daemon(3) failed: %s\n", strerror(errno));
-	  exit(EXIT_FAILURE);
-	}
+  if(olsr_cnf->debug_level == 0 && !olsr_cnf->no_fork) {
+    printf("%s detaching from the current process...\n", olsrd_version);
+    if (daemon(0, 0) < 0) {
+      printf("daemon(3) failed: %s\n", strerror(errno));
+      exit(EXIT_FAILURE);
     }
+  }
 #endif
 
   /* Load plugins */
   olsr_load_plugins();
 
-  OLSR_PRINTF(1, "Main address: %s\n\n", olsr_ip_to_string(&olsr_cnf->main_addr));
+  OLSR_PRINTF(1, "Main address: %s\n\n", olsr_ip_to_string(&buf, &olsr_cnf->main_addr));
 
   /* Start syslog entry */
   olsr_syslog(OLSR_LOG_INFO, "%s successfully started", olsrd_version);
@@ -413,8 +402,12 @@ main(int argc, char *argv[])
 #endif
 #else
   signal(SIGHUP, olsr_reconfigure);  
-  signal(SIGINT, olsr_shutdown);  
-  signal(SIGTERM, olsr_shutdown);  
+  signal(SIGINT,  olsr_shutdown);
+  signal(SIGQUIT, olsr_shutdown);
+  signal(SIGILL,  olsr_shutdown);
+  signal(SIGABRT, olsr_shutdown);
+  signal(SIGSEGV, olsr_shutdown);
+  signal(SIGTERM, olsr_shutdown);
   signal(SIGPIPE, SIG_IGN);
 #endif
 
@@ -423,9 +416,6 @@ main(int argc, char *argv[])
 
   /* Starting scheduler */
   scheduler();
-
-  /* Stop the compiler from complaining */
-  (void)copyright_string;
 
   /* Like we're ever going to reach this ;-) */
   return 1;
@@ -466,7 +456,7 @@ int __stdcall
 SignalHandler(unsigned long signal)
 #else
 static void
-olsr_shutdown(int signal)
+olsr_shutdown(int signal __attribute__((unused)))
 #endif
 {
   struct interface *ifn;
@@ -489,8 +479,9 @@ olsr_shutdown(int signal)
   OLSR_PRINTF(1, "Closing sockets...\n");
 
   /* front-end IPC socket */
-  if(olsr_cnf->open_ipc)
+  if (olsr_cnf->ipc_connections > 0) {
     shutdown_ipc();
+  }
 
   /* OLSR sockets */
   for (ifn = ifnet; ifn; ifn = ifn->int_next) 
@@ -567,17 +558,16 @@ set_default_ifcnfs(struct olsr_if *ifs, struct if_config_options *cnf)
 }
 
 
-#define NEXT_ARG argv++;argc--
-#define CHECK_ARGC if(!argc) { \
+#define NEXT_ARG do { argv++;argc--; } while (0)
+#define CHECK_ARGC do { if(!argc) { \
       if((argc - 1) == 1){ \
       fprintf(stderr, "Error parsing command line options!\n"); \
-      olsr_exit(__func__, EXIT_FAILURE); \
       } else { \
       argv--; \
       fprintf(stderr, "You must provide a parameter when using the %s switch!\n", *argv); \
-      olsr_exit(__func__, EXIT_FAILURE); \
      } \
-     }
+     olsr_exit(__func__, EXIT_FAILURE); \
+     } } while (0)
 
 /**
  * Process command line arguments passed to olsrd
@@ -801,7 +791,6 @@ olsr_process_arguments(int argc, char *argv[],
       if (strcmp(*argv, "-ipc") == 0) 
 	{
 	  cnf->ipc_connections = 1;
-	  cnf->open_ipc = OLSR_TRUE;
 	  continue;
 	}
 

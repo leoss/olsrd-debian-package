@@ -1,5 +1,5 @@
 # The olsr.org Optimized Link-State Routing daemon(olsrd)
-# Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+# Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without 
@@ -35,9 +35,8 @@
 # to the project. For more information see the website or contact
 # the copyright holders.
 #
-# $Id: Makefile,v 1.100 2007/10/20 11:26:25 bernd67 Exp $
 
-VERS =		0.5.4
+VERS =		0.5.5pre
 
 TOPDIR = .
 include Makefile.inc
@@ -45,31 +44,29 @@ include Makefile.inc
 # pass generated variables to save time
 MAKECMD = $(MAKE) OS="$(OS)" WARNINGS="$(WARNINGS)"
 
-LIBS +=		$(OS_LIB_DYNLOAD) $(OS_LIB_PTHREAD)
+LIBS +=		$(OS_LIB_DYNLOAD)
 
 ifeq ($(OS), win32)
-LDFLAGS +=	-Wl,--out-implib=libolsrd.a -Wl,--export-all-symbols
+LDFLAGS +=	-Wl,--out-implib=libolsrd.a
+LDFLAGS +=	-Wl,--export-all-symbols
 endif
 
 SWITCHDIR =	src/olsr_switch
 CFGDIR =	src/cfgparser
-CFGOBJS = 	$(CFGDIR)/oscan.o $(CFGDIR)/oparse.o $(CFGDIR)/olsrd_conf.o
-CFGDEPS = 	$(wildcard $(CFGDIR)/*.[ch]) $(CFGDIR)/oparse.y $(CFGDIR)/oscan.lex
+include $(CFGDIR)/local.mk
 TAG_SRCS =	$(SRCS) $(HDRS) $(wildcard $(CFGDIR)/*.[ch] $(SWITCHDIR)/*.[ch])
 
-default_target: cfgparser $(EXENAME)
+.PHONY: default_target switch
+default_target: $(EXENAME)
 
-$(EXENAME):	$(OBJS) $(CFGOBJS) src/builddata.o
+$(EXENAME):	$(OBJS) src/builddata.o
 		$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 cfgparser:	$(CFGDEPS)
-		$(MAKECMD) -C $(CFGDIR)
+		$(MAKE) -C $(CFGDIR)
 
 switch:		
-		$(MAKECMD) -C $(SWITCHDIR)
-
-$(CFGOBJS):
-		$(MAKECMD) -C $(CFGDIR)
+	$(MAKECMD) -C $(SWITCHDIR)
 
 # generate it always
 .PHONY: src/builddata.c
@@ -84,18 +81,16 @@ src/builddata.c:
 .PHONY: help libs clean_libs libs_clean clean uberclean install_libs libs_install install_bin install_olsrd install build_all install_all clean_all 
 
 clean:
-		-rm -f $(OBJS) $(SRCS:%.c=%.d) $(EXENAME) $(EXENAME).exe src/builddata.c
+	-rm -f $(OBJS) $(SRCS:%.c=%.d) $(EXENAME) $(EXENAME).exe src/builddata.c $(TMPFILES)
 ifeq ($(OS), win32)
-		-rm -f libolsrd.a
+	-rm -f libolsrd.a
 endif
-		$(MAKECMD) -C $(CFGDIR) clean
 
 uberclean:	clean clean_libs
-		-rm -f $(TAGFILE)
-		# BSD-xargs has no "--no-run-if-empty" aka "-r"
-		find . \( -name '*.[od]' -o -name '*~' \) -print0 | xargs -0 rm -f
-		$(MAKECMD) -C $(CFGDIR) uberclean
-		$(MAKECMD) -C $(SWITCHDIR) clean
+	-rm -f $(TAGFILE)
+#	BSD-xargs has no "--no-run-if-empty" aka "-r"
+	find . \( -name '*.[od]' -o -name '*~' \) -print0 | xargs -0 rm -f
+	$(MAKECMD) -C $(SWITCHDIR) clean
 
 install: install_olsrd
 
@@ -108,11 +103,14 @@ install_olsrd:	install_bin
 		@echo ========= C O N F I G U R A T I O N - F I L E ============
 		@echo $(EXENAME) uses the configfile $(CFGFILE)
 		@echo a default configfile. A sample RFC-compliance aimed
-		@echo configfile can be installed. Note that a LQ-based configfile
+		@echo configfile can be found in olsrd.conf.default.rfc.
+		@echo However none of the larger OLSRD using networks use that
+		@echo so install a configfile with activated link quality exstensions
+		@echo per default.
 		@echo can be found at files/olsrd.conf.default.lq
 		@echo ==========================================================
 		mkdir -p $(ETCDIR)
-		-cp -i files/olsrd.conf.default.rfc $(CFGFILE)
+		-cp -i files/olsrd.conf.default.lq $(CFGFILE)
 		@echo -------------------------------------------
 		@echo Edit $(CFGFILE) before running olsrd!!
 		@echo -------------------------------------------
@@ -151,14 +149,17 @@ httpinfo:
 
 tas:
 		$(MAKECMD) -C lib/tas clean
+		$(MAKECMD) -C lib/tas
 		$(MAKECMD) -C lib/tas DESTDIR=$(DESTDIR) install
 
 dot_draw:
 		$(MAKECMD) -C lib/dot_draw clean
+		$(MAKECMD) -C lib/dot_draw
 		$(MAKECMD) -C lib/dot_draw DESTDIR=$(DESTDIR) install
 
 nameservice:
 		$(MAKECMD) -C lib/nameservice clean
+		$(MAKECMD) -C lib/nameservice
 		$(MAKECMD) -C lib/nameservice DESTDIR=$(DESTDIR) install
 
 dyn_gw:
@@ -192,6 +193,6 @@ quagga:
 		$(MAKECMD) -C lib/quagga DESTDIR=$(DESTDIR) install 
 
 
-build_all:	all cfgparser $(EXENAME) switch libs
+build_all:	all switch libs
 install_all:	install install_libs
 clean_all:	uberclean clean_libs

@@ -5,7 +5,7 @@ It was downloaded from http://www.olsr.org/releases/
 
 
 The olsr.org Optimized Link-State Routing daemon(olsrd)
-Copyright (c) 2003-2005, Andreas Tønnesen(andreto@olsr.org)
+Copyright (c) 2003-2005, Andreas TÃ¸nnesen(andreto@olsr.org)
                     Thomas Lopatic(thomas@lopatic.de) and others
 All rights reserved.
 
@@ -39,7 +39,7 @@ POSSIBILITY OF SUCH DAMAGE.<Put the license of the package here>
 
 The files under gui/linux-gtk are:
 
-Copyright (C) 2003 Andreas Tønnesen (andreto@ifi.uio.no)
+Copyright (C) 2003 Andreas TÃ¸nnesen (andreto@ifi.uio.no)
 
 olsrd/gui/linux-gtk is free software; you can redistribute it and/or 
 modify it under the terms of the GNU General Public License as published
