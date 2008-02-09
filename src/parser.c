@@ -306,13 +306,17 @@ parse_packet(struct olsr *olsr, int size, struct interface *in_if, union olsr_ip
        */
 
       /* Should be the same for IPv4 and IPv6 */
-      if(m->v4.originator == olsr_cnf->main_addr.v4.s_addr)
-	{
-#ifdef DEBUG
-	  OLSR_PRINTF(3, "Not processing message originating from us!\n");
+      if(ipequal((union olsr_ip_addr *)&m->v4.originator, &olsr_cnf->main_addr) || !olsr_validate_address((union olsr_ip_addr *)&m->v4.originator))
+        {
+#if !defined(NODEBUG) && defined(DEBUG)
+	  struct ipaddr_str buf;
 #endif
-	  continue;
-	}
+#ifdef DEBUG
+	  OLSR_PRINTF(3, "Not processing message originating from %s!\n",
+	    olsr_ip_to_string(&buf,(union olsr_ip_addr *)&m->v4.originator));
+#endif
+          continue;
+        }
 
 
       //printf("MESSAGETYPE: %d\n", m->v4.olsr_msgtype);
@@ -359,6 +363,8 @@ parse_packet(struct olsr *olsr, int size, struct interface *in_if, union olsr_ip
 				   from_addr);
 	    }
 
+          /* Cancel loop here, otherwise olsrd just hangs forever at this point */
+          break;
 	}
 
     } /* for olsr_msg */ 

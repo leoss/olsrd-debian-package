@@ -83,7 +83,8 @@ olsrd_write_cnf(struct olsrd_config *cnf, const char *fname)
   fprintf(fd, "# IP version to use (4 or 6)\n\nIpVersion\t%d\n\n", cnf->ip_version == AF_INET ? 4 : 6);
 
   /* FIB Metric */
-  fprintf(fd, "# FIBMetric (\"%s\" or \"%s\")\n\nFIBMetric\t\"%s\"\n\n", CFG_FIBM_FLAT, CFG_FIBM_CORRECT, cnf->flat_fib_metric ? CFG_FIBM_FLAT : CFG_FIBM_CORRECT);
+  fprintf(fd, "# FIBMetric (\"%s\", \"%s\", or \"%s\")\n\nFIBMetric\t\"%s\"\n\n", CFG_FIBM_FLAT, CFG_FIBM_CORRECT, CFG_FIBM_APPROX,
+    FIBM_FLAT == cnf->fib_metric ? CFG_FIBM_FLAT : FIBM_CORRECT == cnf->fib_metric ? CFG_FIBM_CORRECT : CFG_FIBM_APPROX);
 
   /* HNA IPv4/IPv6 */
   fprintf(fd, "# HNA IPv%d routes\n# syntax: netaddr/prefix\n\nHna%d {\n", cnf->ip_version == AF_INET ? 4 : 6, cnf->ip_version == AF_INET ? 4 : 6);
@@ -108,6 +109,10 @@ olsrd_write_cnf(struct olsrd_config *cnf, const char *fname)
   /* RtTable */
   fprintf(fd, "# Policy Routing Table to use. Default is 254\n\n");
   fprintf(fd, "RtTable\t\t%d\n\n", cnf->rttable);
+
+  /* RtTableDefault */
+  fprintf(fd, "# Policy Routing Table to use for the default Route. Default is 0 (Take the same table as specified by RtTable)\n\n");
+  fprintf(fd, "RtTableDefault\t\t%d\n\n", cnf->rttable_default);
 
   /* Willingness */
   fprintf(fd, "# The fixed willingness to use(0-7)\n# If not set willingness will be calculated\n# dynammically based on battery/power status\n\n");
@@ -179,6 +184,9 @@ olsrd_write_cnf(struct olsrd_config *cnf, const char *fname)
 
   fprintf(fd, "# Link quality window size\n\n");
   fprintf(fd, "LinkQualityWinSize\t%d\n\n", cnf->lq_wsize);
+
+  fprintf(fd, "# NAT threshold\n\n");
+  fprintf(fd, "NatThreshold\t%f\n\n", cnf->lq_nat_thresh);
 
   fprintf(fd, "# Clear screen when printing debug output?\n\n");
   fprintf(fd, "ClearScreen\t%s\n\n", cnf->clear_screen ? "yes" : "no");
@@ -369,7 +377,8 @@ olsrd_write_cnf_buf(struct olsrd_config *cnf, char *buf, olsr_u32_t bufsize)
   WRITE_TO_BUF("# IP version to use (4 or 6)\n\nIpVersion\t%d\n\n", cnf->ip_version == AF_INET ? 4 : 6);
 
   /* FIB Metric */
-  WRITE_TO_BUF("# FIBMetric (\"%s\" or \"%s\")\n\nFIBMetric\t\"%s\"\n\n", CFG_FIBM_FLAT, CFG_FIBM_CORRECT, cnf->flat_fib_metric ? CFG_FIBM_FLAT : CFG_FIBM_CORRECT);
+  WRITE_TO_BUF("# FIBMetric (\"%s\", \"%s\", or \"%s\")\n\nFIBMetric\t\"%s\"\n\n", CFG_FIBM_FLAT, CFG_FIBM_CORRECT, CFG_FIBM_APPROX,
+    FIBM_FLAT == cnf->fib_metric ? CFG_FIBM_FLAT : FIBM_CORRECT == cnf->fib_metric ? CFG_FIBM_CORRECT : CFG_FIBM_APPROX);
 
   /* HNA IPv4/IPv6 */
   WRITE_TO_BUF("# HNA IPv%1$d routes\n# syntax: netaddr netmask\n\nHna%1$d {\n", cnf->ip_version == AF_INET ? 4 : 6);
@@ -459,6 +468,9 @@ olsrd_write_cnf_buf(struct olsrd_config *cnf, char *buf, olsr_u32_t bufsize)
 
   WRITE_TO_BUF("# Link quality window size\n\n");
   WRITE_TO_BUF("LinkQualityWinSize\t%d\n\n", cnf->lq_wsize);
+
+  WRITE_TO_BUF("# NAT threshold\n\n");
+  WRITE_TO_BUF("NatThreshold\t%f\n\n", cnf->lq_nat_thresh);
 
   WRITE_TO_BUF("# Clear screen when printing debug output?\n\n");
   WRITE_TO_BUF("ClearScreen\t%s\n\n", cnf->clear_screen ? "yes" : "no");

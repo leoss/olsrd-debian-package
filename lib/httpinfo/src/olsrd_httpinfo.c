@@ -839,19 +839,21 @@ static int build_config_body(char *buf, olsr_u32_t bufsize)
     size += snprintf(&buf[size], bufsize-size, "<td>Main address: <strong>%s</strong></td>\n", olsr_ip_to_string(&mainaddrbuf, &olsr_cnf->main_addr));
     size += snprintf(&buf[size], bufsize-size, "<td>IP version: %d</td>\n", olsr_cnf->ip_version == AF_INET ? 4 : 6);
     size += snprintf(&buf[size], bufsize-size, "<td>Debug level: %d</td>\n", olsr_cnf->debug_level);
-    size += snprintf(&buf[size], bufsize-size, "<td>FIB Metrics: %s</td>\n", olsr_cnf->flat_fib_metric ? CFG_FIBM_FLAT : CFG_FIBM_CORRECT);
+    size += snprintf(&buf[size], bufsize-size, "<td>FIB Metrics: %s</td>\n", FIBM_FLAT == olsr_cnf->fib_metric ? CFG_FIBM_FLAT : FIBM_CORRECT == olsr_cnf->fib_metric ? CFG_FIBM_CORRECT : CFG_FIBM_APPROX);
 
     size += snprintf(&buf[size], bufsize-size, "</tr>\n<tr>\n");
 
     size += snprintf(&buf[size], bufsize-size, "<td>Pollrate: %0.2f</td>\n", olsr_cnf->pollrate);
     size += snprintf(&buf[size], bufsize-size, "<td>TC redundancy: %d</td>\n", olsr_cnf->tc_redundancy);
     size += snprintf(&buf[size], bufsize-size, "<td>MPR coverage: %d</td>\n", olsr_cnf->mpr_coverage);
+    size += snprintf(&buf[size], bufsize-size, "<td>NAT threshold: %f</td>\n", olsr_cnf->lq_nat_thresh);
 
     size += snprintf(&buf[size], bufsize-size, "</tr>\n<tr>\n");
 
     size += snprintf(&buf[size], bufsize-size, "<td>Fisheye: %s</td>\n", olsr_cnf->lq_fish ? "Enabled" : "Disabled");
     size += snprintf(&buf[size], bufsize-size, "<td>TOS: 0x%04x</td>\n", olsr_cnf->tos);
     size += snprintf(&buf[size], bufsize-size, "<td>RtTable: 0x%04x/%d</td>\n", olsr_cnf->rttable, olsr_cnf->rttable);
+    size += snprintf(&buf[size], bufsize-size, "<td>RtTableDefault: 0x%04x/%d</td>\n", olsr_cnf->rttable_default, olsr_cnf->rttable_default);
     size += snprintf(&buf[size], bufsize-size, "<td>Willingness: %d %s</td>\n", olsr_cnf->willingness, olsr_cnf->willingness_auto ? "(auto)" : "");
 
     if (olsr_cnf->lq_level == 0) {

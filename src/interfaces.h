@@ -162,6 +162,8 @@ struct interface
   struct        if_gen_property *gen_properties;/* Generic interface properties */
   
   int           ttl_index; /* index in TTL array for fish-eye */
+  
+  olsr_bool	immediate_send_tc; /* Hello's are sent immediately normally, this flag prefers to send TC's */
 
   struct	interface *int_next;
 };
@@ -195,6 +197,9 @@ if_ifwithname(const char *);
 
 const char *
 if_ifwithindex_name(const int if_index);
+
+struct interface *
+if_ifwithindex(const int if_index);
 
 struct olsr_if *
 queue_if(const char *, int);

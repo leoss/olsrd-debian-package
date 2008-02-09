@@ -1,10 +1,14 @@
-olsrd (0.5.5~pre20071226) experimental; urgency=low
+olsrd (0.5.5-1) unstable; urgency=low
 
-  * new upstream version (current bzr head)
+  * new upstream version
+  * removed unused lintian overwrites
   * upgraded to policy 3.7.3, no changes requiered
-  * convert debian/copyright to utf8
+  * made debian/copyright machine readable following
+    http://wiki.debian.org/Proposals/CopyrightFormat and converted it to utf8
+  * patch upstream Makefile to use /usr/lib on amd64
+    (Closes: #461604)
 
- -- Holger Levsen <holger@debian.org>  Wed, 26 Dec 2007 20:57:55 +0000
+ -- Holger Levsen <holger@debian.org>  Sat, 09 Feb 2008 09:39:28 +0000
 
 olsrd (0.5.4-2) unstable; urgency=low
 

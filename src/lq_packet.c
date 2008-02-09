@@ -115,6 +115,11 @@ create_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
 
       else if (walker->neighbor->status == NOT_SYM)
         neigh->neigh_type = NOT_NEIGH;
+        
+      else {
+        OLSR_PRINTF(0, "Error: neigh_type undefined");
+        neigh->neigh_type = NOT_NEIGH;
+      }
   
       // set the entry's neighbour interface address
 
@@ -164,11 +169,11 @@ create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
 
   if (olsr_cnf->lq_fish > 0)
   {
-    // Sven-Ola: Too lazy to find the different iface inits. This will do it too.
     if (outif->ttl_index >= (int)(sizeof(ttl_list) / sizeof(ttl_list[0])))
       outif->ttl_index = 0;
     
-    lq_tc->comm.ttl = ttl_list[outif->ttl_index++];
+    lq_tc->comm.ttl = (0 <= outif->ttl_index ? ttl_list[outif->ttl_index] : MAX_TTL);
+    outif->ttl_index++;
 
     OLSR_PRINTF(3, "Creating LQ TC with TTL %d.\n", lq_tc->comm.ttl);
   }
@@ -225,6 +230,11 @@ create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
             neigh->link_quality = lnk->loss_link_quality;
             neigh->neigh_link_quality = lnk->neigh_link_quality;
           }
+          else {
+            OLSR_PRINTF(0, "Error: link_qualtiy undefined");
+            neigh->link_quality = 0.0;
+            neigh->neigh_link_quality = 0.0;
+          }          
 
           // queue the neighbour entry
 
@@ -566,65 +576,6 @@ serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
   net_outbuffer_push(outif, msg_buffer, size + off);
 }
 
-
-static int
-deserialize_lq_hello(struct hello_message *hello,
-                     const void *ser)
-{
-    const unsigned char *limit;
-    olsr_u8_t type;
-    olsr_u16_t size;
-  
-    const unsigned char *curr = ser;
-    pkt_get_u8(&curr, &type);
-    if (type != LQ_HELLO_MESSAGE) {
-        /* No need to do anything more */
-        return 1;
-    }
-    pkt_get_double(&curr, &hello->vtime);
-    pkt_get_u16(&curr, &size);
-
-    // Sven-Ola: Check the message source addr
-    if (!olsr_validate_address((const union olsr_ip_addr *)curr)) {
-        /* No need to do anything more */
-        return 1;
-    }
-    pkt_get_ipaddress(&curr, &hello->source_addr);
-
-    pkt_get_u8(&curr, &hello->ttl);
-    pkt_get_u8(&curr, &hello->hop_count);
-    pkt_get_u16(&curr, &hello->packet_seq_number);
-    pkt_ignore_u16(&curr);
-
-    pkt_get_double(&curr, &hello->htime);
-    pkt_get_u8(&curr, &hello->willingness);
-
-    hello->neighbors = NULL;
-    limit = ((const unsigned char *)ser) + size;
-    while (curr < limit) {
-        const struct lq_hello_info_header *info_head = (const struct lq_hello_info_header *)curr;
-        const unsigned char *limit2 = curr + ntohs(info_head->size);
-
-        curr = (const unsigned char *)(info_head + 1);      
-        while (curr < limit2) {
-            struct hello_neighbor *neigh = olsr_malloc(sizeof (struct hello_neighbor),
-                                                       "LQ_HELLO deserialization");
-            pkt_get_ipaddress(&curr, &neigh->address);
-
-            pkt_get_lq(&curr, &neigh->link_quality);
-            pkt_get_lq(&curr, &neigh->neigh_link_quality);
-            pkt_ignore_u16(&curr);
-
-            neigh->link   = EXTRACT_LINK(info_head->link_code);
-            neigh->status = EXTRACT_STATUS(info_head->link_code);
-
-            neigh->next = hello->neighbors;
-            hello->neighbors = neigh;
-        }
-    }
-    return 0;
-}
-
 void
 olsr_output_lq_hello(void *para)
 {
@@ -644,7 +595,7 @@ olsr_output_lq_hello(void *para)
   // destroy internal format
   destroy_lq_hello(&lq_hello);
 
-  if(net_output_pending(outif)) {
+  if(net_output_pending(outif) && (!outif->immediate_send_tc || TIMED_OUT(outif->fwdtimer))) {
     net_output(outif);
   }
 }
@@ -691,23 +642,7 @@ olsr_output_lq_tc(void *para)
 
   destroy_lq_tc(&lq_tc);
 
-  if(net_output_pending(outif) && TIMED_OUT(outif->fwdtimer)) {
+  if(net_output_pending(outif) && (outif->immediate_send_tc || TIMED_OUT(outif->fwdtimer))) {
     set_buffer_timer(outif);
   }
-}
-
-void
-olsr_input_lq_hello(union olsr_message *ser,
-                    struct interface *inif,
-                    union olsr_ip_addr *from)
-{
-  struct hello_message hello;
-
-  if (ser == NULL) {
-    return;
-  }
-  if (deserialize_lq_hello(&hello, ser) != 0) {
-    return;
-  }
-  olsr_hello_tap(&hello, inif, from);
 }

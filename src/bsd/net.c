@@ -40,6 +40,7 @@
 
 #include "../defs.h"
 #include "../net_os.h"
+#include "../ipcalc.h"
 #include "../parser.h" /* dnc: needed for call to packet_parser() */
 #include "../olsr_protocol.h"
 
@@ -314,7 +315,7 @@ gethemusocket(struct sockaddr_in *pin)
 
 
 int
-getsocket(int bufspace, char *int_name)
+getsocket(int bufspace, char *int_name __attribute__((unused)))
 {
   struct sockaddr_in sin;
   int on;
@@ -391,8 +392,9 @@ getsocket(int bufspace, char *int_name)
   return (sock);
 }
 
-int getsocket6(struct sockaddr_in6 *sin, int bufspace, char *int_name)
+int getsocket6(int bufspace, char *int_name __attribute__((unused)))
 {
+  struct sockaddr_in6 sin;
   int on;
   int sock = socket(AF_INET6, SOCK_DGRAM, 0);
 
@@ -445,7 +447,10 @@ int getsocket6(struct sockaddr_in6 *sin, int bufspace, char *int_name)
     }
 #endif
 
-  if (bind(sock, (struct sockaddr *)sin, sizeof (*sin)) < 0) 
+  memset(&sin, 0, sizeof(sin));
+  sin.sin6_family = AF_INET6;
+  sin.sin6_port = htons(OLSRPORT);
+  if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0)
     {
       perror("bind");
       syslog(LOG_ERR, "bind: %m");
@@ -493,8 +498,7 @@ join_mcast(struct interface *ifs, int sock)
 		IPPROTO_IPV6, 
 		IPV6_ADD_MEMBERSHIP, 
 		(char *)&mcastreq, 
-		sizeof(struct ipv6_mreq)) 
-     < 0)
+		sizeof(struct ipv6_mreq)) < 0)
 #endif 
     {
       perror("Join multicast send");
@@ -506,8 +510,7 @@ join_mcast(struct interface *ifs, int sock)
 		IPPROTO_IPV6, 
 		IPV6_MULTICAST_IF, 
 		(char *)&mcastreq.ipv6mr_interface, 
-		sizeof(mcastreq.ipv6mr_interface)) 
-     < 0)
+		sizeof(mcastreq.ipv6mr_interface)) < 0)
     {
       perror("Set multicast if");
       return -1;
@@ -605,7 +608,7 @@ ssize_t
 olsr_sendto(int s, 
 	    const void *buf, 
 	    size_t len, 
-	    int flags, 
+	    int flags __attribute__((unused)), 
 	    const struct sockaddr *to, 
 	    socklen_t tolen)
 {
@@ -710,7 +713,7 @@ ssize_t
 olsr_recvfrom(int  s, 
 	      void *buf, 
 	      size_t len, 
-	      int flags, 
+	      int flags __attribute__((unused)), 
 	      struct sockaddr *from,
 	      socklen_t *fromlen)
 {
@@ -778,7 +781,8 @@ olsr_recvfrom(int  s,
   sin6 = (struct sockaddr_in6 *)from;
   OLSR_PRINTF (4, "%d bytes from %s, socket associated %s really received on %s\n",
 	       count,	       
-               inet_ntop(olsr_cnf->ip_version, olsr_cnf->ip_version == AF_INET6 ? (char *)&sin6->sin6_addr : (char *)&sin->sin_addr, addrstr, sizeof(addrstr)):
+               inet_ntop(olsr_cnf->ip_version, olsr_cnf->ip_version == AF_INET6 ?
+                         (char *)&sin6->sin6_addr : (char *)&sin->sin_addr, addrstr, sizeof(addrstr)),
 	       ifc->int_name,
 	       iname);
 
@@ -829,6 +833,7 @@ check_wireless_interface(char *ifname)
   strlcpy(nr.nr_ifname, ifname, sizeof(nr.nr_ifname));
   return (ioctl(olsr_cnf->ioctl_s, SIOCG80211FLAGS, &nr) >=0) ? 1: 0;
 #else
+  ifname = NULL; /* squelsh compiler warning */
   return 0;
 #endif
 }

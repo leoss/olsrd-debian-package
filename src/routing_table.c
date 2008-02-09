@@ -54,6 +54,15 @@
 
 #include <assert.h>
 
+/*
+ * Sven-Ola: if the current internet gateway is switched, the
+ * NAT connection info is lost for any active TCP/UDP session.
+ * For this reason, we do not want to switch if the advantage
+ * is only minimal (cost of loosing all NATs is too high).
+ * The following rt_path keeps track of the current inet gw.
+ */
+static struct rt_path *current_inetgw = NULL;
+
 /* Root of our RIB */
 struct avl_tree routingtree;
 
@@ -302,23 +311,23 @@ olsr_insert_rt_path(struct rt_path *rtp, struct tc_entry *tc,
       return;
     }
 
-    /* Now insert the rt_path to the owning rt_entry tree */
-
-    rtp->rtp_originator = tc->addr;
-
-    /* set key and backpointer prior to tree insertion */
-    rtp->rtp_tree_node.key = &rtp->rtp_originator;
-    rtp->rtp_tree_node.data = rtp;
-
-    /* insert to the route entry originator tree */
-    avl_insert(&rt->rt_path_tree, &rtp->rtp_tree_node, AVL_DUP_NO);
-
-    /* backlink to the owning route entry */
-    rtp->rtp_rt = rt;
-
   } else {
     rt = node->data;
   }
+
+
+  /* Now insert the rt_path to the owning rt_entry tree */
+  rtp->rtp_originator = tc->addr;
+
+  /* set key and backpointer prior to tree insertion */
+  rtp->rtp_tree_node.key = &rtp->rtp_originator;
+  rtp->rtp_tree_node.data = rtp;
+
+  /* insert to the route entry originator tree */
+  avl_insert(&rt->rt_path_tree, &rtp->rtp_tree_node, AVL_DUP_NO);
+
+  /* backlink to the owning route entry */
+  rtp->rtp_rt = rt;
 
   /* update the version field and relevant parameters */
   olsr_update_rt_path(rtp, tc, link);
@@ -341,6 +350,11 @@ olsr_free_rt_path(struct rt_path *rtp)
   if (rtp->rtp_tc) {
     avl_delete(&rtp->rtp_tc->prefix_tree, &rtp->rtp_prefix_tree_node);
     rtp->rtp_tc = NULL;
+  }
+
+  /* no current inet gw if the rt_path is removed */
+  if (current_inetgw == rtp) {
+    current_inetgw = NULL;
   }
 
   free(rtp);
@@ -379,7 +393,7 @@ olsr_hopcount_change(const struct rt_metric *met1, const struct rt_metric *met2)
 olsr_u8_t
 olsr_fib_metric(const struct rt_metric *met)
 {
-  if (!olsr_cnf->flat_fib_metric) {
+  if (FIBM_CORRECT == olsr_cnf->fib_metric) {
     return met->hops;
   }
   return RT_METRIC_DEFAULT;
@@ -410,15 +424,20 @@ olsr_get_nh(const struct rt_entry *rt)
  * than the second one, FALSE otherwise.
  */
 static olsr_bool
-olsr_cmp_rtp(const struct rt_path *rtp1, const struct rt_path *rtp2)
+olsr_cmp_rtp(const struct rt_path *rtp1, const struct rt_path *rtp2, const struct rt_path *inetgw)
 {
-   /* etx comes first */
-    if (rtp1->rtp_metric.etx < rtp2->rtp_metric.etx) {
+    float etx1 = rtp1->rtp_metric.etx;
+    float etx2 = rtp2->rtp_metric.etx;
+    if (inetgw == rtp1) etx1 *= olsr_cnf->lq_nat_thresh;
+    if (inetgw == rtp2) etx2 *= olsr_cnf->lq_nat_thresh;
+
+    /* etx comes first */
+    if (etx1 < etx2) {
       return OLSR_TRUE;
     }
 
     /* hopcount is next tie breaker */
-    if ((rtp1->rtp_metric.etx == rtp2->rtp_metric.etx) &&
+    if ((etx1 == etx2) &&
         (rtp1->rtp_metric.hops < rtp2->rtp_metric.hops)) {
       return OLSR_TRUE;
     }
@@ -442,7 +461,7 @@ olsr_cmp_rtp(const struct rt_path *rtp1, const struct rt_path *rtp2)
 olsr_bool
 olsr_cmp_rt(const struct rt_entry *rt1, const struct rt_entry *rt2)
 {
-  return olsr_cmp_rtp(rt1->rt_best, rt2->rt_best);
+  return olsr_cmp_rtp(rt1->rt_best, rt2->rt_best, NULL);
 }
 
 /**
@@ -463,9 +482,13 @@ olsr_rt_best(struct rt_entry *rt)
   while ((node = avl_walk_next(node))) {
     struct rt_path *rtp = node->data;
 
-    if (olsr_cmp_rtp(rtp, rt->rt_best)) {
+    if (olsr_cmp_rtp(rtp, rt->rt_best, current_inetgw)) {
       rt->rt_best = rtp;
     }
+  }
+
+  if (0 == rt->rt_dst.prefix_len) {
+    current_inetgw = rt->rt_best;
   }
 }
 

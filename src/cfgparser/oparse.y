@@ -173,6 +173,7 @@ static int add_ipv6_addr(YYSTYPE ipaddr_arg, YYSTYPE prefixlen_arg)
 %token TOK_NOINT
 %token TOK_TOS
 %token TOK_RTTABLE
+%token TOK_RTTABLE_DEFAULT
 %token TOK_WILLINGNESS
 %token TOK_IPCCON
 %token TOK_FIBMETRIC
@@ -188,6 +189,7 @@ static int add_ipv6_addr(YYSTYPE ipaddr_arg, YYSTYPE prefixlen_arg)
 %token TOK_LQ_FISH
 %token TOK_LQ_DLIMIT
 %token TOK_LQ_WSIZE
+%token TOK_LQ_NAT_THRESH
 %token TOK_LQ_MULT
 %token TOK_CLEAR_SCREEN
 %token TOK_PLPARAM
@@ -230,6 +232,7 @@ stmt:       idebug
           | bnoint
           | atos
           | arttable
+          | arttable_default
           | awillingness
           | busehyst
           | fhystscale
@@ -242,6 +245,7 @@ stmt:       idebug
           | alq_level
           | alq_fish
           | alq_dlimit
+          | anat_thresh
           | alq_wsize
           | bclear_screen
           | vcomment
@@ -720,11 +724,13 @@ fibmetric:    TOK_FIBMETRIC TOK_STRING
 {
   PARSER_DEBUG_PRINTF("FIBMetric: %d\n", $2->string);
   if (strcmp($2->string, CFG_FIBM_FLAT) == 0) {
-      olsr_cnf->flat_fib_metric = OLSR_TRUE;
+      olsr_cnf->fib_metric = FIBM_FLAT;
   } else if (strcmp($2->string, CFG_FIBM_CORRECT) == 0) {
-      olsr_cnf->flat_fib_metric = OLSR_FALSE;
+      olsr_cnf->fib_metric = FIBM_CORRECT;
+  } else if (strcmp($2->string, CFG_FIBM_APPROX) == 0) {
+      olsr_cnf->fib_metric = FIBM_APPROX;
   } else {
-    fprintf(stderr, "FIBMetric must be \"%s\" or \"%s\"!\n", CFG_FIBM_FLAT, CFG_FIBM_CORRECT);
+    fprintf(stderr, "FIBMetric must be \"%s\", \"%s\", or \"%s\"!\n", CFG_FIBM_FLAT, CFG_FIBM_CORRECT, CFG_FIBM_APPROX);
     YYABORT;
   }
   free($1);
@@ -870,6 +876,14 @@ arttable: TOK_RTTABLE TOK_INTEGER
 }
 ;
 
+arttable_default: TOK_RTTABLE_DEFAULT TOK_INTEGER
+{
+  PARSER_DEBUG_PRINTF("RtTableDefault: %d\n", $2->integer);
+  olsr_cnf->rttable_default = $2->integer;
+  free($2);
+}
+;
+
 awillingness: TOK_WILLINGNESS TOK_INTEGER
 {
   PARSER_DEBUG_PRINTF("Willingness: %d\n", $2->integer);
@@ -972,6 +986,14 @@ alq_wsize: TOK_LQ_WSIZE TOK_INTEGER
 {
   PARSER_DEBUG_PRINTF("Link quality window size %d\n", $2->integer);
   olsr_cnf->lq_wsize = $2->integer;
+  free($2);
+}
+;
+
+anat_thresh: TOK_LQ_NAT_THRESH TOK_FLOAT
+{
+  PARSER_DEBUG_PRINTF("NAT threshold %0.2f\n", $2->floating);
+  olsr_cnf->lq_nat_thresh = $2->floating;
   free($2);
 }
 ;

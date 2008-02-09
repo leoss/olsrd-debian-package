@@ -954,6 +954,9 @@ int chk_if_up(struct olsr_if *IntConf, int DebugLevel __attribute__((unused)))
     return 0;
 
   New = olsr_malloc(sizeof (struct interface), "Interface 1");
+
+  New->immediate_send_tc = (IntConf->cnf->tc_params.emission_interval < IntConf->cnf->hello_params.emission_interval);
+
   New->gen_properties = NULL;
 
   AddrIn = (struct sockaddr_in *)&New->int_addr;
@@ -1001,7 +1004,7 @@ int chk_if_up(struct olsr_if *IntConf, int DebugLevel __attribute__((unused)))
 
   New->olsr_seqnum = random() & 0xffff;
 
-  New->ttl_index = 0;
+  New->ttl_index = -32; /* For the first 32 TC's, fish-eye is disabled */
     
   OLSR_PRINTF(1, "\tInterface %s set up for use with index %d\n\n",
               IntConf->name, New->if_index);
