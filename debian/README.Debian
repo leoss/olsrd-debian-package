@@ -43,11 +43,11 @@ explained in detail in /usr/share/doc/olsrd-plugins:
 - secure	- secure OLSR routing with a shared key
 - nameservice	- announce hostnames and dns servers
 - bmf 		- basic multicast forwarding plugin for olsrd
-- quagga	- quagga plugin
 - txtinfo
 
 The following plugins are not included in the olsrd-plugins binary package:
 
+- quagga	- quagga plugin
 - tas		- (not at all) tiny application server, no useful apps exist
 - powerinfo	- displays /proc/apm on 127.0.0.1:8888
 - pgraph	- obsoleted by httpinfo and dot-draw
@@ -77,4 +77,4 @@ going to link against these plugins, and so shlibs files would be useless
 anyway. 
 
 
- -- Holger Levsen <holger@debian.org>  Tue, 31 Jul 2007 23:42:36 +0200
+ -- Holger Levsen <holger@debian.org>  Mon, 31 Mar 2008 08:50:15 +0200

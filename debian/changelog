@@ -1,3 +1,16 @@
+olsrd (0.5.5-2) unstable; urgency=low
+
+  * update debian/copyright to clarify that src/cfgparser/oparse.(c|h)
+    has a special exception which allows distributing it under other
+    conditions than the GPL in special cases
+  * fix handling of zipped manpages (Closes: #471627)
+  * remove the quagga plugin from the binary package, as it is GPL licenced
+    and cannot be distributed together with the BSD licenced olsrd 
+  * remove linda overwrites as linda is deprecated
+  * updated lintian overwrites
+
+ -- Holger Levsen <holger@debian.org>  Mon, 31 Mar 2008 08:50:25 +0000
+
 olsrd (0.5.5-1) unstable; urgency=low
 
   * new upstream version

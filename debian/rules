@@ -10,13 +10,13 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-# plugins to be build (not build per default are: tas powerinfo pgraph mini)
+# plugins to be build (not build per default are: tas powerinfo pgraph mini quagga)
 # 	(fixme?: if you add them here, they are build but their README is not 
 # 	copied to /usr/share/doc/olsrd-plugins/)
 #
 # you dont need to edit this file. export PLUGIS=foo ; fakeroot ./debian/rules binary
 # is enough for a rebuild :)
-PLUGINS ?= dyn_gw httpinfo dot_draw nameservice secure txtinfo bmf quagga
+PLUGINS ?= dyn_gw httpinfo dot_draw nameservice secure txtinfo bmf
 
 
 CFLAGS = -Wall -g
@@ -85,16 +85,15 @@ binary-arch: build install
 	dh_installman
 	dh_link
 	dh_strip
-	# recompress to use less space and avoid lintian/linda warnings
-	gunzip $(CURDIR)/debian/olsrd/usr/share/man/man8/olsrd.8.gz
+	# recompress to use less space and avoid lintian warnings
+	mv $(CURDIR)/debian/olsrd/usr/share/man/man8/olsrd.8.gz $(CURDIR)/debian/olsrd/usr/share/man/man8/olsrd.8
 	gzip --best $(CURDIR)/debian/olsrd/usr/share/man/man8/olsrd.8
-	gunzip $(CURDIR)/debian/olsrd/usr/share/man/man5/olsrd.conf.5.gz
+	mv $(CURDIR)/debian/olsrd/usr/share/man/man5/olsrd.conf.5.gz $(CURDIR)/debian/olsrd/usr/share/man/man5/olsrd.conf.5
 	gzip --best $(CURDIR)/debian/olsrd/usr/share/man/man5/olsrd.conf.5
 	# compress, but don't compress README_NAMESERVICE, for consistency reasons
 	dh_compress -XREADME_NAMESERVICE -XREADME_BMF
-	# install linda+lintian for olsrd-plugins as explained in README.Debian
+	# install lintian overwrites for olsrd-plugins as explained in README.Debian
 	cp $(CURDIR)/debian/olsrd-plugins.lintian $(CURDIR)/debian/olsrd-plugins/usr/share/lintian/overrides/olsrd-plugins
-	cp $(CURDIR)/debian/olsrd-plugins.linda $(CURDIR)/debian/olsrd-plugins/usr/share/linda/overrides/olsrd-plugins
 	# provide better default config
 	rm $(CURDIR)/debian/olsrd/etc/olsrd.conf
 	cp $(CURDIR)/debian/olsrd.conf $(CURDIR)/debian/olsrd/etc/olsrd/olsrd.conf
