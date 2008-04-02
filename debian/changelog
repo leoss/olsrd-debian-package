@@ -1,3 +1,12 @@
+olsrd (0.5.5-3) unstable; urgency=low
+
+  * No longer work around a bug in debhelper (#470913) in debian/rules,
+    which was introduced in 0.5.5-2 to fix #471627. Due to this, it's also not
+    necessary to manually uncompress and compress some manpages, as debhelper
+    now handles this as well.
+
+ -- Holger Levsen <holger@debian.org>  Wed,  2 Apr 2008 13:06:27 +0200
+
 olsrd (0.5.5-2) unstable; urgency=low
 
   * update debian/copyright to clarify that src/cfgparser/oparse.(c|h)

@@ -85,11 +85,6 @@ binary-arch: build install
 	dh_installman
 	dh_link
 	dh_strip
-	# recompress to use less space and avoid lintian warnings
-	mv $(CURDIR)/debian/olsrd/usr/share/man/man8/olsrd.8.gz $(CURDIR)/debian/olsrd/usr/share/man/man8/olsrd.8
-	gzip --best $(CURDIR)/debian/olsrd/usr/share/man/man8/olsrd.8
-	mv $(CURDIR)/debian/olsrd/usr/share/man/man5/olsrd.conf.5.gz $(CURDIR)/debian/olsrd/usr/share/man/man5/olsrd.conf.5
-	gzip --best $(CURDIR)/debian/olsrd/usr/share/man/man5/olsrd.conf.5
 	# compress, but don't compress README_NAMESERVICE, for consistency reasons
 	dh_compress -XREADME_NAMESERVICE -XREADME_BMF
 	# install lintian overwrites for olsrd-plugins as explained in README.Debian
