@@ -1,3 +1,9 @@
+olsrd (0.5.6~rc1-1) experimental; urgency=low
+
+  * new upstream release candidate
+
+ -- Holger Levsen <holger@debian.org>  Wed, 30 Apr 2008 11:27:54 +0000
+
 olsrd (0.5.5-3) unstable; urgency=low
 
   * No longer work around a bug in debhelper (#470913) in debian/rules,

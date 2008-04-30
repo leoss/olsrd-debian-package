@@ -76,8 +76,7 @@ binary-indep: build install
 binary-arch: build install
 	dh_testdir
 	dh_testroot
-	dh_installchangelogs 
-	dh_installchangelogs -polsrd CHANGELOG
+	dh_installchangelogs -polsrd CHANGELOG -polsrd-plugins
 	# rename to fit the naming scheme of the other plugin READMEs
 	cp $(CURDIR)/lib/bmf/README_BMF.txt $(CURDIR)/lib/bmf/README_BMF
 	dh_installdocs
@@ -94,8 +93,8 @@ binary-arch: build install
 	cp $(CURDIR)/debian/olsrd.conf $(CURDIR)/debian/olsrd/etc/olsrd/olsrd.conf
 	cp  $(CURDIR)/debian/olsrd-default $(CURDIR)/debian/olsrd/etc/default/olsrd
 	dh_fixperms
-	dh_installdeb 
-	dh_shlibdeps 
+	dh_installdeb
+	dh_shlibdeps
 	dh_gencontrol
 	dh_md5sums
 	dh_builddeb

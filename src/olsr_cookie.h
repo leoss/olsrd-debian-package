@@ -1,7 +1,7 @@
+
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Thomas Lopatic (thomas@lopatic.de)
- * IPv4 performance optimization (c) 2006, sven-ola(gmx.de)
+ * Copyright (c) 2008, Hannes Gredler (hannes@gredler.at)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,68 +36,59 @@
  * If you find this software useful feel free to make a donation
  * to the project. For more information see the website or contact
  * the copyright holders.
- *
  */
 
-#include <stdlib.h>
-#include "lq_list.h"
+#include "olsr_types.h"
 
-/* init a circular list  */
-void list_head_init(struct list_node *node)
-{
-  node->prev = node;
-  node->next = node;
-}
+#ifndef _OLSR_COOKIE_H
+#define _OLSR_COOKIE_H
 
-void list_node_init(struct list_node *node)
-{
-  node->prev = NULL;
-  node->next = NULL;
-}
+#define COOKIE_ID_MAX  20	/* maximum number of cookies in the system */
 
-int list_node_on_list(struct list_node *node)
-{
-  if (node->prev || node->next) {
-    return 1;
-  }
+typedef enum olsr_cookie_type_ {
+  OLSR_COOKIE_TYPE_MIN,
+  OLSR_COOKIE_TYPE_MEMORY,
+  OLSR_COOKIE_TYPE_TIMER,
+  OLSR_COOKIE_TYPE_MAX
+} olsr_cookie_type;
 
-  return 0;
-}
+/*
+ * This is a cookie. A cookie is a tool aimed for olsrd developers.
+ * It is used for tracking resource usage in the system and also
+ * for locating memory corruption.
+ */
+struct olsr_cookie_info {
+  olsr_cookie_t ci_id;		       /* ID */
+  char *ci_name;		       /* Name */
+  olsr_cookie_type ci_type;	       /* Type of cookie */
+  size_t ci_size;		       /* Fixed size for block allocations */
+  unsigned int ci_usage;	       /* Stats, resource usage */
+  unsigned int ci_changes;             /* Stats, resource churn */
+};
 
-int list_is_empty(struct list_node *node)
-{
-  if (node->prev == node && node->next == node) {
-    return 1;
-  }
+/*
+ * Small brand which gets appended on the end of every block allocation.
+ * Helps to detect memory corruption, like overruns, double frees.
+ */
+struct olsr_cookie_mem_brand {
+  char cmb_sig[6];
+  olsr_cookie_t cmb_id;
+};
 
-  return 0;
-}
+/* Externals. */
+extern struct olsr_cookie_info *olsr_alloc_cookie(const char *,
+						  olsr_cookie_type);
+extern void olsr_free_cookie(struct olsr_cookie_info *);
+extern char *olsr_cookie_name(olsr_cookie_t);
+extern void olsr_cookie_set_memory_size(struct olsr_cookie_info *, size_t);
+extern void olsr_cookie_usage_incr(olsr_cookie_t);
+extern void olsr_cookie_usage_decr(olsr_cookie_t);
 
-void list_add_after(struct list_node *pos_node, struct list_node *new_node)
-{
-  new_node->next = pos_node->next;
-  new_node->prev = pos_node;
+extern void *olsr_cookie_malloc(struct olsr_cookie_info *);
+extern void olsr_cookie_free(struct olsr_cookie_info *, void *);
 
-  pos_node->next->prev = new_node;
-  pos_node->next = new_node;
-}
 
-void list_add_before(struct list_node *pos_node, struct list_node *new_node)
-{
-  new_node->prev = pos_node->prev;
-  new_node->next = pos_node;
-
-  pos_node->prev->next = new_node;
-  pos_node->prev = new_node;
-}
-
-void list_remove(struct list_node *del_node)
-{
-  del_node->next->prev = del_node->prev;
-  del_node->prev->next = del_node->next;
-
-  list_node_init(del_node);
-}
+#endif /* _OLSR_COOKIE_H */
 
 /*
  * Local Variables:

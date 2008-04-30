@@ -3,15 +3,16 @@ olsrd-plugins binary: ldconfig-symlink-missing-for-shlib usr/lib/olsrd_dyn_gw us
 olsrd-plugins binary: ldconfig-symlink-missing-for-shlib usr/lib/olsrd_secure usr/lib/olsrd_secure.so.0.5 olsrd_secure
 olsrd-plugins binary: ldconfig-symlink-missing-for-shlib usr/lib/olsrd_nameservice usr/lib/olsrd_nameservice.so.0.3 olsrd_nameservice
 olsrd-plugins binary: ldconfig-symlink-missing-for-shlib usr/lib/olsrd_dot_draw usr/lib/olsrd_dot_draw.so.0.3 olsrd_dot_draw
-olsrd-plugins binary: ldconfig-symlink-missing-for-shlib usr/lib/olsrd_bmf usr/lib/olsrd_bmf.so.1.5.2 olsrd_bmf
 olsrd-plugins binary: ldconfig-symlink-missing-for-shlib usr/lib/olsrd_txtinfo usr/lib/olsrd_txtinfo.so.0.1 olsrd_txtinfo
+olsrd-plugins binary: ldconfig-symlink-missing-for-shlib usr/lib/olsrd_bmf usr/lib/olsrd_bmf.so.1.5.3 olsrd_bmf
 olsrd-plugins binary: no-shlibs-control-file usr/lib/olsrd_httpinfo.so.0.1
 olsrd-plugins binary: no-shlibs-control-file usr/lib/olsrd_dyn_gw.so.0.4
 olsrd-plugins binary: no-shlibs-control-file usr/lib/olsrd_secure.so.0.5
 olsrd-plugins binary: no-shlibs-control-file usr/lib/olsrd_nameservice.so.0.3
 olsrd-plugins binary: no-shlibs-control-file usr/lib/olsrd_dot_draw.so.0.3
 olsrd-plugins binary: no-shlibs-control-file usr/lib/olsrd_txtinfo.so.0.1
-olsrd-plugins binary: no-shlibs-control-file usr/lib/olsrd_bmf.so.1.5.2
+olsrd-plugins binary: no-shlibs-control-file usr/lib/olsrd_bmf.so.1.5.3
 olsrd-plugins binary: postinst-must-call-ldconfig usr/lib/olsrd_nameservice.so.0.3
+olsrd-plugins binary: postinst-must-call-ldconfig usr/lib/olsrd_bmf.so.1.5.3
 olsrd-plugins binary: package-name-doesnt-match-sonames olsrd-bmf olsrd-dot_draw olsrd-dyn_gw olsrd-httpinfo olsrd-nameservice olsrd-secure olsrd-txtinfo
 

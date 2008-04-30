@@ -97,7 +97,7 @@ ifeq ($(DEBUG),0)
 WARNINGS +=	-fomit-frame-pointer
 endif
 # we have small inline functions in src/lq_route.h which should always be inlined
-WARNINGS +=	-finline-limit=50
+WARNINGS +=	-finline-limit=100
 # These tell gcc to put each function and global variable in a separate section.
 # The linker can than remove all unreferenced section. But in the olsrd binary
 # unused doesn't imply unused at all since the function may be used by plugins,
@@ -150,9 +150,12 @@ CPPFLAGS +=	$(EXTRA_CPPFLAGS)
 # we have plugins with the old interface
 #CPPFLAGS +=	-DSUPPORT_OLD_PLUGIN_VERSIONS=1
 
+# use the new fixed point math stuff
+CPPFLAGS +=     -DUSE_FPM
+
 # search sources and headers in current dir and in src/
-SRCS +=		$(wildcard src/*.c *.c)
-HDRS +=		$(wildcard src/*.h *.h)
+SRCS +=		$(wildcard src/common/*.c src/*.c *.c)
+HDRS +=		$(wildcard src/common/*.h src/*.h *.h)
 
 # OS detection
 ifeq ($(OS),Windows_NT)
