@@ -1,8 +1,17 @@
-olsrd (0.5.6~rc1-1) experimental; urgency=low
+olsrd (0.5.6~rc7-1) unstable; urgency=low
 
-  * new upstream release candidate
+  * New upstream release candidate.
+  * Use a PID file. (Closes: #484128)
+  * Bump standards-version to 3.8.0, no changes needed.
+  * Install the plugins into /usr/lib/olsrd/, to get rid off all the lintian
+    overrides. Adapted README.Debian to reflect that.
+  * Compile the source without DESTDIR, just install it to DESTDIR.
+  * Modify the plugin targets in the upstream Makefile to provide distinct
+    $pluginname_install targets, otherwise DESTDIR shows up in rpath. 
+  * Drop debian/patches/210-txtinfo-Makefile.patch as it has been adapted by
+    upstream.
 
- -- Holger Levsen <holger@debian.org>  Wed, 30 Apr 2008 11:27:54 +0000
+ -- Holger Levsen <holger@debian.org>  Sat, 12 Jul 2008 16:38:15 +0000
 
 olsrd (0.5.5-3) unstable; urgency=low
 

@@ -1,0 +1,26 @@
+Index: olsrd-0.5.6~rc7/Makefile.inc
+===================================================================
+--- olsrd-0.5.6~rc7.orig/Makefile.inc	2008-07-08 09:13:20.000000000 +0000
++++ olsrd-0.5.6~rc7/Makefile.inc	2008-07-08 09:14:27.000000000 +0000
+@@ -43,7 +43,7 @@
+ DESTDIR ?=
+ SBINDIR ?= $(DESTDIR)/usr/sbin
+ ETCDIR  ?= $(DESTDIR)/etc
+-LIBDIR  ?= $(DESTDIR)/usr/lib
++LIBDIR  ?= $(DESTDIR)/usr/lib/olsrd
+ DOCDIR  ?= $(DESTDIR)/usr/share/doc
+ MANDIR  ?= $(DESTDIR)/usr/share/man
+ EXENAME ?= olsrd
+Index: olsrd-0.5.6~rc7/make/Makefile.linux
+===================================================================
+--- olsrd-0.5.6~rc7.orig/make/Makefile.linux	2008-07-08 09:13:28.000000000 +0000
++++ olsrd-0.5.6~rc7/make/Makefile.linux	2008-07-08 09:14:21.000000000 +0000
+@@ -4,7 +4,7 @@
+ 
+ ARCH := $(shell uname -m)
+ DESTDIR ?=
+-LIBDIR =	$(DESTDIR)/usr/lib
++LIBDIR =	$(DESTDIR)/usr/lib/olsrd
+ 
+ SRCS += 	$(wildcard src/linux/*.c src/unix/*.c)
+ HDRS +=		$(wildcard src/linux/*.h src/unix/*.h)

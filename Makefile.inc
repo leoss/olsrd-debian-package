@@ -11,7 +11,7 @@ DEBUG ?= 0
 NO_DEBUG_MESSAGES ?= 0
 
 # the optimize option to be set for gcc
-OPTIMIZE ?= -O2
+OPTIMIZE ?= 
 
 # enable mudflap with 1 or deactivate with 0
 # you need a recent enough gcc and the libmudflap installed
@@ -97,7 +97,7 @@ ifeq ($(DEBUG),0)
 WARNINGS +=	-fomit-frame-pointer
 endif
 # we have small inline functions in src/lq_route.h which should always be inlined
-WARNINGS +=	-finline-limit=100
+WARNINGS +=	-finline-limit=350
 # These tell gcc to put each function and global variable in a separate section.
 # The linker can than remove all unreferenced section. But in the olsrd binary
 # unused doesn't imply unused at all since the function may be used by plugins,
@@ -128,6 +128,7 @@ LDFLAGS +=	-Wl,--version-script=version-script.txt
 else
 # c and ld flags for main
 LDFLAGS +=	-Wl,-export-dynamic 
+LDFLAGS +=	-Wl,-rpath,$(LIBDIR)
 endif
 # LDFLAGS for all 
 LDFLAGS +=	-Wl,--warn-common
@@ -178,7 +179,7 @@ OBJS +=		$(SRCS:%.c=%.o)
 # debugging or non-debugging flags
 ifeq ($(DEBUG),1)
 CPPFLAGS +=	-DDEBUG
-CFLAGS +=	-g
+CFLAGS +=	-ggdb
 else
 CPPFLAGS +=	-DNDEBUG
 endif

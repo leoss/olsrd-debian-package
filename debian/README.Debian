@@ -72,9 +72,8 @@ http://olsrexperiment.de/sven-ola/nylon/packages/olsrd/files/olsrd.conf-sven-ola
 and has been successfully used in the freifunk networks in Berlin and Hamburg
 (Germany).
 
-I also decided to not package the plugins as libraries, because no one else is 
-going to link against these plugins, and so shlibs files would be useless 
-anyway. 
+The plugins are installed in /usr/lib/olsrd/ which differs from the upstream 
+default /usr/lib/.
 
 
- -- Holger Levsen <holger@debian.org>  Mon, 31 Mar 2008 08:50:15 +0200
+ -- Holger Levsen <holger@debian.org>  Tue,  8 Jul 2008 18:09:15 +0200

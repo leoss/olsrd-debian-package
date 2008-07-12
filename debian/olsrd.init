@@ -15,12 +15,15 @@
 #		by Holger Levsen <debian@layer-acht.org>
 # 
 # Version:	21-Dec-2006  
-# modified:    01-Aug-2007
+# modified:     01-Aug-2007
+# 	        31-Jun-2008
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON=/usr/sbin/olsrd
 NAME=olsrd
 DESC=olsrd
+
+PID_FILE=/var/run/$NAME.pid
 
 test -x $DAEMON || exit 0
 
@@ -34,26 +37,29 @@ set -e
 case "$1" in
   debug)
 	echo -n "Starting $DESC: "
-	start-stop-daemon --start --quiet --exec $DAEMON -- $DAEMON_OPTS &
+	start-stop-daemon --start --quiet --exec $DAEMON --pidfile $PID_FILE -- $DAEMON_OPTS &
 	echo "$NAME."
+	echo $(pidof $NAME) > $PID_FILE
 	;;
   start)
 	if [ "$START_OLSRD" != "YES" ] ; then exit 0 ; fi
 	echo -n "Starting $DESC: "
-	start-stop-daemon --start --quiet --exec $DAEMON -- $DAEMON_OPTS &
-	echo "$NAME."
+	start-stop-daemon --start --quiet --exec $DAEMON --pidfile $PID_FILE -- $DAEMON_OPTS &
+	echo "$NAME."        
+	echo $(pidof $NAME) > $PID_FILE
 	;;
   stop)
+	pidof $NAME || exit 0
 	echo -n "Stopping $DESC: "
-	killall -q $DAEMON || true
+	start-stop-daemon --stop  --quiet --exec $DAEMON --pidfile $PID_FILE
+        rm -f $PID_FILE
 	echo "$NAME."
 	;;
   restart|force-reload)
 	echo -n "Restarting $DESC: "
-	killall -q $DAEMON || true
+	$0 stop
 	sleep 1
-	start-stop-daemon --start --quiet --exec $DAEMON -- $DAEMON_OPTS
-	echo "$NAME."
+	$0 start
 	;;
   *)
 	N=/etc/init.d/$NAME

@@ -49,10 +49,14 @@
 #include "olsr.h"
 #include "link_set.h"
 #include "common/avl.h"
-#include "lq_route.h"
+#include "olsr_spf.h"
 #include "net_olsr.h"
 
 #include <assert.h>
+
+/* Cookies */
+struct olsr_cookie_info *rt_mem_cookie = NULL;
+struct olsr_cookie_info *rtp_mem_cookie = NULL;
 
 /*
  * Sven-Ola: if the current internet gateway is switched, the
@@ -162,9 +166,20 @@ avl_comp_ipv6_prefix (const void *prefix1, const void *prefix2)
 void
 olsr_init_routing_table(void)
 {
+  OLSR_PRINTF(5, "RIB: init routing tree\n");
+
   /* the routing tree */
   avl_init(&routingtree, avl_comp_prefix_default);
   routingtree_version = 0;
+
+  /*
+   * Get some cookies for memory stats and memory recycling.
+   */
+  rt_mem_cookie = olsr_alloc_cookie("rt_entry", OLSR_COOKIE_TYPE_MEMORY);
+  olsr_cookie_set_memory_size(rt_mem_cookie, sizeof(struct rt_entry));
+
+  rtp_mem_cookie = olsr_alloc_cookie("rt_path", OLSR_COOKIE_TYPE_MEMORY);
+  olsr_cookie_set_memory_size(rtp_mem_cookie, sizeof(struct rt_path));
 }
 
 /**
@@ -216,7 +231,7 @@ olsr_update_rt_path(struct rt_path *rtp, struct tc_entry *tc,
 static struct rt_entry *
 olsr_alloc_rt_entry(struct olsr_ip_prefix *prefix)
 {
-  struct rt_entry *rt = olsr_malloc(sizeof(struct rt_entry), __FUNCTION__);
+  struct rt_entry *rt = olsr_cookie_malloc(rt_mem_cookie);
   if (!rt) {
     return NULL;
   }
@@ -245,7 +260,7 @@ static struct rt_path *
 olsr_alloc_rt_path(struct tc_entry *tc,
                    struct olsr_ip_prefix *prefix, olsr_u8_t origin)
 {
-  struct rt_path *rtp = olsr_malloc(sizeof(struct rt_path), __FUNCTION__);
+  struct rt_path *rtp = olsr_cookie_malloc(rtp_mem_cookie);
 
   if (!rtp) {
     return NULL;
@@ -356,7 +371,7 @@ olsr_delete_rt_path(struct rt_path *rtp)
     current_inetgw = NULL;
   }
 
-  free(rtp);
+  olsr_cookie_free(rtp_mem_cookie, rtp);
 }
 
 
@@ -524,12 +539,6 @@ olsr_insert_routing_table(union olsr_ip_addr *dst, int plen,
     return NULL;
   }
 
-#ifdef DEBUG
-  OLSR_PRINTF(1, "RIB: add prefix %s/%u from %s\n",
-              olsr_ip_to_string(&dstbuf, dst), plen,
-              olsr_ip_to_string(&origbuf, originator));
-#endif
-
   /*
    * For all routes we use the tc_entry as an hookup point.
    * If the tc_entry is disconnected, i.e. has no edges it will not
@@ -554,6 +563,12 @@ olsr_insert_routing_table(union olsr_ip_addr *dst, int plen,
       return NULL;
     }
 
+#ifdef DEBUG
+    OLSR_PRINTF(1, "RIB: add prefix %s/%u from %s\n",
+                olsr_ip_to_string(&dstbuf, dst), plen,
+                olsr_ip_to_string(&origbuf, originator));
+#endif
+
     /* overload the hna change bit for flagging a prefix change */
     changes_hna = OLSR_TRUE;
 
@@ -572,7 +587,7 @@ olsr_delete_routing_table(union olsr_ip_addr *dst, int plen,
                           union olsr_ip_addr *originator)
 {
 #if !defined(NODEBUG) && defined(DEBUG)
-  struct ipaddr_str buf;
+  struct ipaddr_str dstbuf, origbuf;
 #endif
 
   struct tc_entry *tc;
@@ -586,12 +601,6 @@ olsr_delete_routing_table(union olsr_ip_addr *dst, int plen,
   if (plen > olsr_cnf->maxplen) {
     return;
   }
-
-#ifdef DEBUG
-  OLSR_PRINTF(1, "RIB: del prefix %s/%u from %s\n",
-              olsr_ip_to_string(&buf, dst), plen,
-              olsr_ip_to_string(&buf, originator));
-#endif
 
   tc = olsr_lookup_tc_entry(originator);
   if (!tc) {
@@ -609,6 +618,12 @@ olsr_delete_routing_table(union olsr_ip_addr *dst, int plen,
   if (node) {
     rtp = rtp_prefix_tree2rtp(node);
     olsr_delete_rt_path(rtp);
+
+#ifdef DEBUG
+    OLSR_PRINTF(1, "RIB: del prefix %s/%u from %s\n",
+                olsr_ip_to_string(&dstbuf, dst), plen,
+                olsr_ip_to_string(&origbuf, originator));
+#endif
 
     /* overload the hna change bit for flagging a prefix change */
     changes_hna = OLSR_TRUE;

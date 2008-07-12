@@ -52,7 +52,7 @@
 #include "mid_set.h"
 #include "mpr.h"
 #include "lq_mpr.h"
-#include "lq_route.h"
+#include "olsr_spf.h"
 #include "scheduler.h"
 #include "apm.h"
 #include "misc.h"
@@ -61,6 +61,7 @@
 #include "lq_packet.h"
 #include "common/avl.h"
 #include "net_olsr.h"
+#include "lq_plugin.h"
 
 #include <stdarg.h>
 #include <signal.h>
@@ -84,6 +85,7 @@ struct pcf
 static struct pcf *pcf_list;
 
 static olsr_u16_t message_seqno;
+union olsr_ip_addr all_zero;
 
 /**
  *Initialize the message sequence number as a random value
@@ -169,7 +171,7 @@ olsr_process_changes(void)
 
   /* calculate the routing table */
   if (changes_neighborhood || changes_topology || changes_hna) {
-    olsr_calculate_routing_table(NULL);
+    olsr_calculate_routing_table();
   }
   
   if (olsr_cnf->debug_level > 0)
@@ -211,9 +213,19 @@ olsr_process_changes(void)
   changes_force = OLSR_FALSE;
 }
 
+/*
+ * Callback for the periodic route calculation.
+ */
+void
+olsr_trigger_forced_update(void *unused __attribute__((unused))) {
 
-
-
+  changes_force = OLSR_TRUE;
+  changes_neighborhood = OLSR_TRUE;
+  changes_topology = OLSR_TRUE;
+  changes_hna = OLSR_TRUE;
+  
+  olsr_process_changes();
+}
 
 /**
  *Initialize all the tables used(neighbor,
@@ -229,13 +241,16 @@ olsr_init_tables(void)
 
   /* Set avl tree comparator */
   if (olsr_cnf->ipsize == 4) {
-    avl_comp_default = NULL;
+    avl_comp_default = avl_comp_ipv4;
     avl_comp_prefix_default = avl_comp_ipv4_prefix;
   } else {
     avl_comp_default = avl_comp_ipv6;
     avl_comp_prefix_default = avl_comp_ipv6_prefix;
   }
 
+  /* Initialize lq plugin set */
+  init_lq_handler_tree();
+  
   /* Initialize link set */
   olsr_init_link_set();
 
@@ -263,10 +278,15 @@ olsr_init_tables(void)
   /* Initialize HNA set */
   olsr_init_hna_set();  
 
+#if 0
+  /* Initialize Layer 1/2 database */
+  olsr_initialize_layer12();
+#endif
+  
   /* Start periodic SPF and RIB recalculation */
   if (olsr_cnf->lq_dinter > 0.0) {
     olsr_start_timer((unsigned int)(olsr_cnf->lq_dinter * MSEC_PER_SEC), 5,
-                     OLSR_TIMER_PERIODIC, &olsr_calculate_routing_table, NULL, 0);
+                     OLSR_TIMER_PERIODIC, &olsr_trigger_forced_update, NULL, 0);
   }
 }
 

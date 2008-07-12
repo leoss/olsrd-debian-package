@@ -1,0 +1,19 @@
+***************
+*** 246,252 ****
+  static const struct olsrd_plugin_parameters plugin_parameters[] = {
+      { .name = "interval",      .set_plugin_parameter = &set_plugin_int,         .data = &my_interval },
+      { .name = "timeout",       .set_plugin_parameter = &set_nameservice_float,  .data = &my_timeout },
+      { .name = "hosts-file",    .set_plugin_parameter = &set_plugin_string,      .data = &my_hosts_file,    .addon = {sizeof(my_hosts_file)} },
+      { .name = "resolv-file",   .set_plugin_parameter = &set_plugin_string,      .data = &my_resolv_file,   .addon = {sizeof(my_resolv_file)} },
+      { .name = "suffix",        .set_plugin_parameter = &set_plugin_string,      .data = &my_suffix,        .addon = {sizeof(my_suffix)} },
+      { .name = "add-hosts",     .set_plugin_parameter = &set_plugin_string,      .data = &my_add_hosts,     .addon = {sizeof(my_add_hosts)} },
+--- 250,258 ----
+  static const struct olsrd_plugin_parameters plugin_parameters[] = {
+      { .name = "interval",      .set_plugin_parameter = &set_plugin_int,         .data = &my_interval },
+      { .name = "timeout",       .set_plugin_parameter = &set_nameservice_float,  .data = &my_timeout },
+      { .name = "hosts-file",    .set_plugin_parameter = &set_plugin_string,      .data = &my_hosts_file,    .addon = {sizeof(my_hosts_file)} },
++     { .name = "name-change-script", .set_plugin_parameter = &set_plugin_string,  .data = &my_name_change_script, .addon = {sizeof(my_name_change_script)} },
++     { .name = "services-change-script", .set_plugin_parameter = &set_plugin_string, .data = &my_services_change_script, .addon = {sizeof(my_services_change_script)} },
+      { .name = "resolv-file",   .set_plugin_parameter = &set_plugin_string,      .data = &my_resolv_file,   .addon = {sizeof(my_resolv_file)} },
+      { .name = "suffix",        .set_plugin_parameter = &set_plugin_string,      .data = &my_suffix,        .addon = {sizeof(my_suffix)} },
+      { .name = "add-hosts",     .set_plugin_parameter = &set_plugin_string,      .data = &my_add_hosts,     .addon = {sizeof(my_add_hosts)} },

@@ -17,6 +17,8 @@
 # you dont need to edit this file. export PLUGIS=foo ; fakeroot ./debian/rules binary
 # is enough for a rebuild :)
 PLUGINS ?= dyn_gw httpinfo dot_draw nameservice secure txtinfo bmf
+#hack: - also needs debian/patches/240-plugin-install-targets.patch - this has been reported to upstream...
+PLUGINS_INSTALL ?= dyn_gw_install httpinfo_install dot_draw_install nameservice_install secure_install txtinfo_install bmf_install
 
 
 CFLAGS = -Wall -g
@@ -32,9 +34,8 @@ configure-stamp:
 	dh_testdir
 	# Add here commands to configure the package.
 	QUILT_PATCHES=debian/patches quilt push -a || test $$? = 2
-
+	
 	touch configure-stamp
-
 
 build: build-stamp
 
@@ -42,7 +43,8 @@ build-stamp: configure-stamp
 	dh_testdir
 
 	# Add here commands to compile the package.
-	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd 
+	$(MAKE)
+	$(MAKE) $(PLUGINS)
 
 	touch $@
 
@@ -66,7 +68,7 @@ install: build
 
 	# Add here commands to install the package into debian/olsrd.
 	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd install STRIP=: 
-	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd-plugins $(PLUGINS) STRIP=:
+	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd-plugins $(PLUGINS_INSTALL) STRIP=:
 
 # Build architecture-independent files here.
 binary-indep: build install
@@ -86,8 +88,6 @@ binary-arch: build install
 	dh_strip
 	# compress, but don't compress README_NAMESERVICE, for consistency reasons
 	dh_compress -XREADME_NAMESERVICE -XREADME_BMF
-	# install lintian overwrites for olsrd-plugins as explained in README.Debian
-	cp $(CURDIR)/debian/olsrd-plugins.lintian $(CURDIR)/debian/olsrd-plugins/usr/share/lintian/overrides/olsrd-plugins
 	# provide better default config
 	rm $(CURDIR)/debian/olsrd/etc/olsrd.conf
 	cp $(CURDIR)/debian/olsrd.conf $(CURDIR)/debian/olsrd/etc/olsrd/olsrd.conf

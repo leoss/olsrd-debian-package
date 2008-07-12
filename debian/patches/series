@@ -1,5 +1,7 @@
 100-debug_level.patch
 200-etc-olsrd.patch
-210-txtinfo-Makefile.patch
 110-build_fix.patch
 220-usr-lib-on-amd64.patch
+230-usr-lib-olsrd.patch
+240-plugin-install-targets.patch
+

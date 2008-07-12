@@ -1,4 +1,1 @@
-- check config file
-- fix remaining bugs in bts
-- confirm that init-script still needs killall instead of start-stop-daemon
-- remove debian/patches/210-txtinfo-Makefile.patch 
+- remove debian/patches/240-plugin-install-targets.patch

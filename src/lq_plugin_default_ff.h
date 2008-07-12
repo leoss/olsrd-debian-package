@@ -38,47 +38,53 @@
  *
  */
 
-#ifndef DUPLICATE_SET_2_H_
-#define DUPLICATE_SET_2_H_
+#ifndef LQ_ETX_FF_
+#define LQ_ETX_FF_
 
-#include "defs.h"
-#include "olsr.h"
-#include "mantissa.h"
-#include "common/avl.h"
+#include "olsr_types.h"
+#include "lq_plugin.h"
 
-#define DUPLICATE_CLEANUP_INTERVAL 15000
-#define DUPLICATE_CLEANUP_JITTER 25
-#define DUPLICATE_VTIME 120000
+#define LQ_PLUGIN_LC_MULTIPLIER 1024
+#define LQ_PLUGIN_RELEVANT_COSTCHANGE_FF 16
 
-struct dup_entry {
-  struct avl_node avl;
-  union olsr_ip_addr ip;
-  olsr_u16_t seqnr;
-  olsr_u16_t too_low_counter;
-  olsr_u32_t array;
-  clock_t    valid_until;
+#define LQ_ALGORITHM_ETX_FF_NAME "etx_ff"
+
+#define LQ_FF_WINDOW 32
+#define LQ_FF_QUICKSTART_INIT 4
+
+struct default_lq_ff {
+  olsr_u8_t valueLq;
+  olsr_u8_t valueNlq;
 };
 
-AVLNODE2STRUCT(duptree2dupentry, struct dup_entry , avl);
+struct default_lq_ff_hello {
+  struct default_lq_ff lq;
+	olsr_u8_t windowSize, activePtr;
+	olsr_u16_t last_seq_nr;
+	olsr_u16_t received[LQ_FF_WINDOW], lost[LQ_FF_WINDOW];
+};
 
-void olsr_init_duplicate_set(void);
-struct dup_entry *olsr_create_duplicate_entry(void *ip, olsr_u16_t seqnr);
-int olsr_shall_process_message(void *ip, olsr_u16_t seqnr);
-void olsr_print_duplicate_table(void);
+void default_lq_initialize_ff(void);
 
-#define OLSR_FOR_ALL_DUP_ENTRIES(dup) \
-{ \
-  struct avl_node *dup_tree_node, *next_dup_tree_node; \
-  for (dup_tree_node = avl_walk_first(&duplicate_set); \
-    dup_tree_node; dup_tree_node = next_dup_tree_node) { \
-    next_dup_tree_node = avl_walk_next(dup_tree_node); \
-    dup = duptree2dupentry(dup_tree_node);
-#define OLSR_FOR_ALL_DUP_ENTRIES_END(dup) }}
+olsr_linkcost default_lq_calc_cost_ff(const void *lq);
 
-#endif /*DUPLICATE_SET_2_H_*/
+olsr_bool default_lq_is_relevant_costchange_ff(olsr_linkcost c1, olsr_linkcost c2);
 
-/*
- * Local Variables:
- * c-basic-offset: 2
- * End:
- */
+olsr_linkcost default_lq_packet_loss_worker_ff(struct link_entry *link, void *lq, olsr_bool lost);
+void default_lq_memorize_foreign_hello_ff(void *local, void *foreign);
+
+int default_lq_serialize_hello_lq_pair_ff(unsigned char *buff, void *lq);
+void default_lq_deserialize_hello_lq_pair_ff(const olsr_u8_t **curr, void *lq);
+int default_lq_serialize_tc_lq_pair_ff(unsigned char *buff, void *lq);
+void default_lq_deserialize_tc_lq_pair_ff(const olsr_u8_t **curr, void *lq);
+
+void default_lq_copy_link2tc_ff(void *target, void *source);
+void default_lq_clear_ff(void *target);
+void default_lq_clear_ff_hello(void *target);
+
+const char *default_lq_print_ff(void *ptr, struct lqtextbuffer *buffer);
+const char *default_lq_print_cost_ff(olsr_linkcost cost, struct lqtextbuffer *buffer);
+
+extern struct lq_handler lq_etx_ff_handler;
+
+#endif /*LQ_ETX_FF_*/
