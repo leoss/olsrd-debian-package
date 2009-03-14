@@ -1,3 +1,11 @@
+olsrd (0.5.6-r3-1) unstable; urgency=low
+
+  * New upstream release, the third maintenance release of 0.5.6.
+  * Adopt debian/patches/200-etc-olsrd.patch to cope with the whitespace
+    changes in the new release.
+
+ -- Holger Levsen <holger@debian.org>  Sat, 14 Mar 2009 18:31:55 +0100
+
 olsrd (0.5.6~rc7-1) unstable; urgency=low
 
   * New upstream release candidate.

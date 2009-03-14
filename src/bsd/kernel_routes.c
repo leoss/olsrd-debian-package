@@ -4,31 +4,31 @@
  * Copyright (c) 2004, Thomas Lopatic (thomas@lopatic.de)
  * All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without 
- * modification, are permitted provided that the following conditions 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
  * are met:
  *
- * * Redistributions of source code must retain the above copyright 
+ * * Redistributions of source code must retain the above copyright
  *   notice, this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright 
- *   notice, this list of conditions and the following disclaimer in 
- *   the documentation and/or other materials provided with the 
+ * * Redistributions in binary form must reproduce the above copyright
+ *   notice, this list of conditions and the following disclaimer in
+ *   the documentation and/or other materials provided with the
  *   distribution.
- * * Neither the name of olsr.org, olsrd nor the names of its 
- *   contributors may be used to endorse or promote products derived 
+ * * Neither the name of olsr.org, olsrd nor the names of its
+ *   contributors may be used to endorse or promote products derived
  *   from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS 
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE 
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, 
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT 
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN 
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
  * Visit http://www.olsr.org for more information.
@@ -38,7 +38,6 @@
  * the copyright holders.
  *
  */
-
 
 #include "kernel_routes.h"
 #include "olsr.h"
@@ -69,17 +68,17 @@ static unsigned int seq = 0;
 static int
 add_del_route(const struct rt_entry *rt, int add)
 {
-  struct rt_msghdr *rtm;	       /* message to configure a route */
-                                       /* contains data to be written to the
-                                          routing socket */
+  struct rt_msghdr *rtm;               /* message to configure a route */
+  /* contains data to be written to the
+     routing socket */
   unsigned char buff[512];
-  unsigned char *walker;	       /* points within the buffer */
-  struct sockaddr_in sin;	       /* internet style sockaddr */
-  struct sockaddr_dl *sdl;	       /* link level sockaddr */
+  unsigned char *walker;               /* points within the buffer */
+  struct sockaddr_in sin;              /* internet style sockaddr */
+  struct sockaddr_dl *sdl;             /* link level sockaddr */
   struct ifaddrs *addrs;
   struct ifaddrs *awalker;
   const struct rt_nexthop *nexthop;
-  union olsr_ip_addr mask;	       /* netmask as ip address */
+  union olsr_ip_addr mask;             /* netmask as ip address */
   int sin_size, sdl_size;              /* size of addresses - e.g. destination
                                           (payload of the message) */
   int len;                             /* message size written to routing socket */
@@ -108,7 +107,7 @@ add_del_route(const struct rt_entry *rt, int add)
 
   rtm->rtm_version = RTM_VERSION;
   rtm->rtm_type = add ? RTM_ADD : RTM_DELETE;
-  rtm->rtm_index = 0;		/* is ignored in outgoing messages */
+  rtm->rtm_index = 0;           /* is ignored in outgoing messages */
   /* RTF_UP [and RTF_HOST and/or RTF_GATEWAY] */
   rtm->rtm_flags = olsr_rt_flags(rt);
   rtm->rtm_pid = OLSR_PID;
@@ -121,7 +120,7 @@ add_del_route(const struct rt_entry *rt, int add)
    *                  SET  DESTINATION OF THE ROUTE
    **********************************************************************/
 
-  rtm->rtm_addrs = RTA_DST;	/* part of the header */
+  rtm->rtm_addrs = RTA_DST;     /* part of the header */
 
   sin.sin_addr = rt->rt_dst.prefix.v4;
   OLSR_PRINTF(8, "\t- Destination of the route: %s\n", inet_ntoa(sin.sin_addr));
@@ -142,10 +141,10 @@ add_del_route(const struct rt_entry *rt, int add)
    **********************************************************************/
 
   if (add || (rtm->rtm_addrs & RTF_GATEWAY)) {
-    rtm->rtm_addrs |= RTA_GATEWAY;	/* part of the header */
+    rtm->rtm_addrs |= RTA_GATEWAY;      /* part of the header */
     nexthop = olsr_get_nh(rt);
 
-    if ((rtm->rtm_flags & RTF_GATEWAY)) {	/* GATEWAY */
+    if ((rtm->rtm_flags & RTF_GATEWAY)) {       /* GATEWAY */
       sin.sin_addr = nexthop->gateway.v4;
 
       memcpy(walker, &sin, sizeof(sin));
@@ -155,34 +154,30 @@ add_del_route(const struct rt_entry *rt, int add)
     }
     /* NO GATEWAY - destination is directly reachable */
     else {
-      rtm->rtm_flags |= RTF_CLONING;	/* part of the header! */
+      rtm->rtm_flags |= RTF_CLONING;    /* part of the header! */
 
       /*
        * Host is directly reachable, so add the output interface MAC address.
        */
       if (getifaddrs(&addrs)) {
-	fprintf(stderr, "\ngetifaddrs() failed\n");
-	return -1;
+        fprintf(stderr, "\ngetifaddrs() failed\n");
+        return -1;
       }
 
       for (awalker = addrs; awalker != NULL; awalker = awalker->ifa_next)
-	if (awalker->ifa_addr->sa_family == AF_LINK &&
-	    strcmp(awalker->ifa_name,
-		   if_ifwithindex_name(nexthop->iif_index)) == 0)
-	  break;
+        if (awalker->ifa_addr->sa_family == AF_LINK && strcmp(awalker->ifa_name, if_ifwithindex_name(nexthop->iif_index)) == 0)
+          break;
 
       if (awalker == NULL) {
-	fprintf(stderr, "\nInterface %s not found\n",
-		if_ifwithindex_name(nexthop->iif_index));
-	freeifaddrs(addrs);
-	return -1;
+        fprintf(stderr, "\nInterface %s not found\n", if_ifwithindex_name(nexthop->iif_index));
+        freeifaddrs(addrs);
+        return -1;
       }
 
       /* sdl is "struct sockaddr_dl" */
       sdl = (struct sockaddr_dl *)awalker->ifa_addr;
 #ifdef DEBUG
-      OLSR_PRINTF(8,"\t- Link layer address of the non gateway route: %s\n",
-                  LLADDR(sdl));
+      OLSR_PRINTF(8, "\t- Link layer address of the non gateway route: %s\n", LLADDR(sdl));
 #endif
 
       memcpy(walker, sdl, sdl->sdl_len);
@@ -200,9 +195,9 @@ add_del_route(const struct rt_entry *rt, int add)
 
   if ((rtm->rtm_flags & RTF_HOST)) {
     OLSR_PRINTF(8, "\t- No netmask needed for a host route.\n");
-  } else {			/* NO! hoste route */
+  } else {                      /* NO! hoste route */
 
-    rtm->rtm_addrs |= RTA_NETMASK; /* part of the header */
+    rtm->rtm_addrs |= RTA_NETMASK;      /* part of the header */
 
     if (!olsr_prefix_to_netmask(&mask, rt->rt_dst.prefix_len)) {
       return -1;
@@ -222,27 +217,20 @@ add_del_route(const struct rt_entry *rt, int add)
   rtm->rtm_msglen = (unsigned short)(walker - buff);
 
   len = write(olsr_cnf->rts, buff, rtm->rtm_msglen);
-  OLSR_PRINTF(8, "\nWrote %d bytes to rts socket (FD=%d)\n", len,
-	      olsr_cnf->rts);
+  OLSR_PRINTF(8, "\nWrote %d bytes to rts socket (FD=%d)\n", len, olsr_cnf->rts);
 
   if (0 != rtm->rtm_errno || len < rtm->rtm_msglen) {
-    fprintf(stderr,
-	    "\nCannot write to routing socket: (rtm_errno= 0x%x) (last error message: %s)\n",
-	    rtm->rtm_errno, strerror(errno));
+    fprintf(stderr, "\nCannot write to routing socket: (rtm_errno= 0x%x) (last error message: %s)\n", rtm->rtm_errno,
+            strerror(errno));
   }
 
   OLSR_PRINTF(8,
-	      "\nWriting the following information to routing socket (message header):"
-	      "\n\trtm_msglen: %u" "\n\trtm_version: %u" "\n\trtm_type: %u"
-	      "\n\trtm_index: %u" "\n\trtm_flags: 0x%x" "\n\trtm_addrs: %u"
-	      "\n\trtm_pid: 0x%x" "\n\trtm_seq: %u" "\n\trtm_errno: 0x%x"
-	      "\n\trtm_use %u" "\n\trtm_inits: %u\n",
-	      (unsigned int)rtm->rtm_msglen, (unsigned int)rtm->rtm_version,
-	      (unsigned int)rtm->rtm_type, (unsigned int)rtm->rtm_index,
-	      (unsigned int)rtm->rtm_flags, (unsigned int)rtm->rtm_addrs,
-	      (unsigned int)rtm->rtm_pid, (unsigned int)rtm->rtm_seq,
-	      (unsigned int)rtm->rtm_errno, (unsigned int)rtm->rtm_use,
-	      (unsigned int)rtm->rtm_inits);
+              "\nWriting the following information to routing socket (message header):" "\n\trtm_msglen: %u" "\n\trtm_version: %u"
+              "\n\trtm_type: %u" "\n\trtm_index: %u" "\n\trtm_flags: 0x%x" "\n\trtm_addrs: %u" "\n\trtm_pid: 0x%x" "\n\trtm_seq: %u"
+              "\n\trtm_errno: 0x%x" "\n\trtm_use %u" "\n\trtm_inits: %u\n", (unsigned int)rtm->rtm_msglen,
+              (unsigned int)rtm->rtm_version, (unsigned int)rtm->rtm_type, (unsigned int)rtm->rtm_index,
+              (unsigned int)rtm->rtm_flags, (unsigned int)rtm->rtm_addrs, (unsigned int)rtm->rtm_pid, (unsigned int)rtm->rtm_seq,
+              (unsigned int)rtm->rtm_errno, (unsigned int)rtm->rtm_use, (unsigned int)rtm->rtm_inits);
 
   return 0;
 }
@@ -299,16 +287,14 @@ add_del_route6(const struct rt_entry *rt, int add)
 
   walker = buff + sizeof(struct rt_msghdr);
 
-  memcpy(&sin6.sin6_addr.s6_addr, &rt->rt_dst.prefix.v6,
-	 sizeof(struct in6_addr));
+  memcpy(&sin6.sin6_addr.s6_addr, &rt->rt_dst.prefix.v6, sizeof(struct in6_addr));
 
   memcpy(walker, &sin6, sizeof(sin6));
   walker += step;
 
   nexthop = olsr_get_nh(rt);
   if ((rtm->rtm_flags & RTF_GATEWAY) != 0) {
-    memcpy(&sin6.sin6_addr.s6_addr, &nexthop->gateway.v6,
-	   sizeof(struct in6_addr));
+    memcpy(&sin6.sin6_addr.s6_addr, &nexthop->gateway.v6, sizeof(struct in6_addr));
 
     memset(&sin6.sin6_addr.s6_addr, 0, 8);
     sin6.sin6_addr.s6_addr[0] = 0xfe;
@@ -325,8 +311,7 @@ add_del_route6(const struct rt_entry *rt, int add)
   /* the host is directly reachable, so add the output interface's address */
 
   else {
-    memcpy(&sin6.sin6_addr.s6_addr, &rt->rt_dst.prefix.v6,
-	   sizeof(struct in6_addr));
+    memcpy(&sin6.sin6_addr.s6_addr, &rt->rt_dst.prefix.v6, sizeof(struct in6_addr));
     memset(&sin6.sin6_addr.s6_addr, 0, 8);
     sin6.sin6_addr.s6_addr[0] = 0xfe;
     sin6.sin6_addr.s6_addr[1] = 0x80;
@@ -342,8 +327,7 @@ add_del_route6(const struct rt_entry *rt, int add)
   }
 
   if ((rtm->rtm_flags & RTF_HOST) == 0) {
-    olsr_prefix_to_netmask((union olsr_ip_addr *)&sin6.sin6_addr,
-			   rt->rt_dst.prefix_len);
+    olsr_prefix_to_netmask((union olsr_ip_addr *)&sin6.sin6_addr, rt->rt_dst.prefix_len);
     memcpy(walker, &sin6, sizeof(sin6));
     walker += step;
     rtm->rtm_addrs |= RTA_NETMASK;
@@ -370,8 +354,7 @@ add_del_route6(const struct rt_entry *rt, int add)
     drtm->rtm_seq = ++seq;
 
     walker = dbuff + sizeof(struct rt_msghdr);
-    memcpy(&sin6.sin6_addr.s6_addr, &rt->rt_dst.prefix.v6,
-	   sizeof(struct in6_addr));
+    memcpy(&sin6.sin6_addr.s6_addr, &rt->rt_dst.prefix.v6, sizeof(struct in6_addr));
     memcpy(walker, &sin6, sizeof(sin6));
     walker += step;
     drtm->rtm_msglen = (unsigned short)(walker - dbuff);
@@ -402,5 +385,6 @@ olsr_ioctl_del_route6(const struct rt_entry *rt)
 /*
  * Local Variables:
  * c-basic-offset: 2
+ * indent-tabs-mode: nil
  * End:
  */

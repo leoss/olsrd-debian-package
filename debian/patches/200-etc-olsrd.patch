@@ -1,13 +1,13 @@
-Index: olsrd-0.4.10/src/olsr_switch/ohs_cmd.c
+Index: olsrd-0.5.6-r3/src/olsr_switch/ohs_cmd.c
 ===================================================================
---- olsrd-0.4.10.orig/src/olsr_switch/ohs_cmd.c	2006-12-08 18:19:14.000000000 +0000
-+++ olsrd-0.4.10/src/olsr_switch/ohs_cmd.c	2006-12-08 18:19:42.000000000 +0000
+--- olsrd-0.5.6-r3.orig/src/olsr_switch/ohs_cmd.c	2009-14-03 18:19:14.000000000 +0100
++++ olsrd-0.5.6-r3/src/olsr_switch/ohs_cmd.c	2009-14-03 18:19:42.000000000 +0100
 @@ -130,7 +130,7 @@
-       if(1) /* config file is set */
- 	{
- 	  olsrd_args[argc++] = "-f";
--	  olsrd_args[argc++] = "/etc/olsrd-emu.conf";
-+	  olsrd_args[argc++] = "/etc/olsrd/olsrd-emu.conf";
- 	}
-       olsrd_args[argc++] = "-hemu";
-       olsrd_args[argc++] = tok_buf;
+ 
+     if (1) {                    /* config file is set */
+       olsrd_args[argc++] = "-f";
+-      olsrd_args[argc++] = "/etc/olsrd-emu.conf";
++      olsrd_args[argc++] = "/etc/olsrd/olsrd-emu.conf";
+     }
+     olsrd_args[argc++] = "-hemu";
+     olsrd_args[argc++] = tok_buf;
