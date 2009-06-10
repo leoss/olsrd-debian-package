@@ -215,7 +215,7 @@ static int
 plugin_ipc_init(void)
 {
   struct sockaddr_in sin;
-  olsr_u32_t yes = 1;
+  uint32_t yes = 1;
 
   /* Init ipc socket */
   if ((ipc_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
@@ -385,7 +385,7 @@ ipc_send(const char *data, int size)
   if (ipc_connection == -1)
     return 0;
 
-#if defined __FreeBSD__ || defined __MacOSX__
+#if defined __FreeBSD__ || defined __MacOSX__ || __OpenBSD__
 #define FLAG 0
 #else
 #define FLAG MSG_NOSIGNAL

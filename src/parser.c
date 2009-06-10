@@ -75,12 +75,13 @@ struct parse_function_entry *parse_functions;
 struct preprocessor_function_entry *preprocessor_functions;
 struct packetparser_function_entry *packetparser_functions;
 
-static char inbuf[MAXMESSAGESIZE + 1];
+static uint32_t inbuf_aligned[MAXMESSAGESIZE/sizeof(uint32_t) + 1];
+static char *inbuf = (char *)inbuf_aligned;
 
-static olsr_bool disp_pack_in = OLSR_FALSE;
+static bool disp_pack_in = false;
 
 void
-parser_set_disp_pack_in(olsr_bool val)
+parser_set_disp_pack_in(bool val)
 {
   disp_pack_in = val;
 }
@@ -101,7 +102,7 @@ olsr_init_parser(void)
 }
 
 void
-olsr_parser_add_function(parse_function * function, olsr_u32_t type)
+olsr_parser_add_function(parse_function * function, uint32_t type)
 {
   struct parse_function_entry *new_entry;
 
@@ -121,7 +122,7 @@ olsr_parser_add_function(parse_function * function, olsr_u32_t type)
 }
 
 int
-olsr_parser_remove_function(parse_function * function, olsr_u32_t type)
+olsr_parser_remove_function(parse_function * function, uint32_t type)
 {
   struct parse_function_entry *entry, *prev;
 
@@ -302,7 +303,7 @@ parse_packet(struct olsr *olsr, int size, struct interface *in_if, union olsr_ip
   }
 
   for (; count > 0; m = (union olsr_message *)((char *)m + (msgsize))) {
-    olsr_bool forward = OLSR_TRUE;
+    bool forward = true;
 
     if (count < MIN_PACKET_SIZE(olsr_cnf->ip_version))
       break;
@@ -351,13 +352,13 @@ parse_packet(struct olsr *olsr, int size, struct interface *in_if, union olsr_ip
       /* Promiscuous or exact match */
       if ((entry->type == PROMISCUOUS) || (entry->type == m->v4.olsr_msgtype)) {
         if (!entry->function(m, in_if, from_addr))
-          forward = OLSR_FALSE;
+          forward = false;
       }
       entry = entry->next;
     }
 
     if (forward) {
-      olsr_forward_message(m, from_addr);
+      olsr_forward_message(m, in_if, from_addr);
     }
   }                             /* for olsr_msg */
 }
@@ -395,7 +396,7 @@ olsr_input(int fd)
     }
 
     fromlen = sizeof(struct sockaddr_storage);
-    cc = olsr_recvfrom(fd, inbuf, sizeof(inbuf), 0, (struct sockaddr *)&from, &fromlen);
+    cc = olsr_recvfrom(fd, inbuf, sizeof(inbuf_aligned), 0, (struct sockaddr *)&from, &fromlen);
 
     if (cc <= 0) {
       if (cc < 0 && errno != EWOULDBLOCK) {
@@ -414,7 +415,7 @@ olsr_input(int fd)
 
 #ifdef DEBUG
     OLSR_PRINTF(5, "Recieved a packet from %s\n",
-                olsr_ip_to_string(&buf, (union olsr_ip_addr *)&((struct sockaddr_in *)&from)->sin_addr.s_addr));
+        olsr_ip_to_string(&buf, &from_addr));
 #endif
 
     if ((olsr_cnf->ip_version == AF_INET) && (fromlen != sizeof(struct sockaddr_in)))
@@ -472,7 +473,7 @@ olsr_input_hostemu(int fd)
   socklen_t fromlen;
   struct interface *olsr_in_if;
   union olsr_ip_addr from_addr;
-  olsr_u16_t pcklen;
+  uint16_t pcklen;
   struct preprocessor_function_entry *entry;
   char *packet;
 

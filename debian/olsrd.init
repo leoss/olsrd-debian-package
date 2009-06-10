@@ -17,6 +17,7 @@
 # Version:	21-Dec-2006  
 # modified:     01-Aug-2007
 # 	        31-Jun-2008
+#		30-May-2009
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON=/usr/sbin/olsrd
@@ -38,13 +39,25 @@ case "$1" in
   debug)
 	echo -n "Starting $DESC: "
 	start-stop-daemon --start --quiet --exec $DAEMON --pidfile $PID_FILE -- $DAEMON_OPTS &
+	# sleep til olsrd has been started
+	while ! pidof $NAME > /dev/null ; do 
+	  sleep 1
+	done
 	echo "$NAME."
 	echo $(pidof $NAME) > $PID_FILE
 	;;
   start)
 	if [ "$START_OLSRD" != "YES" ] ; then exit 0 ; fi
+	if [ $(pidof $NAME) -eq 0 ] ; then 
+		echo "$NAME already running, doing nothing."
+		exit 0
+	fi
 	echo -n "Starting $DESC: "
 	start-stop-daemon --start --quiet --exec $DAEMON --pidfile $PID_FILE -- $DAEMON_OPTS &
+	# sleep til olsrd has been started
+	while ! pidof $NAME > /dev/null ; do 
+	  sleep 1
+	done
 	echo "$NAME."        
 	echo $(pidof $NAME) > $PID_FILE
 	;;

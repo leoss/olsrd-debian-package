@@ -430,7 +430,7 @@ getsocket(int bufspace, char *int_name)
 
   memset(&sin, 0, sizeof(sin));
   sin.sin_family = AF_INET;
-  sin.sin_port = htons(OLSRPORT);
+  sin.sin_port = htons(olsr_cnf->olsrport);
   sin.sin_addr.s_addr = INADDR_ANY;
   if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
     perror("bind");
@@ -518,7 +518,7 @@ getsocket6(int bufspace, char *int_name)
 
   memset(&sin, 0, sizeof(sin));
   sin.sin6_family = AF_INET6;
-  sin.sin6_port = htons(OLSRPORT);
+  sin.sin6_port = htons(olsr_cnf->olsrport);
   //(addrsock6.sin6_addr).s_addr = IN6ADDR_ANY_INIT;
   if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
     perror("bind");
@@ -753,12 +753,12 @@ calculate_if_metric(char *ifname)
   }
 }
 
-olsr_bool
+bool
 is_if_link_up(char *ifname)
 {
   if (check_wireless_interface(ifname)) {
     /* No link checking on wireless devices */
-    return OLSR_TRUE;
+    return true;
   } else {
     /* Mii wizardry */
     struct ifreq ifr;

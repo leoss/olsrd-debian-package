@@ -59,9 +59,10 @@
 #include "net_olsr.h"
 #include "lq_plugin.h"
 
-olsr_bool lq_tc_pending = OLSR_FALSE;
+bool lq_tc_pending = false;
 
-static unsigned char msg_buffer[MAXMESSAGESIZE - OLSR_HEADERSIZE];
+static uint32_t msg_buffer_aligned[(MAXMESSAGESIZE - OLSR_HEADERSIZE) / sizeof(uint32_t) + 1];
+static unsigned char *msg_buffer = (unsigned char *)msg_buffer_aligned;
 
 static void
 create_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
@@ -157,7 +158,7 @@ create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
   // remember that we have generated an LQ TC message; this is
   // checked in net_output()
 
-  lq_tc_pending = OLSR_TRUE;
+  lq_tc_pending = true;
 
   // initialize the static fields
 
@@ -326,7 +327,7 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
   struct lq_hello_info_header *info_head;
   struct lq_hello_neighbor *neigh;
   unsigned char *buff;
-  olsr_bool is_first;
+  bool is_first;
   int i;
 
   // leave space for the OLSR header
@@ -364,14 +365,14 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
     for (i = 0; i <= MAX_NEIGH; i++) {
       unsigned int j;
       for (j = 0; j < sizeof(LINK_ORDER) / sizeof(LINK_ORDER[0]); j++) {
-        is_first = OLSR_TRUE;
+        is_first = true;
         for (neigh = lq_hello->neigh; neigh != NULL; neigh = neigh->next) {
           if (0 == i && 0 == j)
             expected_size += olsr_cnf->ipsize + 4;
           if (neigh->neigh_type == i && neigh->link_type == LINK_ORDER[j]) {
             if (is_first) {
               expected_size += sizeof(struct lq_hello_info_header);
-              is_first = OLSR_FALSE;
+              is_first = false;
             }
           }
         }
@@ -391,7 +392,7 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
   for (i = 0; i <= MAX_NEIGH; i++) {
     unsigned int j;
     for (j = 0; j < sizeof(LINK_ORDER) / sizeof(LINK_ORDER[0]); j++) {
-      is_first = OLSR_TRUE;
+      is_first = true;
 
       // loop through neighbors
 
@@ -438,7 +439,7 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
 
           // we need a new info header
 
-          is_first = OLSR_TRUE;
+          is_first = true;
         }
         // create a new info header
 
@@ -457,7 +458,7 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
         // add the corresponding link quality
         size += olsr_serialize_hello_lq_pair(&buff[size], neigh);
 
-        is_first = OLSR_FALSE;
+        is_first = false;
       }
 
       // finalize the info header, if there are any neighbors with the
@@ -479,13 +480,13 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
   net_outbuffer_push(outif, msg_buffer, size + off);
 }
 
-static olsr_u8_t
+static uint8_t
 calculate_border_flag(void *lower_border, void *higher_border)
 {
-  olsr_u8_t *lower = lower_border;
-  olsr_u8_t *higher = higher_border;
-  olsr_u8_t bitmask;
-  olsr_u8_t part, bitpos;
+  uint8_t *lower = lower_border;
+  uint8_t *higher = higher_border;
+  uint8_t bitmask;
+  uint8_t part, bitpos;
 
   for (part = 0; part < olsr_cnf->ipsize; part++) {
     if (lower[part] != higher[part]) {
@@ -517,7 +518,7 @@ serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
   unsigned char *buff;
 
   union olsr_ip_addr *last_ip = NULL;
-  olsr_u8_t left_border_flag = 0xff;
+  uint8_t left_border_flag = 0xff;
 
   // leave space for the OLSR header
 

@@ -1,3 +1,20 @@
+olsrd (0.5.6-r4-1~bpo50+1) lenny-backports; urgency=low
+
+  * Rebuild for etch-backports, no changes needed.
+
+ -- Holger Levsen <holger@debian.org>  Wed, 10 Jun 2009 17:31:11 +0000
+
+olsrd (0.5.6-r4-1) unstable; urgency=low
+
+  * New upstream version, the fourth maintenance release of 0.5.6.
+  * olsrd.init: 
+    - do not write the pidfile until olsrd has actually been started
+      (Closes: #519842) - thanks to Sebastian Reichel for the bug report!
+    - only start olsrd if it is not already running. 
+  * Bump standards-version to 3.8.1.
+
+ -- Holger Levsen <holger@debian.org>  Sat, 30 May 2009 09:14:27 +0000
+
 olsrd (0.5.6-r3-1) unstable; urgency=low
 
   * New upstream release, the third maintenance release of 0.5.6.
