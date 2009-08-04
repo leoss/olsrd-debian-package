@@ -1,3 +1,20 @@
+olsrd (0.5.6-r5-1) unstable; urgency=low
+
+  * New upstream version, the fifth maintenance release of 0.5.6.
+  * Add patch by Sebastian Harl to add a listen parameter to the dot_draw
+    plugin. (Closes: #532573) - Thanks, Sebastian! 
+  * Re-enable quagga plugin. Since olsrd is licenced under the 3 clause BSD 
+    licence and quagga is GPL-2 code, the resuling binary is GPL-2 licenced
+    too, and thats fine. (Closes: #532761)
+    Add patch by Florian Forster to determine quagga protocol version - thanks
+    Florian!
+  * Add descriptions of quagga, bmf and txtinfo plugins to package 
+    description. (Closes: #532765)
+  * Bump standards version to 3.8.2.
+  * Update years in debian/copyright.
+
+ -- Holger Levsen <holger@debian.org>  Tue, 04 Aug 2009 12:10:35 +0000
+
 olsrd (0.5.6-r4-1) unstable; urgency=low
 
   * New upstream version, the fourth maintenance release of 0.5.6.

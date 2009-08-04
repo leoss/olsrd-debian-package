@@ -4,4 +4,5 @@
 220-usr-lib-on-amd64.patch
 230-usr-lib-olsrd.patch
 240-plugin-install-targets.patch
-
+250-dot-draw-plugin-honor-accept-parameter.patch
+260-quagga-plugin-detect-protocol-version.patch

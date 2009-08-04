@@ -307,7 +307,7 @@ set_loss_link_multiplier(struct link_entry *entry)
      * use the default multiplier only if there isn't any entry that
      * has a matching IP address.
      */
-    if ((ipequal(&mult->addr, &null_addr) && val < 0.0) || ipequal(&mult->addr, &entry->neighbor_iface_addr)) {
+    if ((ipequal(&mult->addr, &null_addr) && val == 0) || ipequal(&mult->addr, &entry->neighbor_iface_addr)) {
       val = mult->value;
     }
   }
@@ -749,7 +749,8 @@ check_link_status(const struct hello_message *message, const struct interface *i
      * Note: If a neigh has 2 cards we can reach, the neigh
      * will send a Hello with the same IP mentined twice
      */
-    if (ipequal(&neighbors->address, &in_if->ip_addr)) {
+    if (ipequal(&neighbors->address, &in_if->ip_addr) &&
+        neighbors->link != UNSPEC_LINK) {
       ret = neighbors->link;
       if (SYM_LINK == ret) {
         break;

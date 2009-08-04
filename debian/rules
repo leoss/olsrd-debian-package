@@ -16,9 +16,9 @@
 #
 # you dont need to edit this file. export PLUGIS=foo ; fakeroot ./debian/rules binary
 # is enough for a rebuild :)
-PLUGINS ?= dyn_gw httpinfo dot_draw nameservice secure txtinfo bmf
+PLUGINS ?= dyn_gw httpinfo dot_draw nameservice secure txtinfo bmf quagga
 #hack: - also needs debian/patches/240-plugin-install-targets.patch - this has been reported to upstream...
-PLUGINS_INSTALL ?= dyn_gw_install httpinfo_install dot_draw_install nameservice_install secure_install txtinfo_install bmf_install
+PLUGINS_INSTALL ?= dyn_gw_install httpinfo_install dot_draw_install nameservice_install secure_install txtinfo_install bmf_install quagga_install
 
 
 CFLAGS = -Wall -g

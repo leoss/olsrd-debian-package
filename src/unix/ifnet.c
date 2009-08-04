@@ -581,6 +581,8 @@ add_hemu_if(struct olsr_if *iface)
   ifp->valtimes.mid = reltime_to_me(iface->cnf->mid_params.validity_time * MSEC_PER_SEC);
   ifp->valtimes.hna = reltime_to_me(iface->cnf->hna_params.validity_time * MSEC_PER_SEC);
 
+  ifp->mode = iface->cnf->mode;
+
   return 1;
 }
 
@@ -896,6 +898,8 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
   ifp->valtimes.tc = reltime_to_me(iface->cnf->tc_params.validity_time * MSEC_PER_SEC);
   ifp->valtimes.mid = reltime_to_me(iface->cnf->mid_params.validity_time * MSEC_PER_SEC);
   ifp->valtimes.hna = reltime_to_me(iface->cnf->hna_params.validity_time * MSEC_PER_SEC);
+
+  ifp->mode = iface->cnf->mode;
 
   /*
    *Call possible ifchange functions registered by plugins

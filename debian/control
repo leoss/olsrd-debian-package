@@ -3,7 +3,7 @@ Section: net
 Priority: extra
 Maintainer: Holger Levsen <holger@debian.org>
 Build-Depends: debhelper (>= 5), quilt, bison, flex
-Standards-Version: 3.8.1
+Standards-Version: 3.8.2
 Homepage: http://olsr.org/
 Vcs-Svn: svn://svn.debian.org/svn/collab-maint/deb-maint/olsrd/
 Vcs-Browser: http://svn.debian.org/wsvn/collab-maint/deb-maint/olsrd/
@@ -37,3 +37,6 @@ Description: various plugins to enhance olsrd
   * dot_draw      - generates output (over a TCP socket) in the dot format
   * secure        - secure OLSR routing with a shared key
   * nameservice   - announce hostnames and dns servers
+  * bmf           - basic multicast forwarding
+  * quagga        - support for quagga routing
+  * txtinfo       - display information about the OSLR node

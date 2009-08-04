@@ -76,6 +76,7 @@
 #define DEF_OLSRPORT        698
 #define DEF_RTPROTO         0 /* 0 means OS-specific default */
 #define DEF_RTTABLE         254
+#define DEF_MIN_TC_VTIME    0.0
 
 /* Bounds */
 
@@ -221,6 +222,7 @@ struct olsrd_config {
   char *lq_algorithm;
   uint8_t lq_dlimit;
 
+  float min_tc_vtime;
   /* Stuff set by olsrd */
   uint16_t system_tick_divider;        /* Tick resolution */
   uint8_t maxplen;                     /* maximum prefix len */
@@ -231,6 +233,8 @@ struct olsrd_config {
   float max_jitter;
   int exit_value;                      /* Global return value for process termination */
   float max_tc_vtime;
+
+  char *lock_file;
 
   int ioctl_s;                         /* Socket used for ioctl calls */
 #if LINUX_POLICY_ROUTING

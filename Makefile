@@ -39,7 +39,7 @@
 # Please also write a new version to:
 # gui/win32/Main/Frontend.rc (line 71, around "CAPTION [...]")
 # gui/win32/Inst/installer.nsi (line 57, around "MessageBox MB_YESNO [...]")
-VERS =		0.5.6-r4
+VERS =		0.5.6-r5
 
 TOPDIR = .
 include Makefile.inc
@@ -148,7 +148,7 @@ else
 ifeq ($(OS),win32)
 SUBDIRS := dot_draw httpinfo mini pgraph secure txtinfo
 else
-SUBDIRS := bmf dot_draw dyn_gw dyn_gw_plain httpinfo mini nameservice pgraph secure txtinfo
+SUBDIRS := bmf dot_draw dyn_gw dyn_gw_plain httpinfo mini nameservice pgraph secure txtinfo watchdog
 endif
 endif
 
@@ -228,6 +228,11 @@ arprefresh:
 		$(MAKECMD) -C lib/arprefresh clean
 		$(MAKECMD) -C lib/arprefresh
 		$(MAKECMD) -C lib/arprefresh DESTDIR=$(DESTDIR) install
+
+watchdog:
+		$(MAKECMD) -C lib/watchdog clean
+		$(MAKECMD) -C lib/watchdog
+		$(MAKECMD) -C lib/watchdog DESTDIR=$(DESTDIR) install
 
 build_all:	all switch libs
 install_all:	install install_libs

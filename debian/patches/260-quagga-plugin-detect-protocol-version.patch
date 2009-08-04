@@ -1,0 +1,14 @@
+diff -pur olsrd-0.5.6-r4.orig/lib/quagga/src/quagga.h olsrd-0.5.6-r4.quag/lib/quagga/src/quagga.h
+--- olsrd-0.5.6-r4.orig/lib/quagga/src/quagga.h	2009-02-01 20:57:02.000000000 +0100
++++ olsrd-0.5.6-r4.quag/lib/quagga/src/quagga.h	2009-06-11 13:28:51.000000000 +0200
+@@ -25,6 +25,10 @@
+ #define ZEBRA_PORT 2600
+ #endif
+ 
++#ifndef ZEBRA_HEADER_MARKER
++#define ZEBRA_HEADER_MARKER 255
++#endif
++
+ #ifdef ZEBRA_HEADER_MARKER
+ #ifndef ZSERV_VERSION
+ #define ZSERV_VERSION 1
