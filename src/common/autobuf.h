@@ -1,7 +1,7 @@
 
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * Copyright (c) 2004-2009, the olsr.org team - see HISTORY file
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,30 +39,38 @@
  *
  */
 
-#ifndef _BUILD_MSG_H
-#define _BUILD_MSG_H
+#ifndef _COMMON_AUTOBUF_H
+#define _COMMON_AUTOBUF_H
 
-#include "packet.h"
-#include "olsr_protocol.h"
-#include <time.h>               /* For clock_t */
+#include "defs.h"
+#include <stdarg.h>
+#include <time.h>
 
-void set_empty_tc_timer(uint32_t);
+#define ROUND_UP_TO_POWER_OF_2(val, pow2) (((val) + (pow2) - 1) & ~((pow2) - 1))
 
-uint32_t get_empty_tc_timer(void);
+#define AUTOBUFCHUNK	4096
+struct autobuf {
+  int size;
+  int len;
+  char *buf;
+};
 
-bool queue_hello(struct hello_message *, struct interface *);
-
-bool queue_tc(struct tc_message *, struct interface *);
-
-bool queue_mid(struct interface *);
-
-bool queue_hna(struct interface *);
-
+int abuf_init (struct autobuf * autobuf, int initial_size);
+void abuf_free (struct autobuf * autobuf);
+int abuf_vappendf (struct autobuf *autobuf, const char *fmt, va_list ap) __attribute__ ((format(printf, 2, 0)));
+int abuf_appendf (struct autobuf * autobuf, const char *fmt, ...) __attribute__ ((format(printf, 2, 3)));
+int abuf_puts (struct autobuf * autobuf, const char *s);
+int abuf_strftime (struct autobuf * autobuf, const char *format, const struct tm * tm);
+int abuf_memcpy (struct autobuf * autobuf, const void *p, const unsigned int len);
+int abuf_memcpy_prefix (struct autobuf *autobuf, const void *p, const unsigned int len);
+int abuf_pull (struct autobuf * autobuf, int len);
 #endif
 
 /*
  * Local Variables:
- * c-basic-offset: 2
+ * mode: c
+ * style: linux
+ * c-basic-offset: 4
  * indent-tabs-mode: nil
  * End:
  */

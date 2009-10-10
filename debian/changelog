@@ -1,3 +1,18 @@
+olsrd (0.5.6-r6-1) unstable; urgency=low
+
+  * New upstream version, the sixth maintenance release of 0.5.6, adding
+    support for Debian kfreebsd (Closes: #544758) and including fixes for
+    httpinfo, txtinfo and dotdraw plugin to prevent them blocking in case of
+    timed out outgoing connections. 
+    Drop 250-dot-draw-plugin-honor-accept-parameter.patch as it has been
+    included in the new upstream release.
+  * Fix incorrect runlevels and dependencies in init.d LSB header, thanks to
+    Petter Reinholdtsen for spotting the issues and providing the patch.
+    (Closes: #548607)
+  * Bump standards version to 3.8.3, no changes necessary.
+
+ -- Holger Levsen <holger@debian.org>  Sat, 10 Oct 2009 14:55:37 +0200
+
 olsrd (0.5.6-r5-1) unstable; urgency=low
 
   * New upstream version, the fifth maintenance release of 0.5.6.
