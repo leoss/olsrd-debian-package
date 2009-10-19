@@ -5,3 +5,4 @@
 230-usr-lib-olsrd.patch
 240-plugin-install-targets.patch
 260-quagga-plugin-detect-protocol-version.patch
+270-make-kfbsd.patch

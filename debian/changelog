@@ -1,3 +1,10 @@
+olsrd (0.5.6-r6-3) unstable; urgency=low
+
+  * Brown paper bag release: add 270-make-kfbsd.patch to debian/patches/series
+    so it actually gets applied. (Closes: #544758)
+
+ -- Holger Levsen <holger@debian.org>  Mon, 19 Oct 2009 11:31:38 +0200
+
 olsrd (0.5.6-r6-2) unstable; urgency=low
 
   * Do not override the general setting in Makefile.kfbsd to "honor DESTDIR 
