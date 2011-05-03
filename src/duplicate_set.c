@@ -61,6 +61,15 @@ olsr_init_duplicate_set(void)
                  &olsr_cleanup_duplicate_entry, NULL, 0);
 }
 
+void olsr_cleanup_duplicates(union olsr_ip_addr *orig) {
+  struct dup_entry *entry;
+
+  entry = (struct dup_entry *)avl_find(&duplicate_set, orig);
+  if (entry != NULL) {
+    entry->too_low_counter = DUP_MAX_TOO_LOW - 2;
+  }
+}
+
 struct dup_entry *
 olsr_create_duplicate_entry(void *ip, uint16_t seqnr)
 {
@@ -88,6 +97,19 @@ olsr_cleanup_duplicate_entry(void __attribute__ ((unused)) * unused)
     }
   }
   OLSR_FOR_ALL_DUP_ENTRIES_END(entry);
+}
+
+int olsr_seqno_diff(uint16_t seqno1, uint16_t seqno2) {
+  int diff = (int)seqno1 - (int)(seqno2);
+
+  // overflow ?
+  if (diff > (1 << 15)) {
+    diff -= (1 << 16);
+  }
+  else if (diff < -(1 << 15)) {
+      diff += (1 << 16);
+  }
+  return diff;
 }
 
 int
@@ -127,31 +149,24 @@ olsr_message_is_duplicate(union olsr_message *m)
     return false;               // okay, we process this package
   }
 
-  diff = (int)seqnr - (int)(entry->seqnr);
 
   // update timestamp
   if (valid_until > entry->valid_until) {
     entry->valid_until = valid_until;
   }
-  // overflow ?
-  if (diff > (1 << 15)) {
-    diff -= (1 << 16);
-  }
-  else if (diff < -(1 << 15)) {
-      diff += (1 << 16);
-  }
 
+  diff = olsr_seqno_diff(seqnr, entry->seqnr);
   if (diff < -31) {
     entry->too_low_counter++;
 
     // client did restart with a lower number ?
-    if (entry->too_low_counter > 16) {
+    if (entry->too_low_counter > DUP_MAX_TOO_LOW) {
       entry->too_low_counter = 0;
       entry->seqnr = seqnr;
       entry->array = 1;
       return false;             /* start with a new sequence number, so NO duplicate */
     }
-    OLSR_PRINTF(9, "blocked %x from %s\n", seqnr, olsr_ip_to_string(&buf, mainIp));
+    OLSR_PRINTF(9, "blocked 0x%x from %s\n", seqnr, olsr_ip_to_string(&buf, mainIp));
     return true;                /* duplicate ! */
   }
 
@@ -160,11 +175,11 @@ olsr_message_is_duplicate(union olsr_message *m)
     uint32_t bitmask = 1 << ((uint32_t) (-diff));
 
     if ((entry->array & bitmask) != 0) {
-      OLSR_PRINTF(9, "blocked %x (diff=%d,mask=%08x) from %s\n", seqnr, diff, entry->array, olsr_ip_to_string(&buf, mainIp));
+      OLSR_PRINTF(9, "blocked 0x%x (diff=%d,mask=%08x) from %s\n", seqnr, diff, entry->array, olsr_ip_to_string(&buf, mainIp));
       return true;              /* duplicate ! */
     }
     entry->array |= bitmask;
-    OLSR_PRINTF(9, "processed %x from %s\n", seqnr, olsr_ip_to_string(&buf, mainIp));
+    OLSR_PRINTF(9, "processed 0x%x from %s\n", seqnr, olsr_ip_to_string(&buf, mainIp));
     return false;               /* no duplicate */
   } else if (diff < 32) {
     entry->array <<= (uint32_t) diff;
@@ -173,7 +188,7 @@ olsr_message_is_duplicate(union olsr_message *m)
   }
   entry->array |= 1;
   entry->seqnr = seqnr;
-  OLSR_PRINTF(9, "processed %x from %s\n", seqnr, olsr_ip_to_string(&buf, mainIp));
+  OLSR_PRINTF(9, "processed 0x%x from %s\n", seqnr, olsr_ip_to_string(&buf, mainIp));
   return false;                 /* no duplicate */
 }
 

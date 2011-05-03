@@ -63,23 +63,17 @@ int bind_socket_to_device(int, char *);
 
 int convert_ip_to_mac(union olsr_ip_addr *, struct sockaddr *, char *);
 
-int disable_redirects(const char *, struct interface *, int);
-
-int disable_redirects_global(int);
-
-int deactivate_spoof(const char *, struct interface *, int);
-
-int restore_settings(int);
-
-int enable_ip_forwarding(int);
+void net_os_set_global_ifoptions(void);
+int net_os_set_ifoptions(const char *if_name, struct interface *iface);
+int net_os_restore_ifoptions(void);
 
 int gethemusocket(struct sockaddr_in *);
 
-int getsocket(int, char *);
+int getsocket(int, struct interface *);
 
-int getsocket6(int, char *);
+int getsocket6(int, struct interface *);
 
-int get_ipv6_address(char *, struct sockaddr_in6 *, int);
+int get_ipv6_address(char *, struct sockaddr_in6 *, struct olsr_ip_prefix *);
 
 int calculate_if_metric(char *);
 
@@ -89,6 +83,8 @@ bool is_if_link_up(char *);
 
 int join_mcast(struct interface *, int);
 
+bool olsr_if_isup(const char * dev);
+int olsr_if_set_state(const char *dev, bool up);
 #endif
 
 /*

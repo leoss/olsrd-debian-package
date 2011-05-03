@@ -46,6 +46,7 @@
 #include "net_olsr.h"
 #include "olsr.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -54,9 +55,34 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#ifdef linux
+#include <linux/types.h>
+#include <linux/rtnetlink.h>
+#include <linux/version.h>
+#endif
 
 extern FILE *yyin;
 extern int yyparse(void);
+
+static char interface_defaults_name[] = "[InterfaceDefaults]";
+
+const char *FIB_METRIC_TXT[] = {
+  "flat",
+  "correct",
+  "approx",
+};
+
+const char *GW_UPLINK_TXT[] = {
+  "none",
+  "ipv4",
+  "ipv6",
+  "both"
+};
+
+const char *OLSR_IF_MODE[] = {
+  "mesh",
+  "ether"
+};
 
 static char copyright_string[] __attribute__ ((unused)) =
   "The olsr.org Optimized Link-State Routing daemon(olsrd) Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org) All rights reserved.";
@@ -100,38 +126,25 @@ main(int argc, char *argv[])
 
 #endif
 
-struct olsrd_config *
+int
 olsrd_parse_cnf(const char *filename)
 {
   struct olsr_if *in, *new_ifqueue;
   int rc;
 
-  /* Initialize the global varibles - oparse.y needs it there */
-  olsr_cnf = malloc(sizeof(*olsr_cnf));
-  if (olsr_cnf == NULL) {
-    fprintf(stderr, "Out of memory %s\n", __func__);
-    return NULL;
-  }
-
-  set_default_cnf(olsr_cnf);
-
-  printf("Parsing file: \"%s\"\n", filename);
+  fprintf(stderr, "Parsing file: \"%s\"\n", filename);
 
   yyin = fopen(filename, "r");
   if (yyin == NULL) {
     fprintf(stderr, "Cannot open configuration file '%s': %s.\n", filename, strerror(errno));
-    olsrd_free_cnf(olsr_cnf);
-    olsr_cnf = NULL;
-    return NULL;
+    return -1;
   }
 
   current_line = 1;
   rc = yyparse();
   fclose(yyin);
   if (rc != 0) {
-    olsrd_free_cnf(olsr_cnf);
-    olsr_cnf = NULL;
-    return NULL;
+    return -1;
   }
 
   /* Reverse the queue (added by user request) */
@@ -154,8 +167,245 @@ olsrd_parse_cnf(const char *filename)
     in->interf = NULL;
     in->host_emul = false;
   }
-  return olsr_cnf;
+  return 0;
 }
+
+/* prints an interface (and checks it againt the default config) and the inverted config */
+static void
+olsrd_print_interface_cnf(struct if_config_options *cnf, struct if_config_options *cnfi, bool defcnf)
+{
+  struct olsr_lq_mult *mult;
+  int lq_mult_cnt = 0;
+  char ipv6_buf[INET6_ADDRSTRLEN];                  /* buffer for IPv6 inet_htop */
+
+  if (cnf->ipv4_multicast.v4.s_addr) {
+    printf("\tIPv4 broadcast/multicast : %s%s\n", inet_ntoa(cnf->ipv4_multicast.v4),DEFAULT_STR(ipv4_multicast.v4.s_addr));
+  } else {
+    printf("\tIPv4 broadcast/multicast : AUTO%s\n",DEFAULT_STR(ipv4_multicast.v4.s_addr));
+  }
+
+  if (cnf->mode==IF_MODE_ETHER){
+    printf("\tMode           : ether%s\n",DEFAULT_STR(mode));
+  } else {
+    printf("\tMode           : mesh%s\n",DEFAULT_STR(mode));
+  }
+
+  printf("\tIPv6 multicast           : %s%s\n", inet_ntop(AF_INET6, &cnf->ipv6_multicast.v6, ipv6_buf, sizeof(ipv6_buf)),DEFAULT_STR(ipv6_multicast.v6));
+
+  printf("\tHELLO emission/validity  : %0.2f%s/%0.2f%s\n", cnf->hello_params.emission_interval, DEFAULT_STR(hello_params.emission_interval),
+         cnf->hello_params.validity_time,DEFAULT_STR(hello_params.validity_time));
+  printf("\tTC emission/validity     : %0.2f%s/%0.2f%s\n", cnf->tc_params.emission_interval, DEFAULT_STR(tc_params.emission_interval),
+         cnf->tc_params.validity_time,DEFAULT_STR(tc_params.validity_time));
+  printf("\tMID emission/validity    : %0.2f%s/%0.2f%s\n", cnf->mid_params.emission_interval, DEFAULT_STR(mid_params.emission_interval),
+         cnf->mid_params.validity_time,DEFAULT_STR(mid_params.validity_time));
+  printf("\tHNA emission/validity    : %0.2f%s/%0.2f%s\n", cnf->hna_params.emission_interval, DEFAULT_STR(hna_params.emission_interval),
+         cnf->hna_params.validity_time,DEFAULT_STR(hna_params.validity_time));
+
+  for (mult = cnf->lq_mult; mult != NULL; mult = mult->next) {
+    lq_mult_cnt++;
+    printf("\tLinkQualityMult          : %s %0.2f %s\n", inet_ntop(olsr_cnf->ip_version, &mult->addr, ipv6_buf, sizeof(ipv6_buf)),
+      (float)(mult->value) / 65536.0, ((lq_mult_cnt > cnf->orig_lq_mult_cnt)?" (d)":""));
+  }
+
+  printf("\tAutodetect changes       : %s%s\n", cnf->autodetect_chg ? "yes" : "no",DEFAULT_STR(autodetect_chg));
+}
+
+#ifdef linux
+static int olsrd_sanity_check_rtpolicy(struct olsrd_config *cnf) {
+  int prio;
+
+  /* calculate rt_policy defaults if necessary */
+  if (!cnf->smart_gw_active) {
+    /* default is "no policy rules" and "everything into the main table" */
+    if (cnf->rt_table == DEF_RT_AUTO) {
+      cnf->rt_table = 254;
+    }
+    if (cnf->rt_table_default == DEF_RT_AUTO) {
+      cnf->rt_table_default = cnf->rt_table;
+    }
+    if (cnf->rt_table_tunnel != DEF_RT_AUTO) {
+      fprintf(stderr, "Warning, setting a table for tunnels without SmartGW does not make sense.\n");
+    }
+    cnf->rt_table_tunnel = cnf->rt_table_default;
+
+    /* priority rules default is "none" */
+    if (cnf->rt_table_pri == DEF_RT_AUTO) {
+      cnf->rt_table_pri = DEF_RT_NONE;
+    }
+    if (cnf->rt_table_defaultolsr_pri == DEF_RT_AUTO) {
+      cnf->rt_table_defaultolsr_pri = DEF_RT_NONE;
+    }
+    if (cnf->rt_table_tunnel_pri == DEF_RT_AUTO) {
+      cnf->rt_table_tunnel_pri = DEF_RT_NONE;
+    }
+    if (cnf->rt_table_default_pri == DEF_RT_AUTO) {
+      cnf->rt_table_default_pri = DEF_RT_NONE;
+    }
+  }
+  else {
+    /* default is "policy rules" and "everything into separate tables (254, 223, 224)" */
+    if (cnf->rt_table == DEF_RT_AUTO) {
+      cnf->rt_table = 254;
+    }
+    if (cnf->rt_table_default == DEF_RT_AUTO) {
+      cnf->rt_table_default = 223;
+    }
+    if (cnf->rt_table_tunnel == DEF_RT_AUTO) {
+      cnf->rt_table_tunnel = 224;
+    }
+
+    /* default for "rt_table_pri" is none (main table already has a policy rule */
+    prio = 32766;
+    if (cnf->rt_table_pri > 0) {
+      prio = cnf->rt_table_pri;
+    }
+    else if (cnf->rt_table_pri == DEF_RT_AUTO) {
+      /* choose default */
+      olsr_cnf->rt_table_pri = 0;
+      fprintf(stderr, "No policy rule for rt_table_pri\n");
+    }
+
+    /* default for "rt_table_defaultolsr_pri" is +10 */
+    prio += 10;
+    if (cnf->rt_table_defaultolsr_pri > 0) {
+      prio = cnf->rt_table_defaultolsr_pri;
+    }
+    else if (cnf->rt_table_defaultolsr_pri == DEF_RT_AUTO) {
+      olsr_cnf->rt_table_defaultolsr_pri = prio;
+      fprintf(stderr, "Choose priority %u for rt_table_defaultolsr_pri\n", prio);
+    }
+
+    prio += 10;
+    if (cnf->rt_table_tunnel_pri > 0) {
+      prio = cnf->rt_table_tunnel_pri;
+    }
+    else if (cnf->rt_table_tunnel_pri == DEF_RT_AUTO) {
+      olsr_cnf->rt_table_tunnel_pri = prio;
+      fprintf(stderr, "Choose priority %u for rt_table_tunnel_pri\n", prio);
+    }
+
+    prio += 10;
+    if (cnf->rt_table_default_pri == DEF_RT_AUTO) {
+      olsr_cnf->rt_table_default_pri = prio;
+      fprintf(stderr, "Choose priority %u for rt_table_default_pri\n", prio);
+    }
+  }
+
+  /* check rule priorities */
+  if (cnf->rt_table_pri > 0) {
+    if (cnf->rt_table >= 253) {
+      fprintf(stderr, "rttable %d does not need policy rules from OLSRd\n", cnf->rt_table);
+      return -1;
+    }
+  }
+
+  prio = cnf->rt_table_pri;
+  if (cnf->rt_table_defaultolsr_pri > 0) {
+    if (prio >= cnf->rt_table_defaultolsr_pri) {
+      fprintf(stderr, "rttable_defaultolsr priority must be greater than %d\n", prio);
+      return -1;
+    }
+    if (cnf->rt_table_default >= 253) {
+      fprintf(stderr, "rttable %d does not need policy rules from OLSRd\n", cnf->rt_table_default);
+      return -1;
+    }
+    prio = olsr_cnf->rt_table_defaultolsr_pri;
+  }
+
+  if (cnf->rt_table_tunnel_pri > 0 ) {
+    if (prio >= cnf->rt_table_tunnel_pri) {
+      fprintf(stderr, "rttable_tunnel priority must be greater than %d\n", prio);
+      return -1;
+    }
+    if (cnf->rt_table_tunnel >= 253) {
+      fprintf(stderr, "rttable %d does not need policy rules from OLSRd\n", cnf->rt_table_tunnel);
+      return -1;
+    }
+    prio = cnf->rt_table_tunnel_pri;
+  }
+
+  if (cnf->rt_table_default_pri > 0) {
+    if (prio >= cnf->rt_table_default_pri) {
+      fprintf(stderr, "rttable_default priority must be greater than %d\n", prio);
+      return -1;
+    }
+    if (cnf->rt_table_default >= 253) {
+      fprintf(stderr, "rttable %d does not need policy rules from OLSRd\n", cnf->rt_table_default);
+      return -1;
+    }
+  }
+
+  /* filter rt_proto entry */
+  if (cnf->rt_proto == 1) {
+    /* protocol 1 is reserved, so better use 0 */
+    cnf->rt_proto = 0;
+  }
+  else if (cnf->rt_proto == 0) {
+    cnf->rt_proto = RTPROT_BOOT;
+  }
+  return 0;
+}
+
+#endif
+
+
+static 
+int olsrd_sanity_check_interface_cnf(struct if_config_options * io, struct olsrd_config * cnf, char* name) {
+  struct olsr_lq_mult *mult;
+
+  /* HELLO interval */
+
+  if (io->hello_params.validity_time < 0.0) {
+    if (cnf->lq_level == 0)
+      io->hello_params.validity_time = NEIGHB_HOLD_TIME;
+
+    else
+      io->hello_params.validity_time = (int)(REFRESH_INTERVAL / cnf->lq_aging);
+  }
+
+  if (io->hello_params.emission_interval < cnf->pollrate || io->hello_params.emission_interval > io->hello_params.validity_time) {
+    fprintf(stderr, "Bad HELLO parameters! (em: %0.2f, vt: %0.2f) for dev %s\n", io->hello_params.emission_interval,
+            io->hello_params.validity_time, name);
+    return -1;
+  }
+
+  /* TC interval */
+  if (io->tc_params.emission_interval < cnf->pollrate || io->tc_params.emission_interval > io->tc_params.validity_time) {
+    fprintf(stderr, "Bad TC parameters! (em: %0.2f, vt: %0.2f) for dev %s\n", io->tc_params.emission_interval,
+        io->tc_params.validity_time, name);
+    return -1;
+  }
+
+  if (cnf->min_tc_vtime > 0.0 && (io->tc_params.validity_time / io->tc_params.emission_interval) < 128) {
+    fprintf(stderr, "Please use a tc vtime at least 128 times the emission interval while using the min_tc_vtime hack.\n");
+    return -1;
+  }
+  /* MID interval */
+  if (io->mid_params.emission_interval < cnf->pollrate || io->mid_params.emission_interval > io->mid_params.validity_time) {
+    fprintf(stderr, "Bad MID parameters! (em: %0.2f, vt: %0.2f) for dev %s\n", io->mid_params.emission_interval,
+            io->mid_params.validity_time, name);
+    return -1;
+  }
+
+  /* HNA interval */
+  if (io->hna_params.emission_interval < cnf->pollrate || io->hna_params.emission_interval > io->hna_params.validity_time) {
+    fprintf(stderr, "Bad HNA parameters! (em: %0.2f, vt: %0.2f) for dev %s\n", io->hna_params.emission_interval,
+            io->hna_params.validity_time, name);
+    return -1;
+  }
+
+  for (mult = io->lq_mult; mult; mult=mult->next) {
+    if (mult->value > LINK_LOSS_MULTIPLIER) {
+      struct ipaddr_str buf;
+
+      fprintf(stderr, "Bad Linkquality multiplier ('%s' on IP %s: %0.2f)\n",
+          name, olsr_ip_to_string(&buf, &mult->addr), (float)mult->value / (float)LINK_LOSS_MULTIPLIER);
+      return -1;
+    }
+  }
+  return 0;
+}
+
 
 int
 olsrd_sanity_check_cnf(struct olsrd_config *cnf)
@@ -176,8 +426,7 @@ olsrd_sanity_check_cnf(struct olsrd_config *cnf)
   }
 
   /* TOS */
-  if (                          //cnf->tos < MIN_TOS ||
-       cnf->tos > MAX_TOS) {
+  if (cnf->tos > MAX_TOS) {
     fprintf(stderr, "TOS %d is not allowed\n", cnf->tos);
     return -1;
   }
@@ -211,14 +460,7 @@ olsrd_sanity_check_cnf(struct olsrd_config *cnf)
     }
   }
 
-  /* Check Link quality dijkstra limit */
-  if (olsr_cnf->lq_dinter < cnf->pollrate && olsr_cnf->lq_dlimit != 255) {
-    fprintf(stderr, "Link quality dijkstra limit must be higher than pollrate\n");
-    return -1;
-  }
-
   /* Pollrate */
-
   if (cnf->pollrate < MIN_POLLRATE || cnf->pollrate > MAX_POLLRATE) {
     fprintf(stderr, "Pollrate %0.2f is not allowed\n", cnf->pollrate);
     return -1;
@@ -256,8 +498,7 @@ olsrd_sanity_check_cnf(struct olsrd_config *cnf)
   }
 
   /* Link quality level */
-
-  if (cnf->lq_level > MAX_LQ_LEVEL) {
+  if (cnf->lq_level != 0 && cnf->lq_level != 2) {
     fprintf(stderr, "LQ level %d is not allowed\n", cnf->lq_level);
     return -1;
   }
@@ -274,24 +515,102 @@ olsrd_sanity_check_cnf(struct olsrd_config *cnf)
     return -1;
   }
 
+#if defined linux
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
+  if (cnf->ip_version == AF_INET6 && cnf->smart_gw_active) {
+    fprintf(stderr, "Smart gateways are not supported for linux kernel 2.4 and ipv6\n");
+    return -1;
+  }
+#endif
+
+  /* this rtpolicy settings are also currently only used in Linux */
+  if (olsrd_sanity_check_rtpolicy(cnf)) {
+    return -1;
+  }
+
+#endif
+
   if (in == NULL) {
     fprintf(stderr, "No interfaces configured!\n");
     return -1;
   }
 
   if (cnf->min_tc_vtime < 0.0) {
-	fprintf(stderr, "Error, negative minimal tc time not allowed.\n");
-	return -1;
+    fprintf(stderr, "Error, negative minimal tc time not allowed.\n");
+    return -1;
   }
   if (cnf->min_tc_vtime > 0.0) {
 	  fprintf(stderr, "Warning, you are using the min_tc_vtime hack. We hope you know what you are doing... contact olsr.org otherwise.\n");
   }
 
+  if (cnf->smart_gw_type >= GW_UPLINK_CNT) {
+    fprintf(stderr, "Error, illegal gateway uplink type: %d\n", cnf->smart_gw_type);
+    return -1;
+  }
+  if (cnf->smart_gw_downlink < MIN_SMARTGW_SPEED || cnf->smart_gw_downlink > MAX_SMARTGW_SPEED) {
+    fprintf(stderr, "Error, bad gateway downlink speed: %d kbit/s (should be %d-%d)\n",
+        cnf->smart_gw_downlink, MIN_SMARTGW_SPEED, MAX_SMARTGW_SPEED);
+    return -1;
+  }
+  if (cnf->smart_gw_uplink < MIN_SMARTGW_SPEED || cnf->smart_gw_uplink > MAX_SMARTGW_SPEED) {
+    fprintf(stderr, "Error, bad gateway uplink speed: %d kbit/s (should be %d-%d)\n",
+        cnf->smart_gw_uplink, MIN_SMARTGW_SPEED, MAX_SMARTGW_SPEED);
+    return -1;
+  }
+
+  if (cnf->interface_defaults == NULL) {
+    /* get a default configuration if the user did not specify one */
+    cnf->interface_defaults = get_default_if_config();
+  } else {
+    olsrd_print_interface_cnf(cnf->interface_defaults, cnf->interface_defaults, false);
+    olsrd_sanity_check_interface_cnf(cnf->interface_defaults, cnf, interface_defaults_name);
+  }
+
   /* Interfaces */
   while (in) {
-    struct olsr_lq_mult *mult;
+    struct olsr_lq_mult *mult, *mult_orig;
 
     io = in->cnf;
+
+    olsrd_print_interface_cnf(in->cnf, in->cnfi, false);
+
+    /*apply defaults*/
+    {
+      size_t pos;
+      struct olsr_lq_mult *mult_temp, *mult_orig_walk;
+      uint8_t *cnfptr = (uint8_t*)in->cnf;
+      uint8_t *cnfiptr = (uint8_t*)in->cnfi;
+      uint8_t *defptr = (uint8_t*)cnf->interface_defaults;
+
+      /*save interface specific lqmults, as they are merged togehter later*/
+      mult_orig = io->lq_mult;
+
+      assert(in->cnf);
+      assert(in->cnfi);
+      for (pos = 0; pos < sizeof(*in->cnf); pos++) {
+        if (cnfptr[pos] != cnfiptr[pos]) {
+          cnfptr[pos] = defptr[pos]; cnfiptr[pos]=0x00;
+        }
+        else cnfiptr[pos]=0xFF;
+      }
+
+      io->lq_mult=NULL;
+      /*copy default lqmults into this interface*/
+      for (mult = cnf->interface_defaults->lq_mult; mult; mult=mult->next) {
+        /*search same lqmult in orig_list*/
+        for (mult_orig_walk = mult_orig; mult_orig_walk; mult_orig_walk=mult_orig_walk->next) {
+          if (ipequal(&mult_orig_walk->addr,&mult->addr)) {
+            break;
+          }
+        }
+        if (mult_orig_walk == NULL) {
+          mult_temp=malloc(sizeof(struct olsr_lq_mult));
+          memcpy(mult_temp,mult,sizeof(struct olsr_lq_mult));
+          mult_temp->next=io->lq_mult;
+          io->lq_mult=mult_temp;
+        }
+      }
+    }
 
     if (in->name == NULL || !strlen(in->name)) {
       fprintf(stderr, "Interface has no name!\n");
@@ -303,55 +622,21 @@ olsrd_sanity_check_cnf(struct olsrd_config *cnf)
       return -1;
     }
 
-    /* HELLO interval */
-
-    if (io->hello_params.validity_time < 0.0) {
-      if (cnf->lq_level == 0)
-        io->hello_params.validity_time = NEIGHB_HOLD_TIME;
-
-      else
-        io->hello_params.validity_time = (int)(REFRESH_INTERVAL / cnf->lq_aging);
-    }
-
-    if (io->hello_params.emission_interval < cnf->pollrate || io->hello_params.emission_interval > io->hello_params.validity_time) {
-      fprintf(stderr, "Bad HELLO parameters! (em: %0.2f, vt: %0.2f)\n", io->hello_params.emission_interval,
-              io->hello_params.validity_time);
-      return -1;
-    }
-
-    /* TC interval */
-    if (io->tc_params.emission_interval < cnf->pollrate || io->tc_params.emission_interval > io->tc_params.validity_time) {
-      fprintf(stderr, "Bad TC parameters! (em: %0.2f, vt: %0.2f)\n", io->tc_params.emission_interval, io->tc_params.validity_time);
-      return -1;
-    }
-
-    if (cnf->min_tc_vtime > 0.0 && (io->tc_params.validity_time / io->tc_params.emission_interval) < 128) {
-      fprintf(stderr, "Please use a tc vtime at least 128 times the emission interval while using the min_tc_vtime hack.\n");
-      return -1;
-    }
-    /* MID interval */
-    if (io->mid_params.emission_interval < cnf->pollrate || io->mid_params.emission_interval > io->mid_params.validity_time) {
-      fprintf(stderr, "Bad MID parameters! (em: %0.2f, vt: %0.2f)\n", io->mid_params.emission_interval,
-              io->mid_params.validity_time);
-      return -1;
-    }
-
-    /* HNA interval */
-    if (io->hna_params.emission_interval < cnf->pollrate || io->hna_params.emission_interval > io->hna_params.validity_time) {
-      fprintf(stderr, "Bad HNA parameters! (em: %0.2f, vt: %0.2f)\n", io->hna_params.emission_interval,
-              io->hna_params.validity_time);
-      return -1;
-    }
-
-    for (mult = io->lq_mult; mult; mult=mult->next) {
-      if (mult->value > LINK_LOSS_MULTIPLIER) {
-        struct ipaddr_str buf;
-
-        fprintf(stderr, "Bad Linkquality multiplier ('%s' on IP %s: %0.2f)\n",
-            in->name, olsr_ip_to_string(&buf, &mult->addr), (float)mult->value / (float)LINK_LOSS_MULTIPLIER);
-        return -1;
+    /*merge lqmults*/
+    if (mult_orig!=NULL) {
+      io->orig_lq_mult_cnt=1;
+      /*search last of interface specific lqmults*/
+      mult = mult_orig;
+      while (mult->next!=NULL) {
+        mult=mult->next;
       }
+      /*append default lqmults ath the end of the interface specific (to ensure they can overwrite them)*/
+      mult->next=io->lq_mult;
+      io->lq_mult=mult_orig;
     }
+
+    if (olsrd_sanity_check_interface_cnf(io, cnf, in->name)) return -1;
+
     in = in->next;
   }
 
@@ -379,10 +664,11 @@ olsrd_free_cnf(struct olsrd_config *cnf)
     }
 
     free(in->cnf);
+    free(in->cnfi);
+
     ind = in;
     in = in->next;
-    free(ind->name);
-    free(ind->config);
+
     free(ind);
   }
 
@@ -423,10 +709,17 @@ set_default_cnf(struct olsrd_config *cnf)
   cnf->allow_no_interfaces = DEF_ALLOW_NO_INTS;
   cnf->tos = DEF_TOS;
   cnf->olsrport = DEF_OLSRPORT;
-  cnf->rttable = DEF_RTTABLE;
-  cnf->rtproto = DEF_RTPROTO;
-  cnf->rttable_default = 0;
+  cnf->rt_proto = DEF_RTPROTO;
+  cnf->rt_table = DEF_RT_AUTO;
+  cnf->rt_table_default = DEF_RT_AUTO;
+  cnf->rt_table_tunnel = DEF_RT_AUTO;
+  cnf->rt_table_pri = DEF_RT_AUTO;
+  cnf->rt_table_default_pri = DEF_RT_AUTO;
+  cnf->rt_table_defaultolsr_pri = DEF_RT_AUTO;
+  cnf->rt_table_tunnel_pri = DEF_RT_AUTO;
+
   cnf->willingness_auto = DEF_WILL_AUTO;
+  cnf->willingness = DEF_WILLINGNESS;
   cnf->ipc_connections = DEF_IPC_CONNECTIONS;
   cnf->fib_metric = DEF_FIB_METRIC;
 
@@ -442,8 +735,6 @@ set_default_cnf(struct olsrd_config *cnf)
   cnf->mpr_coverage = MPR_COVERAGE;
   cnf->lq_level = DEF_LQ_LEVEL;
   cnf->lq_fish = DEF_LQ_FISH;
-  cnf->lq_dlimit = DEF_LQ_DIJK_LIMIT;
-  cnf->lq_dinter = DEF_LQ_DIJK_INTER;
   cnf->lq_aging = DEF_LQ_AGING;
   cnf->lq_algorithm = NULL;
   cnf->lq_nat_thresh = DEF_LQ_NAT_THRESH;
@@ -455,7 +746,20 @@ set_default_cnf(struct olsrd_config *cnf)
   cnf->exit_value = EXIT_SUCCESS;
   cnf->max_tc_vtime = 0.0;
   cnf->ioctl_s = 0;
-#if LINUX_POLICY_ROUTING
+  cnf->use_niit = DEF_USE_NIIT;
+  cnf->niit4to6_if_index = 0;
+  cnf->niit6to4_if_index = 0;
+
+  cnf->smart_gw_active = DEF_SMART_GW;
+  cnf->smart_gw_allow_nat = DEF_GW_ALLOW_NAT;
+  cnf->smart_gw_type = DEF_GW_TYPE;
+  cnf->smart_gw_uplink = DEF_UPLINK_SPEED;
+  cnf->smart_gw_uplink_nat = DEF_GW_UPLINK_NAT;
+  cnf->smart_gw_downlink = DEF_DOWNLINK_SPEED;
+
+  cnf->use_src_ip_routes = DEF_USE_SRCIP_ROUTES;
+
+#ifdef LINUX_NETLINK_ROUTING
   cnf->rtnl_s = 0;
 #endif
 
@@ -467,7 +771,6 @@ set_default_cnf(struct olsrd_config *cnf)
 struct if_config_options *
 get_default_if_config(void)
 {
-  struct in6_addr in6;
   struct if_config_options *io = malloc(sizeof(*io));
 
   if (io == NULL) {
@@ -477,20 +780,14 @@ get_default_if_config(void)
 
   memset(io, 0, sizeof(*io));
 
-  io->ipv6_addrtype = 1;        /* XXX - FixMe */
+  io->mode = DEF_IF_MODE;
 
-  inet_pton(AF_INET6, OLSR_IPV6_MCAST_SITE_LOCAL, &in6);
-  io->ipv6_multi_site.v6 = in6;
-
-  inet_pton(AF_INET6, OLSR_IPV6_MCAST_GLOBAL, &in6);
-  io->ipv6_multi_glbl.v6 = in6;
+  io->ipv6_multicast = ipv6_def_multicast;
 
   io->lq_mult = NULL;
 
   io->weight.fixed = false;
   io->weight.value = 0;
-
-  io->ipv6_addrtype = 0;        /* global */
 
   io->hello_params.emission_interval = HELLO_INTERVAL;
   io->hello_params.validity_time = NEIGHB_HOLD_TIME;
@@ -513,8 +810,6 @@ olsrd_print_cnf(struct olsrd_config *cnf)
   struct olsr_if *in = cnf->interfaces;
   struct plugin_entry *pe = cnf->plugins;
   struct ip_prefix_list *ie = cnf->ipc_nets;
-  struct olsr_lq_mult *mult;
-  char ipv6_buf[100];                  /* buffer for IPv6 inet_htop */
 
   printf(" *** olsrd configuration ***\n");
 
@@ -529,8 +824,9 @@ olsrd_print_cnf(struct olsrd_config *cnf)
     printf("No interfaces    : NOT ALLOWED\n");
   printf("TOS              : 0x%02x\n", cnf->tos);
   printf("OlsrPort          : 0x%03x\n", cnf->olsrport);
-  printf("RtTable          : 0x%02x\n", cnf->rttable);
-  printf("RtTableDefault   : 0x%02x\n", cnf->rttable_default);
+  printf("RtTable          : %u\n", cnf->rt_table);
+  printf("RtTableDefault   : %u\n", cnf->rt_table_default);
+  printf("RtTableTunnel    : %u\n", cnf->rt_table_tunnel);
   if (cnf->willingness_auto)
     printf("Willingness      : AUTO\n");
   else
@@ -559,8 +855,6 @@ olsrd_print_cnf(struct olsrd_config *cnf)
 
   printf("LQ fish eye      : %d\n", cnf->lq_fish);
 
-  printf("LQ Dijkstra limit: %d, %0.2f\n", cnf->lq_dlimit, cnf->lq_dinter);
-
   printf("LQ aging factor  : %f\n", cnf->lq_aging);
 
   printf("LQ algorithm name: %s\n", cnf->lq_algorithm ? cnf->lq_algorithm : "default");
@@ -569,46 +863,40 @@ olsrd_print_cnf(struct olsrd_config *cnf)
 
   printf("Clear screen     : %s\n", cnf->clear_screen ? "yes" : "no");
 
+  printf("Use niit         : %s\n", cnf->use_niit ? "yes" : "no");
+
+  printf("Smart Gateway    : %s\n", cnf->smart_gw_active ? "yes" : "no");
+
+  printf("SmGw. Allow NAT  : %s\n", cnf->smart_gw_allow_nat ? "yes" : "no");
+
+  printf("Smart Gw. Uplink : %s\n", GW_UPLINK_TXT[cnf->smart_gw_type]);
+
+  printf("SmGw. Uplink NAT : %s\n", cnf->smart_gw_uplink_nat ? "yes" : "no");
+
+  printf("Smart Gw. speed  : %d kbit/s up, %d kbit/s down\n",
+      cnf->smart_gw_uplink, cnf->smart_gw_downlink);
+
+  if (olsr_cnf->smart_gw_prefix.prefix_len == 0) {
+    printf("# Smart Gw. prefix : ::/0\n");
+  }
+  else {
+    printf("Smart Gw. prefix : %s\n", olsr_ip_prefix_to_string(&cnf->smart_gw_prefix));
+  }
+
   /* Interfaces */
   if (in) {
-    printf("Interfaces:\n");
-    while (in) {
-      printf(" dev: \"%s\"\n", in->name);
+    /*print interface default config*/
+    printf(" InterfaceDefaults: \n");
+    olsrd_print_interface_cnf(cnf->interface_defaults, cnf->interface_defaults, true);
 
-      if (in->cnf->ipv4_broadcast.v4.s_addr) {
-        printf("\tIPv4 broadcast           : %s\n", inet_ntoa(in->cnf->ipv4_broadcast.v4));
-      } else {
-        printf("\tIPv4 broadcast           : AUTO\n");
+    while (in)
+    { 
+      if (cnf->interface_defaults!=in->cnf)
+      {
+        printf(" dev: \"%s\"\n", in->name);
+
+        olsrd_print_interface_cnf(in->cnf, in->cnfi, false);
       }
-
-      if (in->cnf->mode==IF_MODE_ETHER){
-        printf("\tMode           : ether\n");
-      } else {
-        printf("\tMode           : mesh\n");
-      }
-
-      printf("\tIPv6 addrtype            : %s\n", in->cnf->ipv6_addrtype ? "site-local" : "global");
-
-      //union olsr_ip_addr       ipv6_multi_site;
-      //union olsr_ip_addr       ipv6_multi_glbl;
-      printf("\tIPv6 multicast site/glbl : %s", inet_ntop(AF_INET6, &in->cnf->ipv6_multi_site.v6, ipv6_buf, sizeof(ipv6_buf)));
-      printf("/%s\n", inet_ntop(AF_INET6, &in->cnf->ipv6_multi_glbl.v6, ipv6_buf, sizeof(ipv6_buf)));
-
-      printf("\tHELLO emission/validity  : %0.2f/%0.2f\n", in->cnf->hello_params.emission_interval,
-             in->cnf->hello_params.validity_time);
-      printf("\tTC emission/validity     : %0.2f/%0.2f\n", in->cnf->tc_params.emission_interval, in->cnf->tc_params.validity_time);
-      printf("\tMID emission/validity    : %0.2f/%0.2f\n", in->cnf->mid_params.emission_interval,
-             in->cnf->mid_params.validity_time);
-      printf("\tHNA emission/validity    : %0.2f/%0.2f\n", in->cnf->hna_params.emission_interval,
-             in->cnf->hna_params.validity_time);
-
-      for (mult = in->cnf->lq_mult; mult != NULL; mult = mult->next) {
-        printf("\tLinkQualityMult          : %s %0.2f\n", inet_ntop(cnf->ip_version, &mult->addr, ipv6_buf, sizeof(ipv6_buf)),
-               (float)(mult->value) / 65536.0);
-      }
-
-      printf("\tAutodetetc changes       : %s\n", in->cnf->autodetect_chg ? "yes" : "no");
-
       in = in->next;
     }
   }
@@ -695,6 +983,18 @@ win32_olsrd_free(void *ptr)
 }
 #endif
 
+static void update_has_gateway_fields(void) {
+  struct ip_prefix_list *h;
+
+  olsr_cnf->has_ipv4_gateway = false;
+  olsr_cnf->has_ipv6_gateway = false;
+
+  for (h = olsr_cnf->hna_entries; h != NULL; h = h->next) {
+    olsr_cnf->has_ipv4_gateway |= ip_prefix_is_v4_inetgw(&h->net) || ip_prefix_is_mappedv4_inetgw(&h->net);
+    olsr_cnf->has_ipv6_gateway |= ip_prefix_is_v6_inetgw(&h->net);
+  }
+}
+
 void
 ip_prefix_list_add(struct ip_prefix_list **list, const union olsr_ip_addr *net, uint8_t prefix_len)
 {
@@ -706,6 +1006,9 @@ ip_prefix_list_add(struct ip_prefix_list **list, const union olsr_ip_addr *net, 
   /* Queue */
   new_entry->next = *list;
   *list = new_entry;
+
+  /* update gateway flags */
+  update_has_gateway_fields();
 }
 
 int
@@ -722,6 +1025,9 @@ ip_prefix_list_remove(struct ip_prefix_list **list, const union olsr_ip_addr *ne
         prev->next = h->next;
       }
       free(h);
+
+      /* update gateway flags */
+      update_has_gateway_fields();
       return 1;
     }
     prev = h;

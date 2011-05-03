@@ -74,9 +74,11 @@ void parser_set_disp_pack_in(bool);
 
 void olsr_init_parser(void);
 
-void olsr_input(int);
+void olsr_destroy_parser(void);
 
-void olsr_input_hostemu(int);
+void olsr_input(int fd, void *, unsigned int);
+
+void olsr_input_hostemu(int fd, void *, unsigned int);
 
 void olsr_parser_add_function(parse_function, uint32_t);
 

@@ -52,6 +52,7 @@
 #include "mid_set.h"
 #include "scheduler.h"
 #include "log.h"
+#include <time.h>
 
 static void default_lq_initialize_ff(void);
 
@@ -97,7 +98,9 @@ struct lq_handler lq_etx_ff_handler = {
   &default_lq_print_cost_ff,
 
   sizeof(struct default_lq_ff_hello),
-  sizeof(struct default_lq_ff)
+  sizeof(struct default_lq_ff),
+  4,
+  4
 };
 
 static void
@@ -190,7 +193,7 @@ default_lq_parser_ff(struct olsr *olsr, struct interface *in_if, union olsr_ip_a
   /* ignore double package */
   if (lq->last_seq_nr == olsr->olsr_seqno) {
     struct ipaddr_str buf;
-    olsr_syslog(OLSR_LOG_INFO, "detected duplicate packet with seqnr %d from %s on %s (%d Bytes)",
+    olsr_syslog(OLSR_LOG_INFO, "detected duplicate packet with seqnr 0x%x from %s on %s (%d Bytes)",
 		olsr->olsr_seqno,olsr_ip_to_string(&buf, from_addr),in_if->int_name,ntohs(olsr->olsr_packlen));
     return;
   }
@@ -236,7 +239,7 @@ default_lq_ff_timer(void __attribute__ ((unused)) * context)
     }
 
     /* calculate link quality */
-    if (received + total == 0) {
+    if (total == 0) {
       tlq->lq.valueLq = 0;
     } else {
       // start with link-loss-factor
@@ -244,14 +247,7 @@ default_lq_ff_timer(void __attribute__ ((unused)) * context)
 
       /* keep missed hello periods in mind (round up hello interval to seconds) */
       if (tlq->missed_hellos > 1) {
-        int penalty = received * tlq->missed_hellos * link->inter->hello_etime/1000 / LQ_FF_WINDOW;
-
-        if (penalty < 0) {
-          received = 0;
-        }
-        else {
-          received -= penalty;
-        }
+        received = received - received * tlq->missed_hellos * link->inter->hello_etime/1000 / LQ_FF_WINDOW;
       }
 
       // calculate received/total factor

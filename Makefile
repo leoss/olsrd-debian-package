@@ -39,7 +39,7 @@
 # Please also write a new version to:
 # gui/win32/Main/Frontend.rc (line 71, around "CAPTION [...]")
 # gui/win32/Inst/installer.nsi (line 57, around "MessageBox MB_YESNO [...]")
-VERS =		0.5.6-r7
+VERS =		0.6.1
 
 TOPDIR = .
 include Makefile.inc
@@ -76,7 +76,7 @@ switch:
 src/builddata.c:
 	@$(RM) "$@"
 	@echo "#include \"defs.h\"" >> "$@" 
-	@echo "const char olsrd_version[] = \"olsr.org - $(VERS)\";" >> "$@" 
+	@echo "const char olsrd_version[] = \"olsr.org -  $(VERS)-git_`git log -1 --pretty=%h`-hash_`./make/hash_source.sh`\";"  >> "$@"
 	@date +"const char build_date[] = \"%Y-%m-%d %H:%M:%S\";" >> "$@" 
 	@echo "const char build_host[] = \"$(shell hostname)\";" >> "$@" 
 
@@ -85,13 +85,12 @@ src/builddata.c:
 
 clean:
 	-rm -f $(OBJS) $(SRCS:%.c=%.d) $(EXENAME) $(EXENAME).exe src/builddata.c $(TMPFILES)
-ifeq ($(OS), win32)
 	-rm -f libolsrd.a
+	-rm -f olsr_switch.exe
 	-rm -f gui/win32/Main/olsrd_cfgparser.lib
 	-rm -f olsr-setup.exe
 	-rm -fr gui/win32/Main/Release
 	-rm -fr gui/win32/Shim/Release
-endif
 
 uberclean:	clean clean_libs
 	-rm -f $(TAGFILE)
@@ -151,10 +150,9 @@ ifeq ($(OS),win32)
 SUBDIRS := dot_draw httpinfo mini pgraph secure txtinfo
 else
 ifeq ($(OS),android)
-# nameservice: no regex
-SUBDIRS := bmf dot_draw dyn_gw_plain httpinfo mini quagga secure tas txtinfo watchdog
+SUBDIRS := arprefresh bmf dot_draw dyn_gw_plain httpinfo mini nameservice pgraph secure tas txtinfo watchdog
 else
-SUBDIRS := bmf dot_draw dyn_gw dyn_gw_plain httpinfo mini nameservice pgraph secure txtinfo watchdog
+SUBDIRS := dot_draw dyn_gw dyn_gw_plain httpinfo mini nameservice pgraph secure txtinfo watchdog
 endif
 endif
 endif
@@ -163,15 +161,7 @@ libs:
 		set -e;for dir in $(SUBDIRS);do $(MAKECMD) -C lib/$$dir LIBDIR=$(LIBDIR);done
 
 libs_clean clean_libs:
-		-for dir in $(SUBDIRS);do $(MAKECMD) -C lib/$$dir LIBDIR=$(LIBDIR) clean;done
-ifeq ($(OS), win32)
-		-rm -f lib/pgraph/olsrd_pgraph.dll
-		-rm -f lib/txtinfo/olsrd_txtinfo.dll
-		-rm -f lib/httpinfo/olsrd_httpinfo.dll
-		-rm -f lib/secure/olsrd_secure.dll
-		-rm -f lib/dot_draw/olsrd_dot_draw.dll
-		-rm -f lib/mini/olsrd_mini.dll
-endif
+		-for dir in $(SUBDIRS);do $(MAKECMD) -C lib/$$dir LIBDIR=$(LIBDIR) clean;rm -f lib/$$dir/*.so lib/$$dir/*.dll;done
 
 libs_install install_libs:
 		set -e;for dir in $(SUBDIRS);do $(MAKECMD) -C lib/$$dir LIBDIR=$(LIBDIR) install;done
@@ -226,6 +216,10 @@ quagga:
 		$(MAKECMD) -C lib/quagga 
 		$(MAKECMD) -C lib/quagga DESTDIR=$(DESTDIR) install 
 
+mdns:
+		$(MAKECMD) -C lib/mdns clean
+		$(MAKECMD) -C lib/mdns 
+		$(MAKECMD) -C lib/mdns DESTDIR=$(DESTDIR) install 
 txtinfo:
 		$(MAKECMD) -C lib/txtinfo clean
 		$(MAKECMD) -C lib/txtinfo 

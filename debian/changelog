@@ -1,3 +1,36 @@
+olsrd (0.6.1-1) unstable; urgency=low
+
+  [ Holger Levsen ]
+  * New upstream version with quite some fixes and new features, see upstream
+    changelog for details. Quoting from there:
+     Change in version number system. No more -rcX for release candidates and
+     -rX for bugfix releases. In future bugfix releases or updates of plugins
+     will increase the third digit of the version string while feature 
+     releases will increase the first and/or the second one.
+  * Update package description, OLSR is no experimental protocol anymore.
+
+  [ Roland Stigge ]
+  * New maintainer (Closes: #612277)
+  * Adjusted debian patches to work with 0.6.1
+  * debian/control:
+    - Standards-Version: 3.9.2
+    - Build-Depends: debhelper (>=8)
+  * Debian source format: 3.0 (quilt)
+  * Included remaining plugins
+  * New upstream version works with newer kernels (Closes: #605296)
+  * New upstream version fixes memory leak (Closes: #605295)
+
+ -- Roland Stigge <stigge@antcom.de>  Tue, 03 May 2011 15:30:56 +0200
+
+olsrd (0.5.6-r8-1) unstable; urgency=low
+
+  * New upstream version, the eighth maintenance release of 0.5.6, introducing
+    options to set the source and destination IP of the OLSR packets and a 
+    more flexible handling config handling as well as some bug fixes including
+    memory leaks.
+
+ -- Holger Levsen <holger@debian.org>  Wed, 20 Jan 2010 01:13:43 +0000
+
 olsrd (0.5.6-r7-1) unstable; urgency=low
 
   * New upstream version, the seventh maintenance release of 0.5.6, with some

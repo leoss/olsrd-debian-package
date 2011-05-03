@@ -73,7 +73,6 @@
 #include "hna_set.h"
 #include "mid_set.h"
 #include "link_set.h"
-#include "socket_parser.h"
 #include "net_olsr.h"
 #include "lq_plugin.h"
 #include "common/autobuf.h"
@@ -104,7 +103,7 @@ static int plugin_ipc_init(void);
 /* Event function to register with the sceduler */
 static int pcf_event(int, int, int);
 
-static void ipc_action(int);
+static void ipc_action(int, void *, unsigned int);
 
 static void ipc_print_neigh_link(struct autobuf *abuf, const struct neighbor_entry *neighbor);
 
@@ -243,13 +242,13 @@ plugin_ipc_init(void)
 #if 0
   printf("Adding socket with olsrd\n");
 #endif
-  add_olsr_socket(ipc_socket, &ipc_action);
+  add_olsr_socket(ipc_socket, &ipc_action, NULL, NULL, SP_PR_READ);
 
   return 1;
 }
 
 static void
-ipc_action(int fd __attribute__ ((unused)))
+ipc_action(int fd __attribute__ ((unused)), void *data __attribute__ ((unused)), unsigned int flags __attribute__ ((unused)))
 {
   struct sockaddr_in pin;
   socklen_t addrlen = sizeof(struct sockaddr_in);
@@ -288,7 +287,8 @@ dotdraw_write_data(void *foo __attribute__ ((unused))) {
   struct timeval tv;
 
   FD_ZERO(&set);
-  FD_SET(outbuffer_socket, &set);
+  /* prevent warning on WIN32 */
+  FD_SET((unsigned int)outbuffer_socket, &set);
 
   tv.tv_sec = 0;
   tv.tv_usec = 0;
@@ -299,11 +299,11 @@ dotdraw_write_data(void *foo __attribute__ ((unused))) {
   }
 
   if (FD_ISSET(outbuffer_socket, &set)) {
-    result = write(outbuffer_socket, outbuffer.buf, outbuffer.len);
+    result = send(outbuffer_socket, outbuffer.buf, outbuffer.len, 0);
     if (result > 0)
       abuf_pull(&outbuffer, result);
 
-    if (result <= 0) {
+    if (result < 0) {
       /* close this socket and cleanup*/
       close(outbuffer_socket);
       abuf_free(&outbuffer);
@@ -359,7 +359,8 @@ pcf_event(int my_changes_neighborhood, int my_changes_topology, int my_changes_h
 
       /* Check all networks */
       for (tmp_net = tmp_hna->networks.next; tmp_net != &tmp_hna->networks; tmp_net = tmp_net->next) {
-        ipc_print_net(&outbuffer, &tmp_hna->A_gateway_addr, &tmp_net->A_network_addr, tmp_net->prefixlen);
+        ipc_print_net(&outbuffer, &tmp_hna->A_gateway_addr,
+            &tmp_net->hna_prefix.prefix, tmp_net->hna_prefix.prefix_len);
       }
     }
     OLSR_FOR_ALL_HNA_ENTRIES_END(tmp_hna);

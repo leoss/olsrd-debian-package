@@ -55,6 +55,8 @@
 
 #include "oparse.h"
  
+#define ECHO if(fwrite( yytext, yyleng, 1, yyout )) {}
+
 /* Prototypes */
 int yyget_lineno(void);
 FILE * yyget_in(void);
@@ -144,17 +146,17 @@ IPV4ADDR {QUAD}\.{QUAD}\.{QUAD}\.{QUAD}
 
 HEX16 {HEX8}{1,4}
 
-IP6PAT2 ({HEX16}:){1}:({HEX16}:){0,5}{HEX16}
-IP6PAT3 ({HEX16}:){2}:({HEX16}:){0,4}{HEX16}
-IP6PAT4 ({HEX16}:){3}:({HEX16}:){0,3}{HEX16}
-IP6PAT5 ({HEX16}:){4}:({HEX16}:){0,2}{HEX16}
-IP6PAT6 ({HEX16}:){5}:({HEX16}:){0,1}{HEX16}
-IP6PAT7 ({HEX16}:){6}:({HEX16})
-IP6PAT1 ({HEX16}:){7}{HEX16}
-IP6PAT8 ({HEX16}:){1,7}:
-IP6PAT9 ::
+IPV6PAT2 ({HEX16}:){1}:({HEX16}:){0,5}{HEX16}
+IPV6PAT3 ({HEX16}:){2}:({HEX16}:){0,4}{HEX16}
+IPV6PAT4 ({HEX16}:){3}:({HEX16}:){0,3}{HEX16}
+IPV6PAT5 ({HEX16}:){4}:({HEX16}:){0,2}{HEX16}
+IPV6PAT6 ({HEX16}:){5}:({HEX16}:){0,1}{HEX16}
+IPV6PAT7 ({HEX16}:){6}:({HEX16})
+IPV6PAT1 ({HEX16}:){7}{HEX16}
+IPV6PAT8 ({HEX16}:){1,7}:
+IPV6PAT9 ::
 
-IPV6ADDR {IP6PAT1}|{IP6PAT2}|{IP6PAT3}|{IP6PAT4}|{IP6PAT5}|{IP6PAT6}|{IP6PAT7}|{IP6PAT8}|{IP6PAT9}
+IPV6ADDR {IPV6PAT1}|{IPV6PAT2}|{IPV6PAT3}|{IPV6PAT4}|{IPV6PAT5}|{IPV6PAT6}|{IPV6PAT7}|{IPV6PAT8}|{IPV6PAT9}
 
 %%
 
@@ -201,19 +203,29 @@ IPV6ADDR {IP6PAT1}|{IP6PAT2}|{IP6PAT3}|{IP6PAT4}|{IP6PAT5}|{IP6PAT6}|{IP6PAT7}|{
     if (yylval == NULL) {
         yyterminate();
     }
-    return TOK_IP4_ADDR;
+    return TOK_IPV4_ADDR;
 }
 {IPV6ADDR} {
     yylval = get_string_token(yytext, yyleng + 1);
     if (yylval == NULL) {
         yyterminate();
     }
-    return TOK_IP6_ADDR;
+    return TOK_IPV6_ADDR;
 }
 
 "default" {
     yylval = NULL;
     return TOK_DEFAULT;
+}
+
+"auto" {
+    yylval = NULL;
+    return TOK_AUTO;
+}
+
+"none" {
+    yylval = NULL;
+    return TOK_NONE;
 }
 
 {DECDIGIT}+ {
@@ -230,16 +242,6 @@ IPV6ADDR {IP6PAT1}|{IP6PAT2}|{IP6PAT3}|{IP6PAT4}|{IP6PAT5}|{IP6PAT6}|{IP6PAT7}|{
 "no" {
     yylval = get_boolean_token(false);
     return TOK_BOOLEAN;
-}
-
-"site-local" {
-    yylval = get_boolean_token(true);
-    return TOK_IP6TYPE;
-}
-
-"global" {
-    yylval = get_boolean_token(false);
-    return TOK_IP6TYPE;
 }
 
 "Host" {
@@ -296,6 +298,10 @@ IPV6ADDR {IP6PAT1}|{IP6PAT2}|{IP6PAT3}|{IP6PAT4}|{IP6PAT5}|{IP6PAT6}|{IP6PAT7}|{
     yylval = NULL;
     return TOK_INTERFACE;
 }
+"InterfaceDefaults" {
+    yylval = NULL;
+    return TOK_INTERFACE_DEFAULTS;
+}
 
 "AllowNoInt" {
     yylval = NULL;
@@ -313,19 +319,44 @@ IPV6ADDR {IP6PAT1}|{IP6PAT2}|{IP6PAT3}|{IP6PAT4}|{IP6PAT5}|{IP6PAT6}|{IP6PAT7}|{
   return TOK_OLSRPORT;
 }
 
-"RtTable" {
-  yylval = NULL;
-  return TOK_RTTABLE;
-}
-
 "RtProto" {
   yylval = NULL;
   return TOK_RTPROTO;
 }
 
+"RtTable" {
+  yylval = NULL;
+  return TOK_RTTABLE;
+}
+
 "RtTableDefault" {
   yylval = NULL;
   return TOK_RTTABLE_DEFAULT;
+}
+
+"RtTableTunnel" {
+  yylval = NULL;
+  return TOK_RTTABLE_TUNNEL;
+}
+
+"RtTablePriority" {
+  yylval = NULL;
+  return TOK_RTTABLE_PRIORITY;
+}
+
+"RtTableDefaultOlsrPriority" {
+  yylval = NULL;
+  return TOK_RTTABLE_DEFAULTOLSR_PRIORITY;
+}
+
+"RtTableTunnelPriority" {
+  yylval = NULL;
+  return TOK_RTTABLE_TUNNEL_PRIORITY;
+}
+
+"RtTableDefaultPriority" {
+  yylval = NULL;
+  return TOK_RTTABLE_DEFAULT_PRIORITY;
 }
 
 "Willingness" {
@@ -389,11 +420,6 @@ IPV6ADDR {IP6PAT1}|{IP6PAT2}|{IP6PAT3}|{IP6PAT4}|{IP6PAT5}|{IP6PAT6}|{IP6PAT7}|{
     return TOK_LQ_FISH;
 }
 
-"LinkQualityDijkstraLimit" {
-    yylval = NULL;
-    return TOK_LQ_DLIMIT;
-}
-
 "LinkQualityAging" {
     yylval = NULL;
     return TOK_LQ_AGING;
@@ -402,11 +428,6 @@ IPV6ADDR {IP6PAT1}|{IP6PAT2}|{IP6PAT3}|{IP6PAT4}|{IP6PAT5}|{IP6PAT6}|{IP6PAT7}|{
 "LinkQualityAlgorithm" {
     yylval = NULL;
     return TOK_LQ_PLUGIN;
-}
-
-"LinkQualityWinSize" {
-    yylval = NULL;
-    return TOK_LQ_WSIZE;
 }
 
 "NatThreshold" {
@@ -434,30 +455,80 @@ IPV6ADDR {IP6PAT1}|{IP6PAT2}|{IP6PAT3}|{IP6PAT4}|{IP6PAT5}|{IP6PAT6}|{IP6PAT7}|{
     return TOK_CLEAR_SCREEN;
 }
 
+"UseNiit" {
+    yylval = NULL;
+    return TOK_USE_NIIT;
+}
+
+"SmartGateway" {
+    yylval = NULL;
+    return TOK_SMART_GW;
+}
+
+"SmartGatewayAllowNAT" {
+    yylval = NULL;
+    return TOK_SMART_GW_ALLOW_NAT;
+}
+
+"SmartGatewayUplink" {
+    yylval = NULL;
+    return TOK_SMART_GW_UPLINK;
+}
+ 
+"SmartGatewayUplinkNAT" {
+    yylval = NULL;
+    return TOK_SMART_GW_UPLINK_NAT;
+}
+ 
+"SmartGatewaySpeed" {
+    yylval = NULL;
+    return TOK_SMART_GW_SPEED;
+}
+
+"SmartGatewayPrefix" {
+    yylval = NULL;
+    return TOK_SMART_GW_PREFIX;
+}
+
+"SrcIpRoutes" {
+    yylval = NULL;
+    return TOK_SRC_IP_ROUTES;
+}
 "Weight" {
     yylval = NULL;
     return TOK_IFWEIGHT;
 }
-
+"MainIp" {
+    yylval = NULL;
+    return TOK_MAIN_IP;
+}
 "Ip4Broadcast" {
     yylval = NULL;
     return TOK_IP4BROADCAST;
+}
+"IPv4Broadcast" {
+    yylval = NULL;
+    return TOK_IPV4BROADCAST;
+}
+"IPv4Multicast" {
+    yylval = NULL;
+    return TOK_IPV4MULTICAST;
 }
 "Mode" {
     yylval = NULL;
     return TOK_IFMODE;
 }
-"Ip6AddrType" {
+"IPv6Multicast" {
     yylval = NULL;
-    return TOK_IP6ADDRTYPE;
+    return TOK_IPV6MULTICAST;
 }
-"Ip6MulticastSite" {
-    yylval = NULL;
-    return TOK_IP6MULTISITE;
+"IPv4Src" {
+		yylval = NULL;
+		return TOK_IPV4SRC;
 }
-"Ip6MulticastGlobal" {
-    yylval = NULL;
-    return TOK_IP6MULTIGLOBAL;
+"IPv6Src" {
+		yylval = NULL;
+		return TOK_IPV6SRC;
 }
 "HelloInterval" {
     yylval = NULL;
