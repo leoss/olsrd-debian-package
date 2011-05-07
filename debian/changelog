@@ -1,3 +1,10 @@
+olsrd (0.6.1-2) unstable; urgency=low
+
+  * Add patch to upstream to add mips and mips64 to -fPIC arch list
+    (fixes FTBFS on mips*)
+
+ -- Roland Stigge <stigge@antcom.de>  Sat, 07 May 2011 13:11:27 +0200
+
 olsrd (0.6.1-1) unstable; urgency=low
 
   [ Holger Levsen ]
