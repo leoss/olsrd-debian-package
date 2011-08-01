@@ -1,7 +1,7 @@
 100-debug_level.patch
 200-etc-olsrd.patch
 110-build_fix.patch
-111-build-mips.patch
+111-build-mips-and-armhf.patch
 220-usr-lib-on-amd64.patch
 230-usr-lib-olsrd.patch
 260-quagga-plugin-detect-protocol-version.patch
