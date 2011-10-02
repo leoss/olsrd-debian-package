@@ -1,3 +1,10 @@
+olsrd (0.6.1-5) unstable; urgency=low
+
+  * dh style debian/rules
+  * debian/compat: 9, exports dpkg-buildflags (Closes: #643472)
+
+ -- Roland Stigge <stigge@antcom.de>  Sun, 02 Oct 2011 14:59:17 +0200
+
 olsrd (0.6.1-4) unstable; urgency=low
 
   * Added debian/watch

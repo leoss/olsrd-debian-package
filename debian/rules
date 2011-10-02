@@ -1,91 +1,29 @@
 #!/usr/bin/make -f
-# Holger Levsen, 2006-12, based on 
-# -*- makefile -*-
-# Sample debian/rules that uses debhelper.
-# This file was originally written by Joey Hess and Craig Small.
-# As a special exception, when this file is copied by dh-make into a
-# dh-make output file, you may use that output file without restriction.
-# This special exception was added by Craig Small in version 0.37 of dh-make.
 
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-CFLAGS = -Wall -g
+%:
+	dh $@
 
-ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
-	CFLAGS += -O0
-else
-	CFLAGS += -O2
-endif
-
-configure: configure-stamp
-configure-stamp:
-	dh_testdir
-	
-	touch configure-stamp
-
-build: build-arch build-indep
-build-arch: build-stamp
-build-indep: build-stamp
-
-build-stamp: configure-stamp 
-	dh_testdir
-
-	# Add here commands to compile the package.
+override_dh_auto_build: 
 	$(MAKE)
 	$(MAKE) libs
+	# rename to fit the naming scheme of the other plugin READMEs
+	cp $(CURDIR)/lib/bmf/README_BMF.txt $(CURDIR)/lib/bmf/README_BMF
 
-	touch $@
-
-clean:
-	dh_testdir
-	dh_testroot
-	rm -f build-stamp configure-stamp
-
-	# Add here commands to clean up after the build process.
+override_dh_auto_clean:
 	[ ! -f Makefile ] || $(MAKE) uberclean
 	rm -f $(CURDIR)/lib/*/src/*.o $(CURDIR)/lib/*/*.so.?.?
 
-	dh_clean 
-
-install: build
-	dh_testdir
-	dh_testroot
-	dh_prep 
-	dh_installdirs
-
-	# Add here commands to install the package into debian/olsrd.
+override_dh_auto_install:
 	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd install STRIP=: 
 	$(MAKE) DESTDIR=$(CURDIR)/debian/olsrd-plugins libs_install STRIP=:
-
-# Build architecture-independent files here.
-binary-indep: build install
-# We have nothing to do by default.
-
-# Build architecture-dependent files here.
-binary-arch: build install
-	dh_testdir
-	dh_testroot
-	dh_installchangelogs -polsrd CHANGELOG -polsrd-plugins
-	# rename to fit the naming scheme of the other plugin READMEs
-	cp $(CURDIR)/lib/bmf/README_BMF.txt $(CURDIR)/lib/bmf/README_BMF
-	dh_installdocs
-	dh_installinit
-	dh_installman
-	dh_link
-	dh_strip
-	# compress, but don't compress README_NAMESERVICE, for consistency reasons
-	dh_compress -XREADME_NAMESERVICE -XREADME_BMF
 	# provide better default config
 	rm $(CURDIR)/debian/olsrd/etc/olsrd.conf
 	cp $(CURDIR)/debian/olsrd.conf $(CURDIR)/debian/olsrd/etc/olsrd/olsrd.conf
 	cp  $(CURDIR)/debian/olsrd-default $(CURDIR)/debian/olsrd/etc/default/olsrd
-	dh_fixperms
-	dh_installdeb
-	dh_shlibdeps
-	dh_gencontrol
-	dh_md5sums
-	dh_builddeb
 
-binary: binary-indep binary-arch
-.PHONY: build clean binary-indep binary-arch binary install configure
+override_dh_compress:
+	# compress, but don't compress README_NAMESERVICE, for consistency reasons
+	dh_compress -XREADME_NAMESERVICE -XREADME_BMF
