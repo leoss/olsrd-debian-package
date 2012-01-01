@@ -1,3 +1,12 @@
+olsrd (0.6.2-1) unstable; urgency=low
+
+  * New upstream release (repackaged and cleaned from debian/ dir)
+  * Adjusted patches to upstream tarball
+  * Removing obsolete options LinkQualityDijkstraLimit and LinkQualityWinSize
+    from default configuration file (Closes: #652690)
+
+ -- Roland Stigge <stigge@antcom.de>  Sun, 01 Jan 2012 23:20:20 +0100
+
 olsrd (0.6.1-5) unstable; urgency=low
 
   * dh style debian/rules

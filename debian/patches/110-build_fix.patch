@@ -4,7 +4,7 @@ Index: olsrd-0.5.4/Makefile
 +++ olsrd-0.6.1/Makefile	2011-05-03 15:01:40.000000000 +0200
 @@ -71,8 +71,6 @@
  switch:		
- 	$(MAKECMD) -C $(SWITCHDIR)
+ 	@$(MAKECMD) -C $(SWITCHDIR)
  
 -# generate it always
 -.PHONY: src/builddata.c

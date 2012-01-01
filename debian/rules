@@ -9,8 +9,6 @@
 override_dh_auto_build: 
 	$(MAKE)
 	$(MAKE) libs
-	# rename to fit the naming scheme of the other plugin READMEs
-	cp $(CURDIR)/lib/bmf/README_BMF.txt $(CURDIR)/lib/bmf/README_BMF
 
 override_dh_auto_clean:
 	[ ! -f Makefile ] || $(MAKE) uberclean
