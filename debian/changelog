@@ -1,9 +1,3 @@
-olsrd (0.6.2-2~bpo60+1) squeeze-backports; urgency=low
-
-  * submitted current wheezy version to squeeze-backports
-
- -- Hans-Christoph Steiner <hans@eds.org>  Fri, 05 Oct 2012 18:53:34 -0400
-
 olsrd (0.6.2-2) unstable; urgency=low
 
   * debian/control: Build-Depends: debhelper (>= 9) (Closes: #658330)
