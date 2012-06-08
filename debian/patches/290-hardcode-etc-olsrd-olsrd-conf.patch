@@ -1,8 +1,8 @@
-diff --git a/Makefile.inc b/Makefile.inc
-index 34af527..17027b6 100644
---- a/Makefile.inc
-+++ b/Makefile.inc
-@@ -57,7 +57,7 @@ DOCDIR   ?= $(SHAREDIR)/doc
+Index: olsrd-0.6.3/Makefile.inc
+===================================================================
+--- olsrd-0.6.3.orig/Makefile.inc	2012-06-08 13:15:45.000000000 +0200
++++ olsrd-0.6.3/Makefile.inc	2012-06-08 13:22:54.000000000 +0200
+@@ -57,7 +57,7 @@
  MANDIR   ?= $(SHAREDIR)/man
  EXENAME  ?= olsrd
  CFGNAME  ?= $(EXENAME).conf
@@ -11,11 +11,11 @@ index 34af527..17027b6 100644
  
  CPPFLAGS =	-Isrc
  ifneq ($(TOPDIR),.)
-diff --git a/lib/arprefresh/README_ARPREFRESH b/lib/arprefresh/README_ARPREFRESH
-index 8308d51..16fdc3c 100644
---- a/lib/arprefresh/README_ARPREFRESH
-+++ b/lib/arprefresh/README_ARPREFRESH
-@@ -21,7 +21,7 @@ None.
+Index: olsrd-0.6.3/lib/arprefresh/README_ARPREFRESH
+===================================================================
+--- olsrd-0.6.3.orig/lib/arprefresh/README_ARPREFRESH	2011-06-18 21:26:50.000000000 +0200
++++ olsrd-0.6.3/lib/arprefresh/README_ARPREFRESH	2012-06-08 13:22:54.000000000 +0200
+@@ -21,7 +21,7 @@
  SAMPLE CONFIG
  ---------------------------------------------------------------------
  
@@ -24,11 +24,11 @@ index 8308d51..16fdc3c 100644
  
  LoadPlugin "arprefresh.so.0.1"
  {
-diff --git a/lib/bmf/README_BMF b/lib/bmf/README_BMF
-index ec313da..efcc4b2 100644
---- a/lib/bmf/README_BMF
-+++ b/lib/bmf/README_BMF
-@@ -44,7 +44,7 @@ Set permissions, e.g.:
+Index: olsrd-0.6.3/lib/bmf/README_BMF
+===================================================================
+--- olsrd-0.6.3.orig/lib/bmf/README_BMF	2011-07-07 18:12:12.000000000 +0200
++++ olsrd-0.6.3/lib/bmf/README_BMF	2012-06-08 13:22:54.000000000 +0200
+@@ -44,7 +44,7 @@
  
    chmod 0700 /dev/net/tun
  
@@ -37,7 +37,7 @@ index ec313da..efcc4b2 100644
  to load the BMF plugin. For example, add the following lines:
  
    LoadPlugin "olsrd_bmf.so.1.7.0"
-@@ -184,7 +184,7 @@ the forwarding towards non-OLSR enabled hosts are omitted):
+@@ -184,7 +184,7 @@
  -------------------------
  
  All configuration of BMF is done via the "LoadPlugin" section in
@@ -46,7 +46,7 @@ index ec313da..efcc4b2 100644
  
  The following gives an overview of all plugin parameters that can be
  configured. Unless otherwise stated, settings may differ for each node in the
-@@ -348,7 +348,7 @@ non-OLSR interfaces.
+@@ -348,7 +348,7 @@
  If you have network interfaces on which OLSR is *not* running, but you *do*
  want to forward multicast and local-broadcast IP packets, specify these
  interfaces one by one as "NonOlsrIf" parameters in the BMF plugin section
@@ -55,7 +55,7 @@ index ec313da..efcc4b2 100644
  
    LoadPlugin "olsrd_bmf.so.1.7.0"
    {
-@@ -368,7 +368,7 @@ as an OLSR-enabled interface.
+@@ -368,7 +368,7 @@
  In a typical interworking configuration there is a network of OLSR hosts
  in which one host acts as a gateway to a fixed infrastructure network.
  Usually that host will be advertising a default route via the HNA
@@ -64,7 +64,7 @@ index ec313da..efcc4b2 100644
  file:
  
    Hna4
-@@ -405,7 +405,7 @@ add the following line /etc/mrouted.conf :
+@@ -405,7 +405,7 @@
  
  Finally, mrouted does not accept interfaces with prefix length 32.
  Therefore, override the default IP address and prefix length of
@@ -73,11 +73,11 @@ index ec313da..efcc4b2 100644
  For example:
  
    LoadPlugin "olsrd_bmf.so.1.7.0"
-diff --git a/lib/mini/README_MINI b/lib/mini/README_MINI
-index 625f994..ff47b3f 100644
---- a/lib/mini/README_MINI
-+++ b/lib/mini/README_MINI
-@@ -24,7 +24,7 @@ PlParam "test" "anything"
+Index: olsrd-0.6.3/lib/mini/README_MINI
+===================================================================
+--- olsrd-0.6.3.orig/lib/mini/README_MINI	2011-06-18 21:26:50.000000000 +0200
++++ olsrd-0.6.3/lib/mini/README_MINI	2012-06-08 13:22:54.000000000 +0200
+@@ -24,7 +24,7 @@
  SAMPLE CONFIG
  ---------------------------------------------------------------------
  
@@ -86,11 +86,11 @@ index 625f994..ff47b3f 100644
  
  LoadPlugin "olsrd_mini.so.0.1"
  {
-diff --git a/lib/nameservice/README_NAMESERVICE b/lib/nameservice/README_NAMESERVICE
-index 59f3c69..b27eb59 100644
---- a/lib/nameservice/README_NAMESERVICE
-+++ b/lib/nameservice/README_NAMESERVICE
-@@ -142,7 +142,7 @@ PlParam "macs-change-script" "/path/to/script"
+Index: olsrd-0.6.3/lib/nameservice/README_NAMESERVICE
+===================================================================
+--- olsrd-0.6.3.orig/lib/nameservice/README_NAMESERVICE	2011-06-18 21:26:50.000000000 +0200
++++ olsrd-0.6.3/lib/nameservice/README_NAMESERVICE	2012-06-08 13:22:54.000000000 +0200
+@@ -142,7 +142,7 @@
  SAMPLE CONFIG
  ---------------------------------------------------------------------
  
@@ -99,11 +99,11 @@ index 59f3c69..b27eb59 100644
  
  LoadPlugin "olsrd_nameservice.so.0.2"
  {
-diff --git a/lib/pgraph/README_PGRAPH b/lib/pgraph/README_PGRAPH
-index bc73f69..57b40e7 100644
---- a/lib/pgraph/README_PGRAPH
-+++ b/lib/pgraph/README_PGRAPH
-@@ -39,7 +39,7 @@ Usage:
+Index: olsrd-0.6.3/lib/pgraph/README_PGRAPH
+===================================================================
+--- olsrd-0.6.3.orig/lib/pgraph/README_PGRAPH	2011-06-18 21:26:50.000000000 +0200
++++ olsrd-0.6.3/lib/pgraph/README_PGRAPH	2012-06-08 13:22:54.000000000 +0200
+@@ -39,7 +39,7 @@
             run "make" and "make install"
  	   This will create the "olsrd_pgraph.so.1.1" file and install it. 
  
@@ -112,7 +112,7 @@ index bc73f69..57b40e7 100644
  	   monitor from to load the plugin. 
  	   Add the line: "LoadPlugin "olsrd_pgraph.so.1.1" {}"
  
-@@ -51,7 +51,7 @@ Usage:
+@@ -51,7 +51,7 @@
             # By default only localhost will be able to connect to the IPC
  	   # system of the olsrd process so if you are not going to be 
  	   # running pgraph locally, modify the "Host" variable of the 
@@ -121,11 +121,11 @@ index bc73f69..57b40e7 100644
  	   # reflect the IP address of the host you will be connecting from. 
  
  	5) Start olsrd and make sure that the plugin has loaded correctly.
-diff --git a/lib/quagga/README_QUAGGA b/lib/quagga/README_QUAGGA
-index 8e44f8d..c8efeaf 100644
---- a/lib/quagga/README_QUAGGA
-+++ b/lib/quagga/README_QUAGGA
-@@ -55,7 +55,7 @@ PlParam "Version" "<version>"
+Index: olsrd-0.6.3/lib/quagga/README_QUAGGA
+===================================================================
+--- olsrd-0.6.3.orig/lib/quagga/README_QUAGGA	2012-06-03 10:07:07.000000000 +0200
++++ olsrd-0.6.3/lib/quagga/README_QUAGGA	2012-06-08 13:22:54.000000000 +0200
+@@ -58,7 +58,7 @@
  SAMPLE CONFIG
  ---------------------------------------------------------------------
  
@@ -134,11 +134,11 @@ index 8e44f8d..c8efeaf 100644
  
  LoadPlugin "olsrd_quagga.so.0.2.2"
  {
-diff --git a/lib/watchdog/README_WATCHDOG b/lib/watchdog/README_WATCHDOG
-index f5eac1d..8397cb2 100644
---- a/lib/watchdog/README_WATCHDOG
-+++ b/lib/watchdog/README_WATCHDOG
-@@ -21,7 +21,7 @@ PlParam "interval" "5"
+Index: olsrd-0.6.3/lib/watchdog/README_WATCHDOG
+===================================================================
+--- olsrd-0.6.3.orig/lib/watchdog/README_WATCHDOG	2011-06-18 21:26:50.000000000 +0200
++++ olsrd-0.6.3/lib/watchdog/README_WATCHDOG	2012-06-08 13:22:54.000000000 +0200
+@@ -21,7 +21,7 @@
  SAMPLE CONFIG
  ---------------------------------------------------------------------
  
@@ -147,14 +147,16 @@ index f5eac1d..8397cb2 100644
  
  LoadPlugin "olsrd_watchdog.so.0.1"
  {
-diff --git a/make/Makefile.linux b/make/Makefile.linux
-index 3fb19b9..03e1527 100644
---- a/make/Makefile.linux
-+++ b/make/Makefile.linux
-@@ -10,6 +10,7 @@ SRCS += 	$(wildcard src/linux/*.c src/unix/*.c)
+Index: olsrd-0.6.3/make/Makefile.linux
+===================================================================
+--- olsrd-0.6.3.orig/make/Makefile.linux	2012-06-08 13:15:45.000000000 +0200
++++ olsrd-0.6.3/make/Makefile.linux	2012-06-08 13:23:33.000000000 +0200
+@@ -9,7 +9,8 @@
+ SRCS += 	$(wildcard src/linux/*.c src/unix/*.c)
  HDRS +=		$(wildcard src/linux/*.h src/unix/*.h)
  
- CPPFLAGS += 	-Dlinux -DLINUX_NETLINK_ROUTING
+-CPPFLAGS += 	-Dlinux
++CPPFLAGS += 	-Dlinux -DLINUX_NETLINK_ROUTING
 +CPPFLAGS +=	-DOLSRD_GLOBAL_CONF_FILE=\"$(CFGFILE)\"
  LIBS +=		
  
