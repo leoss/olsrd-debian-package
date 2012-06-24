@@ -1,3 +1,9 @@
+olsrd (0.6.3-2) unstable; urgency=low
+
+  * Re-upload to unstable
+
+ -- Roland Stigge <stigge@antcom.de>  Sun, 24 Jun 2012 18:00:24 +0200
+
 olsrd (0.6.3-1) experimental; urgency=low
 
   * New upstream release
