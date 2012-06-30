@@ -4,3 +4,6 @@
 230-usr-lib-olsrd.patch
 260-quagga-plugin-detect-protocol-version.patch
 290-hardcode-etc-olsrd-olsrd-conf.patch
+295-update-jsoninfo-plugin.patch
+295-update-olsrd-adhoc-setup.patch
+296-jsoninfo-fix-typo.patch

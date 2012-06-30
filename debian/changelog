@@ -1,3 +1,11 @@
+olsrd (0.6.3-3) unstable; urgency=low
+
+  * update broken jsoninfo plugin with patches from upstream git
+  * updated default config based on settings from funkfeuer and
+    commotionwireless.net
+
+ -- Hans-Christoph Steiner <hans@eds.org>  Sat, 30 Jun 2012 09:57:55 -0400
+
 olsrd (0.6.3-2) unstable; urgency=low
 
   * Re-upload to unstable

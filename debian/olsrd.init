@@ -48,6 +48,10 @@ case "$1" in
 	;;
   start)
 	if [ "$START_OLSRD" != "YES" ] ; then exit 0 ; fi
+	if [ "$SETUP_ADHOC" = "YES" ] ; then
+		test -x /usr/sbin/olsrd-adhoc-setup && \
+			/usr/sbin/olsrd-adhoc-setup $MESH_IF $channel $ssid $bssid
+	fi
 	if [ "$(pidof $NAME)" != "" ] ; then 
 		echo "$NAME already running, doing nothing."
 		exit 0

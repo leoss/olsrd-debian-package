@@ -2,6 +2,7 @@ Source: olsrd
 Section: net
 Priority: extra
 Maintainer: Roland Stigge <stigge@antcom.de>
+Uploaders: Hans-Christoph Steiner <hans@eds.org>
 Build-Depends: debhelper (>= 9),
                bison,
                flex,

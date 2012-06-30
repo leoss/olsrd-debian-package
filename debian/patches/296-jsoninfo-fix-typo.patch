@@ -1,0 +1,25 @@
+From 1b5f780c3db18a83893f14c4525811744f5d5a9a Mon Sep 17 00:00:00 2001
+From: Hans-Christoph Steiner <hans@eds.org>
+Date: Wed, 27 Jun 2012 18:31:02 -0400
+Subject: [PATCH 1/1] jsoninfo: fix typo
+
+---
+ lib/jsoninfo/src/olsrd_jsoninfo.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/jsoninfo/src/olsrd_jsoninfo.c b/lib/jsoninfo/src/olsrd_jsoninfo.c
+index 46ef3fb..98686e1 100644
+--- a/lib/jsoninfo/src/olsrd_jsoninfo.c
++++ b/lib/jsoninfo/src/olsrd_jsoninfo.c
+@@ -1181,7 +1181,7 @@ ipc_print_interfaces(struct autobuf *abuf)
+     abuf_json_sys_class_net(abuf, "noiseLevel", ifs->name, "wireless/noise");
+     abuf_json_sys_class_net(abuf, "nwid", ifs->name, "wireless/nwid");
+     abuf_json_sys_class_net(abuf, "wirelessRetries", ifs->name, "wireless/retries");
+-    abuf_json_sys_class_net(abuf, "wirlessStatus", ifs->name, "wireless/status");
++    abuf_json_sys_class_net(abuf, "wirelessStatus", ifs->name, "wireless/status");
+ #endif
+     abuf_json_close_array_entry(abuf);
+   }
+-- 
+1.7.9.5
+
