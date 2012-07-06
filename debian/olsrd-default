@@ -12,7 +12,7 @@
 # for ad-hoc mode using the /usr/sbin/olsrd-adhoc-setup script whenever olsrd
 # is started.
 #
-#START_ADHOC="YES"
+#SETUP_ADHOC="YES"
 
 #
 # debuglevel from 1 (=quiet) to 9 (=max debug)

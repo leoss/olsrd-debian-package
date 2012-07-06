@@ -7,7 +7,7 @@
 	dh $@
 
 override_dh_auto_build: 
-	$(MAKE) OS=linux DEBUG=0 build_all
+	$(MAKE) DEBUG=0 build_all
 	$(MAKE) -C gui/linux-gtk
 	$(MAKE) -C src/olsr_switch
 
