@@ -1,4 +1,3 @@
-100-debug_level.patch
 110-build_fix.patch
 111-build-mips-and-armhf.patch
 230-usr-lib-olsrd.patch
@@ -7,3 +6,6 @@
 295-update-jsoninfo-plugin.patch
 295-update-olsrd-adhoc-setup.patch
 296-jsoninfo-fix-typo.patch
+300-stop-hiding-compile-and-linking-flags.patch
+310-hardening-fixes.patch
+320-build-tas-plugin-against-debian-lua.patch

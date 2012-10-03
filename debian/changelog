@@ -1,3 +1,12 @@
+olsrd (0.6.3-5~) experimental; urgency=low
+
+  * fixed build system so all hardening flags are applied
+  * fixed some lintian warnings
+  * make tas plugin build against Debian's lua rather than the included
+    lua sources
+
+ -- Hans-Christoph Steiner <hans@eds.org>  Wed, 03 Oct 2012 18:11:49 -0400
+
 olsrd (0.6.3-4) unstable; urgency=low
 
   * debian/rules: Drop OS=linux from the make call, fixing FTBFS on !linux,

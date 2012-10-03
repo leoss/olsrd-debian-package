@@ -5,7 +5,9 @@
 # Required-Stop:     $network $remote_fs $syslog
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: /etc/init.d/olsrd: start olsrd
+# Short-Description: Start the OLSR mesh daemon
+# Description:       System mode startup script for
+#                    the olsr.org OLSR mesh daemon.
 ### END INIT INFO
 
 #		Based on skeleton script written by Miquel van Smoorenburg <miquels@cistron.nl>.
@@ -18,6 +20,7 @@
 # modified:     01-Aug-2007
 # 	        31-Jun-2008
 #		30-May-2009
+#       02-Oct-2012
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON=/usr/sbin/olsrd
