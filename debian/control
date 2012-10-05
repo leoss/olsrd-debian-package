@@ -2,7 +2,12 @@ Source: olsrd
 Section: net
 Priority: extra
 Maintainer: Roland Stigge <stigge@antcom.de>
-Build-Depends: debhelper (>= 8), bison, flex
+Build-Depends: debhelper (>= 9),
+               bison,
+               flex,
+               pkg-config,
+               libgtk2.0-dev,
+               python-gtk2-dev
 Standards-Version: 3.9.2
 Homepage: http://olsr.org/
 Vcs-Svn: svn://svn.debian.org/svn/collab-maint/deb-maint/olsrd/
@@ -11,6 +16,7 @@ Vcs-Browser: http://svn.debian.org/wsvn/collab-maint/deb-maint/olsrd/
 Package: olsrd
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: olsrd-plugins
 Description: optimized link-state routing daemon (unik-olsrd)
  unik-olsrd is an implementation of the Optimized Link State Routing protocol 
  for Mobile Ad-Hoc networks(MANET). The protocol is described in RFC3626. It 
@@ -50,3 +56,16 @@ Description: various plugins to enhance olsrd
   * arprefresh    - optimize kernel arp cache from olsr UDP sniffing
   * mdnsp         - multicast DNS via OLSR mesh network
   * p2pd          - distribute P2P Discovery messages
+
+Package: olsrd-gui
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, olsrd (= ${binary:Version})
+Description: GTK GUI to control and get info about olsrd
+ olsrd-gui is a GTK GUI for controlling and getting information from a running
+ olsrd, a daemon for OLSR mesh networking.  It uses IPC to talk to olsrd, so
+ /etc/olsrd/olsrd.conf must enable IPC connections for olsrd-gui to work.
+ .
+ OLSR operates as a table driven, proactive protocol, i.e., it exchanges 
+ topology information with other nodes of the network regularly. It is 
+ developed to work independently from other protocols. Likewise, OLSR makes no
+ assumptions about the underlying link-layer.

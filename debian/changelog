@@ -1,3 +1,23 @@
+olsrd (0.6.2-2~bpo60+1) squeeze-backports; urgency=low
+
+  * submitted current wheezy version to squeeze-backports
+
+ -- Hans-Christoph Steiner <hans@eds.org>  Fri, 05 Oct 2012 18:53:34 -0400
+
+olsrd (0.6.2-2) unstable; urgency=low
+
+  * debian/control: Build-Depends: debhelper (>= 9) (Closes: #658330)
+  * Integrated patches by Hans-Christoph Steiner:
+    - Added olsrd-gui (Closes: #658329)
+    - debian/control: Recommends: olsrd-plugins (Closes: #658557)
+    - Fix *.d clean problem (Closes: #658559)
+    - Added olsr_switch (Closes: #658560)
+    - Fix conffile location to /etc/olsrd/olsrd.conf (Closes: #658561)
+
+    Thanks Hans-Christoph!
+
+ -- Roland Stigge <stigge@antcom.de>  Sun, 19 Feb 2012 16:14:34 +0100
+
 olsrd (0.6.2-1) unstable; urgency=low
 
   * New upstream release (repackaged and cleaned from debian/ dir)
