@@ -1,7 +1,8 @@
-From f4d250ad4fad5fcfe5b5feaac3f3e121adef3fba Mon Sep 17 00:00:00 2001
 From: Jo-Philipp Wich <jow@openwrt.org>
-Date: Fri, 22 Jun 2012 03:17:59 +0200
 Subject: [PATCH] olsrd: fix stack corruption in net_output()
+Bug: https://lists.olsr.org/pipermail/olsr-dev/2013-March/006718.html
+Bug-Debian: http://bugs.debian.org/704025
+Origin: upstream, http://olsr.org/git/?p=olsrd.git;a=commit;h=f4d250ad4fad5fcfe5b5feaac3f3e121adef3fba
 
 The net_output() function indirectly uses the stack variables dst and dst6
 outside of the scope they're declared in, this might leads to olsr_sendto()

@@ -1,5 +1,8 @@
+From: Hans-Christoph Steiner <hans@eds.org>
+Origin: upstream, http://olsr.org/git/?p=olsrd.git;a=commit;h=09e23dcef0b541e19e0843f6dd86c852cbc3a92a
+Subject: provide functional setup script for adhoc mode
 --- olsrd-0.6.3/files/olsrd-adhoc-setup	2012-05-06 05:55:08.000000000 -0400
-+++ /home/hans/code/olsr.org/olsrd/files/olsrd-adhoc-setup	2012-06-25 22:23:46.000000000 -0400
++++ olsrd-0.6.3/files/olsrd-adhoc-setup	2012-06-25 22:23:46.000000000 -0400
 @@ -1,15 +1,6 @@
  #!/bin/sh
  
@@ -34,7 +37,7 @@
 +fi
 +
 +if [ -z "$4" ]; then
-+    bssid=00:00:00:00:00:00
++    bssid=02:ca:ff:ee:ba:be
 +else
 +    bssid="$4"
 +fi
