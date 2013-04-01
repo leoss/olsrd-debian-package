@@ -1,3 +1,23 @@
+olsrd (0.6.2-2.1~bpo60+1) squeeze-backports; urgency=low
+
+  * submitted current wheezy version to squeeze-backports
+
+ -- Hans-Christoph Steiner <hans@eds.org>  Mon, 01 Apr 2013 16:26:09 -0700
+
+olsrd (0.6.2-2.1) testing-proposed-updates; urgency=low
+
+  * Non-maintainer upload.
+  * Include upstream patch to fix stack corruption in
+    net output (Closes: #704025).
+
+ -- John Paul Adrian Glaubitz <glaubitz@physik.fu-berlin.de>  Thu, 28 Mar 2013 04:29:10 +0100
+
+olsrd (0.6.2-2~bpo60+1) squeeze-backports; urgency=low
+
+  * submitted current wheezy version to squeeze-backports
+
+ -- Hans-Christoph Steiner <hans@eds.org>  Fri, 05 Oct 2012 18:53:34 -0400
+
 olsrd (0.6.2-2) unstable; urgency=low
 
   * debian/control: Build-Depends: debhelper (>= 9) (Closes: #658330)
