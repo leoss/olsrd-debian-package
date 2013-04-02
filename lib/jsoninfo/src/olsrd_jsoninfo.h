@@ -54,6 +54,10 @@
 /* uncomment this to allow connections from 127.0.0.1 regardless of olsrd.conf (useful to allow externel ip/network + localhost) (ipv4 only)*/
 /* #define JSONINFO_ALLOW_LOCALHOST */
 
+#define UUIDLEN 256
+extern char uuid[UUIDLEN + 1];
+extern char uuidfile[FILENAME_MAX];
+
 extern union olsr_ip_addr jsoninfo_accept_ip;
 extern union olsr_ip_addr jsoninfo_listen_ip;
 extern int ipc_port;
@@ -64,7 +68,7 @@ int olsrd_plugin_init(void);
 void olsr_plugin_exit(void);
 void olsrd_get_plugin_parameters(const struct olsrd_plugin_parameters **params, int *size);
 
-#endif
+#endif /* _OLSRD_JSONINFO */
 
 /*
  * Local Variables:

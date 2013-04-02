@@ -12,14 +12,15 @@ include Makefile.inc
 #
 
 LIBNAME = libnmea.so
+LIBNAMESTATIC = libnmea.a
 
 DESTDIR ?=
+USRDIR ?= $(DESTDIR)/usr
+INCLUDEDIR ?= $(DESTDIR)/usr/include
+LIBDIR ?= $(USRDIR)/lib
 
-MACHINE=$(shell uname -m)
-LIBDIR_INSTALL = usr/lib
-INCLUDEDIR = usr/include
 
-MODULES = context generate generator gmath info parse parser sentence time tok util
+MODULES = context conversions generate generator gmath info parse parser sentence tok
 OBJ = $(MODULES:%=build/%.o)
 
 LIBRARIES = -lm
@@ -32,20 +33,30 @@ INCLUDES = -I ./include
 
 all: default_target
 
-default_target: all-before lib/$(LIBNAME)
+default_target: all-before lib/$(LIBNAMESTATIC) lib/$(LIBNAME)
 
 remake: clean all
 
+lib/$(LIBNAMESTATIC): $(OBJ)
+ifeq ($(VERBOSE),0)
+	@echo "[AR] $@"
+endif
+	$(MAKECMDPREFIX)ar rcs "$@" $(OBJ)
+
 lib/$(LIBNAME): $(OBJ)
+ifeq ($(VERBOSE),0)
 	@echo "[LD] $@"
-	@$(CC) -shared -Wl,-soname=$(LIBNAME) -o "$@" $(LIBRARIES) $(OBJ)
+endif
+	$(MAKECMDPREFIX)$(CC) -shared -Wl,-soname=$(LIBNAME) -o "$@" $(LIBRARIES) $(OBJ)
 
 build/%.o: src/%.c Makefile Makefile.inc
+ifeq ($(VERBOSE),0)
 	@echo "[CC] $<"
-	@$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+endif
+	$(MAKECMDPREFIX)$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 samples: all
-	@$(MAKE) -C samples all
+	$(MAKECMDPREFIX)$(MAKE) -C samples all
 
 
 #
@@ -55,32 +66,35 @@ samples: all
 .PHONY: all default_target all-before clean doc install install-headers uninstall uninstall-headers
 
 all-before:
-	@mkdir -p build lib
+	$(MAKECMDPREFIX)mkdir -p build lib
 
 clean:
-	@$(MAKE) -C doc clean
-	@$(MAKE) -C samples clean
-	rm -fr build lib
+	$(MAKECMDPREFIX)$(MAKE) -C doc clean
+	$(MAKECMDPREFIX)$(MAKE) -C samples clean
+	$(MAKECMDPREFIX)rm -frv build lib
 
 doc:
-	$(MAKE) -C doc all
+	$(MAKECMDPREFIX)$(MAKE) -C doc all
+
+doc-clean:
+	$(MAKECMDPREFIX)$(MAKE) -C doc clean
 
 install: all
-	@mkdir -v -p "$(DESTDIR)/$(LIBDIR_INSTALL)"
-	cp "lib/$(LIBNAME)" "$(DESTDIR)/$(LIBDIR_INSTALL)/$(LIBNAME).$(VERSION)"
-	$(STRIP) "$(DESTDIR)/$(LIBDIR_INSTALL)/$(LIBNAME).$(VERSION)"
-	ldconfig -n "$(DESTDIR)/$(LIBDIR_INSTALL)"
+	$(MAKECMDPREFIX)mkdir -v -p "$(LIBDIR)"
+	$(MAKECMDPREFIX)cp -v "lib/$(LIBNAME)" "$(LIBDIR)/$(LIBNAME).$(VERSION)"
+	$(MAKECMDPREFIX)$(STRIP) "$(LIBDIR)/$(LIBNAME).$(VERSION)"
+	$(MAKECMDPREFIX)/sbin/ldconfig -n "$(LIBDIR)"
 
 install-headers: all
-	@mkdir -v -p "$(DESTDIR)/$(INCLUDEDIR)"
-	@rm -fr "$(DESTDIR)/$(INCLUDEDIR)/nmea"
-	cp -r include/nmea "$(DESTDIR)/$(INCLUDEDIR)"
+	$(MAKECMDPREFIX)mkdir -v -p "$(INCLUDEDIR)"
+	$(MAKECMDPREFIX)rm -fr "$(INCLUDEDIR)/nmea"
+	$(MAKECMDPREFIX)cp -rv include/nmea "$(INCLUDEDIR)"
 
 uninstall:
-	rm -f "$(DESTDIR)/$(LIBDIR_INSTALL)/$(LIBNAME)" "$(DESTDIR)/$(LIBDIR_INSTALL)/$(LIBNAME).$(VERSION)"
-	ldconfig -n "$(DESTDIR)/$(LIBDIR_INSTALL)"
-	@rmdir -v -p --ignore-fail-on-non-empty "$(DESTDIR)/$(LIBDIR_INSTALL)"
+	$(MAKECMDPREFIX)rm -fv "$(LIBDIR)/$(LIBNAME)" "$(LIBDIR)/$(LIBNAME).$(VERSION)"
+	$(MAKECMDPREFIX)/sbin/ldconfig -n "$(LIBDIR)"
+	$(MAKECMDPREFIX)rmdir -v -p --ignore-fail-on-non-empty "$(LIBDIR)"
 
 uninstall-headers:
-	rm -fr "$(DESTDIR)/$(INCLUDEDIR)/nmea"
-	@rmdir -v -p --ignore-fail-on-non-empty "$(DESTDIR)/$(INCLUDEDIR)"
+	$(MAKECMDPREFIX)rm -frv "$(INCLUDEDIR)/nmea"
+	$(MAKECMDPREFIX)rmdir -v -p --ignore-fail-on-non-empty "$(INCLUDEDIR)"

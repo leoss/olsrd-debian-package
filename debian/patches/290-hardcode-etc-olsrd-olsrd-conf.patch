@@ -1,16 +1,8 @@
-Index: olsrd-0.6.3/Makefile.inc
-===================================================================
---- olsrd-0.6.3.orig/Makefile.inc	2012-06-08 13:15:45.000000000 +0200
-+++ olsrd-0.6.3/Makefile.inc	2012-06-08 13:22:54.000000000 +0200
-@@ -57,7 +57,7 @@
- MANDIR   ?= $(SHAREDIR)/man
- EXENAME  ?= olsrd
- CFGNAME  ?= $(EXENAME).conf
--CFGFILE  ?= $(ETCDIR)/$(CFGNAME)
-+CFGFILE  ?= $(ETCDIR)/$(EXENAME)/$(CFGNAME)
- 
- CPPFLAGS =	-Isrc
- ifneq ($(TOPDIR),.)
+From: Hans-Christoph Steiner <hans@eds.org>
+Description: hard-code /etc/olsrd and /usr/lib/olsrd for Debian-style
+ This patch sets up /etc/olsrd as the config dir and /usr/lib/olsrd as the dir
+ for olsrd plugins, following Debian convention.
+
 Index: olsrd-0.6.3/lib/arprefresh/README_ARPREFRESH
 ===================================================================
 --- olsrd-0.6.3.orig/lib/arprefresh/README_ARPREFRESH	2011-06-18 21:26:50.000000000 +0200
@@ -147,17 +139,45 @@ Index: olsrd-0.6.3/lib/watchdog/README_WATCHDOG
  
  LoadPlugin "olsrd_watchdog.so.0.1"
  {
-Index: olsrd-0.6.3/make/Makefile.linux
-===================================================================
---- olsrd-0.6.3.orig/make/Makefile.linux	2012-06-08 13:15:45.000000000 +0200
-+++ olsrd-0.6.3/make/Makefile.linux	2012-06-08 13:23:33.000000000 +0200
-@@ -9,7 +9,8 @@
- SRCS += 	$(wildcard src/linux/*.c src/unix/*.c)
- HDRS +=		$(wildcard src/linux/*.h src/unix/*.h)
+index 9ef9881..cfc6214 100644
+--- a/Makefile.inc
++++ b/Makefile.inc
+@@ -57,10 +57,10 @@ TAGCMD ?=   etags
  
--CPPFLAGS += 	-Dlinux
-+CPPFLAGS += 	-Dlinux -DLINUX_NETLINK_ROUTING
-+CPPFLAGS +=	-DOLSRD_GLOBAL_CONF_FILE=\"$(CFGFILE)\"
- LIBS +=		
+ # target directories and names
+ DESTDIR  ?=
+-ETCDIR   ?= $(DESTDIR)/etc
++ETCDIR   ?= $(DESTDIR)/etc/olsrd
+ USRDIR   ?= $(DESTDIR)/usr
+ INCLUDEDIR ?= $(DESTDIR)/usr/include
+-LIBDIR   ?= $(USRDIR)/lib
++LIBDIR   ?= $(USRDIR)/lib/olsrd
+ SBINDIR  ?= $(USRDIR)/sbin
+ SHAREDIR ?= $(USRDIR)/share
+ DOCDIR   ?= $(SHAREDIR)/doc
+index 76a8abb..5b6e92b 100644
+--- a/make/Makefile.linux
++++ b/make/Makefile.linux
+@@ -5,8 +5,8 @@
+ ARCH := $(shell uname -m)
  
- PLUGIN_SONAME ?= lib$(PLUGIN_NAME).so
+ DESTDIR ?=
+-prefix ?= /usr/local
+-libdir ?= $(prefix)/lib
++prefix ?= /usr
++libdir ?= $(prefix)/lib/olsrd
+ datarootdir ?= $(prefix)/share
+ mandir ?= $(datarootdir)/man
+ sbindir ?= $(prefix)/sbin
+index 141c6cd..6bf35b9 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -393,7 +393,7 @@ int main(int argc, char *argv[]) {
+ 
+   strscpy(conf_file_name + len, "olsrd.conf", sizeof(conf_file_name) - len);
+ #else /* _WIN32 */
+-  strscpy(conf_file_name, OLSRD_GLOBAL_CONF_FILE, sizeof(conf_file_name));
++  strscpy(conf_file_name, "/etc/olsrd/olsrd.conf", sizeof(conf_file_name));
+ #endif /* _WIN32 */
+ 
+   olsr_cnf = olsrd_get_default_cnf();

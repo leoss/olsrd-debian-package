@@ -1,3 +1,11 @@
+olsrd (0.6.5.2-1~) experimental; urgency=low
+
+  * New upstream release
+  * remove patches that have been included or obsoleted upstream
+  * update build process based on upstream changes
+
+ -- Hans-Christoph Steiner <hans@eds.org>  Mon, 01 Apr 2013 22:39:25 -0700
+
 olsrd (0.6.3-6) unstable; urgency=low
 
   * include upstream fix for brokenness on amd64 (Closes #704025)

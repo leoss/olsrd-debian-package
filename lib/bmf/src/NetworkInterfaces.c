@@ -64,6 +64,7 @@
 #include "tc_set.h" /* olsr_lookup_tc_entry(), olsr_lookup_tc_edge() */
 #include "net_olsr.h" /* ipequal */
 #include "lq_plugin.h"
+#include "kernel_tunnel.h"
 
 /* Plugin includes */
 #include "Packet.h" /* IFHWADDRLEN */
@@ -107,6 +108,9 @@ u_int32_t EtherTunTapIpMask = 0xFFFFFFFF;
 /* The IP broadcast address of the BMF network interface in host byte order.
  * May be overruled by setting the plugin parameter "BmfinterfaceIp". */
 u_int32_t EtherTunTapIpBroadcast = ETHERTUNTAPIPNOTSET;
+
+/* Whether or not the BMF network interface must be marked as persistent */
+int EtherTunTapPersistent = 1;
 
 /* Whether or not the configuration has overruled the default IP
  * configuration of the EtherTunTap interface */
@@ -211,6 +215,32 @@ int SetBmfInterfaceIp(
 
   return 0;
 } /* SetBmfInterfaceIp */
+
+/* -------------------------------------------------------------------------
+ * Function   : SetBmfInterfacePersistent
+ * Description: Determine if the EtherTunTap interface must be marked
+ *              persistent or not
+ * Input      : value - yes/true/1  or no/false/0
+ *              data  - not used
+ *              addon - not used
+ * Output     : none
+ * Return     : success (0) or fail (1)
+ * Data Used  : EtherTunTapPersistent
+ * ------------------------------------------------------------------------- */
+int SetBmfInterfacePersistent(
+  const char* value,
+  void* data __attribute__((unused)),
+  set_plugin_parameter_addon addon __attribute__((unused)))
+{
+	if (strcasecmp(value, "yes") == 0 || strcasecmp(value, "true") == 0 || strcasecmp(value, "1") == 0) {
+		EtherTunTapPersistent = 1;
+	} else if (strcasecmp(value, "no") == 0 || strcasecmp(value, "false") == 0 || strcasecmp(value, "0") == 0) {
+		EtherTunTapPersistent = 0;
+	} else {
+		return 1;
+	}
+	return 0;
+} /* SetBmfInterfacePersistent */
 
 /* -------------------------------------------------------------------------
  * Function   : SetCapturePacketsOnOlsrInterfaces
@@ -333,7 +363,7 @@ int DeactivateSpoofFilter(void)
     return 0;
   }
 
-  EthTapSpoofState = fgetc(procSpoof);
+  EthTapSpoofState = (char)fgetc(procSpoof);
   fclose(procSpoof);
 
   /* Open procfile for writing */
@@ -417,7 +447,7 @@ void FindNeighbors(
 {
 #ifndef NODEBUG
   struct ipaddr_str buf;
-#endif
+#endif /* NODEBUG */
   int i;
 
   /* Initialize */
@@ -673,7 +703,7 @@ void FindNeighbors(
 #ifndef NODEBUG
               struct ipaddr_str neighbor_iface_buf, forw_buf;
               olsr_ip_to_string(&neighbor_iface_buf, &walker->neighbor_iface_addr);
-#endif
+#endif /* NODEBUG */
               OLSR_PRINTF(
                 9,
                 "%s: ----> not forwarding to %s: I am not an MPR between %s and %s, direct link costs %5.2f\n",
@@ -826,13 +856,13 @@ void FindNeighbors(
 #ifndef NODEBUG
           struct interface* bestIntf = if_ifwithaddr(&bestLinkToNeighbor->local_iface_addr);
           struct lqtextbuffer lqbuffer;
-#endif
+#endif /* NODEBUG */
           OLSR_PRINTF(
             9,
             "%s: ----> not forwarding to %s: \"%s\" gives a better link to this neighbor, costing %s\n",
             PLUGIN_NAME_SHORT,
             olsr_ip_to_string(&buf, &walker->neighbor_iface_addr),
-            bestIntf->int_name,
+            bestIntf ? bestIntf->int_name : "NULL",
             get_linkcost_text(bestLinkToNeighbor->linkcost, false, &lqbuffer));
         }
 
@@ -844,7 +874,7 @@ void FindNeighbors(
 #ifndef NODEBUG
         struct ipaddr_str forwardedByBuf, niaBuf;
         struct lqtextbuffer lqbuffer;
-#endif
+#endif /* NODEBUG */
         OLSR_PRINTF(
           9,
           "%s: ----> 2-hop path from %s via me to %s will cost ETX %s\n",
@@ -877,7 +907,7 @@ void FindNeighbors(
               struct ipaddr_str neighbor_iface_buf, forw_buf;
               struct lqtextbuffer lqbuffer;
               olsr_ip_to_string(&neighbor_iface_buf, &walker->neighbor_iface_addr);
-#endif
+#endif /* NODEBUG */
               OLSR_PRINTF(
                 9,
                 "%s: ----> not forwarding to %s: I am not an MPR between %s and %s, direct link costs %s\n",
@@ -1172,7 +1202,7 @@ static int CreateEncapsulateSocket(const char* ifName)
  * ------------------------------------------------------------------------- */
 static int CreateLocalEtherTunTap(void)
 {
-  static const char deviceName[] = "/dev/net/tun";
+  static const char * deviceName = OS_TUNNEL_PATH;
   struct ifreq ifreq;
   int etfd;
   int ioctlSkfd;
@@ -1298,9 +1328,9 @@ static int CreateLocalEtherTunTap(void)
   /* Use ioctl to make the tuntap persistent. Otherwise it will disappear
    * when this program exits. That is not desirable, since a multicast
    * daemon (e.g. mrouted) may be using the tuntap interface. */
-  if (ioctl(etfd, TUNSETPERSIST, (void *)&ifreq) < 0)
+  if (ioctl(etfd, TUNSETPERSIST, EtherTunTapPersistent ? (void *)&ifreq : NULL) < 0)
   {
-    BmfPError("error making EtherTunTap interface \"%s\" persistent", EtherTunTapIfName);
+    BmfPError("error making EtherTunTap interface \"%s\" %spersistent", EtherTunTapIfName, !EtherTunTapPersistent ? "non-" : "");
 
     /* Continue anyway */
   }
@@ -1375,7 +1405,9 @@ static int CreateInterface(
     capturingSkfd = CreateCaptureSocket(ifName);
     if (capturingSkfd < 0)
     {
-      close(encapsulatingSkfd);
+      if (encapsulatingSkfd >= 0) {
+        close(encapsulatingSkfd);
+      }
       free(newIf);
       return 0;
     }
@@ -1390,8 +1422,9 @@ static int CreateInterface(
     listeningSkfd = CreateListeningSocket(ifName);
     if (listeningSkfd < 0)
     {
-      close(listeningSkfd);
-      close(encapsulatingSkfd); /* no problem if 'encapsulatingSkfd' is -1 */
+      if (encapsulatingSkfd >= 0) {
+        close(encapsulatingSkfd); /* no problem if 'encapsulatingSkfd' is -1 */
+      }
       free(newIf);
       return 0;
     }
@@ -1410,8 +1443,12 @@ static int CreateInterface(
   if (ioctl(ioctlSkfd, SIOCGIFHWADDR, &ifr) < 0)
   {
     BmfPError("ioctl(SIOCGIFHWADDR) error for interface \"%s\"", ifName);
-    close(capturingSkfd);
-    close(encapsulatingSkfd);
+    if (capturingSkfd >= 0) {
+      close(capturingSkfd);
+    }
+    if (encapsulatingSkfd >= 0) {
+      close(encapsulatingSkfd);
+    }
     free(newIf);
     return 0;
   }

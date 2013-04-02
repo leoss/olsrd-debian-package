@@ -8,11 +8,9 @@
 #ifndef GATEWAY_DEFAULT_HANDLER_H_
 #define GATEWAY_DEFAULT_HANDLER_H_
 
-#ifndef WIN32
-#include "gateway.h"
+#ifdef __linux__
 
-void olsr_gw_default_init(void);
-void olsr_gw_default_lookup_gateway(bool, bool);
+extern struct olsr_gw_handler gw_def_handler;
 
-#endif /* !WIN32 */
+#endif /* __linux__ */
 #endif /* GATEWAY_DEFAULT_HANDLER_H_ */

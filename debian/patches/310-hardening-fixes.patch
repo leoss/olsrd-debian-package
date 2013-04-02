@@ -15,14 +15,6 @@ diff --git a/Makefile.inc b/Makefile.inc
 index aa4f5c1..c5fa7cb 100644
 --- a/Makefile.inc
 +++ b/Makefile.inc
-@@ -63,6 +63,7 @@ CPPFLAGS =	-Isrc
- ifneq ($(TOPDIR),.)
- CPPFLAGS +=	-I$(TOPDIR)/src
- endif
-+CPPFLAGS +=	-D_FORTIFY_SOURCE=2
- 
- # add gcc warnings and optimizations if CFLAGS not set
- ifndef CFLAGS
 @@ -150,6 +151,7 @@ endif
  LDFLAGS +=	-shared
  LDFLAGS +=	-Wl,-soname,$(PLUGIN_SONAME)
@@ -31,27 +23,3 @@ index aa4f5c1..c5fa7cb 100644
  else
  # c and ld flags for main
  ifeq ($(OS),win32)
-@@ -222,7 +224,7 @@ quote = $(subst .,\.,$(subst /,\/,$1))
- 
- %.o: %.c
- 	@echo "[CC] $<"
--	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
-+	$(CC) -O2 $(CFLAGS) $(CPPFLAGS) -fPIE -c -o $@ $<
- 
- # we always need the includes and defines
- # for legacy since now
-diff --git a/gui/linux-gtk/Makefile b/gui/linux-gtk/Makefile
-index 19d713b..f333c8f 100644
---- a/gui/linux-gtk/Makefile
-+++ b/gui/linux-gtk/Makefile
-@@ -1,7 +1,8 @@
- CC ?=	gcc
- 
--CFLAGS += -Wall `pkg-config --cflags gtk+-2.0`
--LDFLAGS +=
-+# hardening flags: -fPIE -Wl,-z,now -pie
-+CFLAGS += -O2 -Wall `pkg-config --cflags gtk+-2.0` -fPIE
-+LDFLAGS += -Wl,-z,now -pie
- LIBS := `pkg-config --libs gtk+-2.0` -lm
- 
- OBJS=	src/main.o src/interface.o src/callbacks.o src/ipc.o \

@@ -118,9 +118,9 @@ static void olsrd_write_if_autobuf(struct autobuf *out, struct if_config_options
   if (comments) abuf_puts(out,
     "    \n"
     "    # IPv4 broadcast address for outgoing OLSR packets.\n"
-    "    # One usefull example would be 255.255.255.255\n"
+    "    # One useful example would be 255.255.255.255\n"
     "    # The second useful value would be to\n"
-    "    # specify the peer adress of an ptp-tunnel.\n"
+    "    # specify the peer address of an ptp-tunnel.\n"
     "    # another name of this parameter is \"IPv4Multicast\"\n"
     "    # (default is 0.0.0.0, which triggers the usage of the\n"
     "    # interface broadcast IP)\n"
@@ -472,6 +472,43 @@ void olsrd_write_cnf_autobuf(struct autobuf *out, struct olsrd_config *cnf) {
   abuf_appendf(out, "%sSmartGatewayThreshold  %d\n",
       cnf->smart_gw_thresh == DEF_GW_THRESH ? "# " : "",
       cnf->smart_gw_thresh);
+  abuf_puts(out,
+    "\n"
+    "# The weighing factor for the gateway uplink bandwidth (exit link, uplink).\n"
+    "# See README-Olsr-Extensions for a description of smart gateways.\n"
+    "# (default is 1)\n"
+    "\n");
+  abuf_appendf(out, "%sSmartGatewayWeightExitLinkUp  %d\n",
+      cnf->smart_gw_weight_exitlink_up == DEF_GW_WEIGHT_EXITLINK_UP ? "# " : "",
+      cnf->smart_gw_weight_exitlink_up);
+  abuf_puts(out,
+    "\n"
+    "# The weighing factor for the gateway downlink bandwidth (exit link, downlink).\n"
+    "# See README-Olsr-Extensions for a description of smart gateways.\n"
+    "# (default is 1)\n"
+    "\n");
+  abuf_appendf(out, "%sSmartGatewayWeightExitLinkDown  %d\n",
+      cnf->smart_gw_weight_exitlink_down == DEF_GW_WEIGHT_EXITLINK_DOWN ? "# " : "",
+      cnf->smart_gw_weight_exitlink_down);
+  abuf_puts(out,
+    "\n"
+    "# The weighing factor for the ETX costs.\n"
+    "# See README-Olsr-Extensions for a description of smart gateways.\n"
+    "# (default is 1)\n"
+    "\n");
+  abuf_appendf(out, "%sSmartGatewayWeightEtx  %d\n",
+      cnf->smart_gw_weight_etx == DEF_GW_WEIGHT_ETX ? "# " : "",
+      cnf->smart_gw_weight_etx);
+
+  abuf_puts(out,
+    "\n"
+    "# The divider for the ETX costs.\n"
+    "# See README-Olsr-Extensions for a description of smart gateways.\n"
+    "# (default is 0)\n"
+    "\n");
+  abuf_appendf(out, "%sSmartGatewayDividerEtx  %d\n",
+      cnf->smart_gw_divider_etx == DEF_GW_DIVIDER_ETX ? "# " : "",
+      cnf->smart_gw_divider_etx);
   abuf_puts(out,
     "\n"
     "# Defines what kind of Uplink this node will publish as a\n"
