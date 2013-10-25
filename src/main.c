@@ -46,6 +46,7 @@
 
 #include "ipcalc.h"
 #include "defs.h"
+#include "builddata.h"
 #include "olsr.h"
 #include "log.h"
 #include "scheduler.h"
@@ -234,11 +235,11 @@ static void writePidFile(void) {
     /* write the PID */
     {
       pid_t pid = getpid();
-      int chars = snprintf(buf, sizeof(buf), "%d", pid);
+      int chars = snprintf(buf, sizeof(buf), "%d", (int)pid);
       ssize_t chars_written = write(fd, buf, chars);
       if (chars_written != chars) {
         close(fd);
-        snprintf(buf, sizeof(buf), "Could not write the PID %d to the PID file %s", pid, olsr_cnf->pidfile);
+        snprintf(buf, sizeof(buf), "Could not write the PID %d to the PID file %s", (int)pid, olsr_cnf->pidfile);
         perror(buf);
         if (remove(olsr_cnf->pidfile) < 0) {
           snprintf(buf, sizeof(buf), "Could not remove the PID file %s", olsr_cnf->pidfile);
@@ -287,9 +288,9 @@ static void initRandom(void) {
 #ifndef _WIN32
   int randomFile;
 
-  randomFile = open("/dev/random", O_RDONLY);
+  randomFile = open("/dev/urandom", O_RDONLY);
   if (randomFile == -1) {
-    randomFile = open("/dev/urandom", O_RDONLY);
+    randomFile = open("/dev/random", O_RDONLY);
   }
 
   if (randomFile != -1) {
@@ -591,6 +592,15 @@ int main(int argc, char *argv[]) {
     }
   }
 
+#ifdef __linux__
+  /* startup gateway system */
+  if (olsr_cnf->smart_gw_active) {
+    if (olsr_startup_gateways()) {
+      olsr_exit("Cannot startup gateway tunnels", 1);
+    }
+  }
+#endif /* __linux__ */
+
   olsr_do_startup_sleep();
 
   /* Print heartbeat to stdout */
@@ -828,6 +838,7 @@ static void olsr_shutdown(int signo __attribute__ ((unused)))
 #ifdef __linux__
   /* trigger gateway selection */
   if (olsr_cnf->smart_gw_active) {
+    olsr_shutdown_gateways();
     olsr_cleanup_gateways();
   }
 

@@ -1,7 +1,10 @@
-diff --git a/Makefile b/Makefile
-index a9d7fb6..a63f59e 100644
---- a/Makefile
-+++ b/Makefile
+---
+ Makefile     |    2 ++
+ Makefile.inc |    1 +
+ 2 files changed, 3 insertions(+)
+
+--- olsrd-0.6.6.1.orig/Makefile
++++ olsrd-0.6.6.1/Makefile
 @@ -54,6 +54,8 @@ LDFLAGS +=	-Wl,--out-implib=libolsrd.a
  LDFLAGS +=	-Wl,--export-all-symbols
  endif
@@ -11,11 +14,9 @@ index a9d7fb6..a63f59e 100644
  SWITCHDIR =	src/olsr_switch
  CFGDIR =	src/cfgparser
  include $(CFGDIR)/local.mk
-diff --git a/Makefile.inc b/Makefile.inc
-index aa4f5c1..c5fa7cb 100644
---- a/Makefile.inc
-+++ b/Makefile.inc
-@@ -150,6 +151,7 @@ endif
+--- olsrd-0.6.6.1.orig/Makefile.inc
++++ olsrd-0.6.6.1/Makefile.inc
+@@ -165,6 +165,7 @@ endif
  LDFLAGS +=	-shared
  LDFLAGS +=	-Wl,-soname,$(PLUGIN_SONAME)
  LDFLAGS +=	-Wl,--version-script=version-script.txt 

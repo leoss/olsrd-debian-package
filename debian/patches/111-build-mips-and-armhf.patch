@@ -1,7 +1,10 @@
-diff -ruN olsrd-0.6.1.orig/make/Makefile.linux olsrd-0.6.1/make/Makefile.linux
---- olsrd-0.6.1.orig/make/Makefile.linux	2011-05-07 13:07:54.000000000 +0200
-+++ olsrd-0.6.1/make/Makefile.linux	2011-05-07 13:08:27.000000000 +0200
-@@ -19,7 +19,7 @@
+---
+ make/Makefile.linux |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- olsrd-0.6.6.1.orig/make/Makefile.linux
++++ olsrd-0.6.6.1/make/Makefile.linux
+@@ -39,7 +39,7 @@ UNINSTALL_LIB =	rm -f $(LIBDIR)/$(PLUGIN
  ifdef OLSRD_PLUGIN
  GENERATE_PIC = true
  endif
