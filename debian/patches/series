@@ -1,3 +1,2 @@
 111-build-mips-and-armhf.patch
 290-hardcode-etc-olsrd-olsrd-conf.patch
-310-hardening-fixes.patch
