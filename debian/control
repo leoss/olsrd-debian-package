@@ -12,8 +12,8 @@ Build-Depends: debhelper (>= 9),
                liblua50-dev
 Standards-Version: 3.9.5
 Homepage: http://olsr.org/
-Vcs-Svn: svn://svn.debian.org/svn/collab-maint/deb-maint/olsrd/
-Vcs-Browser: http://svn.debian.org/wsvn/collab-maint/deb-maint/olsrd/
+Vcs-Git: https://salsa.debian.org/debian/olsrd.git
+Vcs-Browser: https://salsa.debian.org/debian/olsrd
 
 Package: olsrd
 Architecture: any
