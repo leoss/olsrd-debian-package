@@ -43,7 +43,8 @@
 #include "link_set.h"
 
 float
-olsr_hyst_calc_stability(float);
+olsr_hyst_calc_stability
+(float);
 
 int
 olsr_process_hysteresis(struct link_entry *);

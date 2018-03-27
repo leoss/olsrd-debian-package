@@ -1,7 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Thomas Lopatic (thomas@lopatic.de)
- * IPv4 performance optimization (c) 2006, sven-ola(gmx.de)
+ * Copyright (c) 2008 Henning Rogge <rogge@fgan.de>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -39,25 +38,20 @@
  *
  */
 
-#ifndef _LQ_LIST_H
-#define _LQ_LIST_H
+#ifndef LQ_ETX_FPM_PLUGIN_
+#define LQ_ETX_FPM_PLUGIN_
 
-struct list_node
-{
-  struct list_node *next;
-  struct list_node *prev;
-  void *data;
-};
 
-void list_head_init(struct list_node *);
-void list_node_init(struct list_node *);
-int list_node_on_list(struct list_node *);
-int list_is_empty(struct list_node *);
+/****************************************************************************
+ *                Functions that the plugin MUST provide                    *
+ ****************************************************************************/
 
-void list_add_before(struct list_node *, struct list_node *);
-void list_add_after(struct list_node *, struct list_node *);
 
-void list_remove(struct list_node *);
+/* Initialization function */
+int
+olsrd_plugin_init(void);
+
+int 
+olsrd_plugin_interface_version(void);
 
 #endif
-

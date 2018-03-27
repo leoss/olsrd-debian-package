@@ -1,6 +1,7 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas TÃÂ¸nnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2008 Henning Rogge <rogge@fgan.de>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -38,56 +39,29 @@
  *
  */
 
-#ifndef _OLSR_DUP_TABLE
-#define _OLSR_DUP_TABLE
+#ifndef DUPLICATE_SET_H_
+#define DUPLICATE_SET_H_
 
-#include "olsr_types.h"
+#include "common/avl.h"
+#include "olsr.h"
 
-#define UNKNOWN_MESSAGE 0
-
-struct dup_entry
-{
-  union olsr_ip_addr     addr;      /* IP address of originator */
-  olsr_u16_t             seqno;     /* Seqno of message */
-  olsr_u8_t              forwarded; /* If this message was forwarded or not */
-  clock_t                timer;	    /* Holding time */
-  struct dup_iface       *ifaces;   /* Interfaces this message was recieved on */
-  struct dup_entry       *next;     /* Next entry */
-  struct dup_entry       *prev;     /* Prev entry */
+struct duplicate_entry {
+  struct avl_node avl;
+  union olsr_ip_addr ip;
+  olsr_u16_t seqnr;
+  olsr_u16_t too_low_counter;
+  olsr_u32_t array;
 };
 
-struct dup_iface
-{
-  union olsr_ip_addr     addr;      /* Addess of the interface */
-  struct dup_iface       *next;     /* Next in line */
-};
+void olsr_init_duplicate_set(void);
+struct duplicate_entry *olsr_create_duplicate_entry(void *ip, olsr_u16_t seqnr);
+int olsr_shall_process_message(void *ip, olsr_u16_t seqnr);
+void olsr_print_duplicate_table(void);
 
+#endif /*DUPLICATE_SET_H_*/
 
-void
-olsr_init_duplicate_table(void);
-
-void
-olsr_time_out_duplicate_table(void *);
-
-int
-olsr_check_dup_table_proc(const union olsr_ip_addr *, const olsr_u16_t);
-
-int
-olsr_check_dup_table_fwd(const union olsr_ip_addr *, const olsr_u16_t, const union olsr_ip_addr *);
-
-void
-olsr_del_dup_entry(struct dup_entry *);
-
-void
-olsr_print_duplicate_table(void);
-
-int
-olsr_update_dup_entry(const union olsr_ip_addr *, const olsr_u16_t, const union olsr_ip_addr *);
-
-int
-olsr_set_dup_forward(const union olsr_ip_addr *, const olsr_u16_t);
-
-int
-olsr_check_dup_forward(union olsr_ip_addr *, olsr_u16_t);
-
-#endif
+/*
+ * Local Variables:
+ * c-basic-offset: 2
+ * End:
+ */
