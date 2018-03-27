@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,8 +58,12 @@
 
 #define DEFAULT_HNA_CHECK_INTERVAL	1000
 #define DEFAULT_PING_CHECK_INTERVAL	5
+#define DEFAULT_PING_CMD            "ping -c 1 -q %s"
+#define PING_CMD_MAX_LEN            64
 
 int olsrd_plugin_init(void);
+
+void olsrd_plugin_fini(void);
 
 int olsrd_plugin_interface_version(void);
 

@@ -1,7 +1,11 @@
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Thomas Lopatic (thomas@lopatic.de)
- * IPv4 performance optimization (c) 2006, sven-ola(gmx.de)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -93,7 +97,7 @@ struct gw_container_entry * olsr_gw_list_find(struct gw_list * list, struct gate
 	assert(entry);
 
 	OLSR_FOR_ALL_GWS(&list->head, gw) {
-		if (gw && gw->gw && (gw->gw == entry)) {
+		if (gw->gw && (gw->gw == entry)) {
 			return gw;
 		}
 	}
@@ -123,7 +127,10 @@ struct gw_container_entry * olsr_gw_list_add(struct gw_list * list, struct gw_co
 	list_node_init(&entry->list_node);
 
 	OLSR_FOR_ALL_GWS(&list->head, gw) {
-		if (gw && (entry->path_cost <= gw->path_cost)) {
+	  assert(gw);
+	  assert(gw->gw);
+	  assert(entry->gw);
+	  if (entry->gw->path_cost <= gw->gw->path_cost) {
 			/* add before the iterated list entry: the gateway to insert has lower
 			 * costs or has equal costs but is newer (since we insert it) */
 			list_add_before(&gw->list_node, &entry->list_node);
@@ -140,26 +147,19 @@ struct gw_container_entry * olsr_gw_list_add(struct gw_list * list, struct gw_co
 }
 
 /**
- * Update an entry on the list.
+ * Update an entry on the list (re-sort the list.)
  *
  * @param list a pointer to the list
  * @param entry a pointer to the entry
- * @param path_cost the costs of the entry
  * @return a pointer to the updated entry
  */
-struct gw_container_entry * olsr_gw_list_update(struct gw_list * list, struct gw_container_entry * entry,
-		uint64_t path_cost) {
+struct gw_container_entry * olsr_gw_list_update(struct gw_list * list, struct gw_container_entry * entry) {
 	assert(list);
 	assert(entry);
 	assert(!olsr_gw_list_empty(list));
 
-	if (entry->path_cost == path_cost) {
-		return entry;
-	}
-
 	/* don't touch gw */
 	/* don't touch tunnel */
-	entry->path_cost = path_cost;
 	/* don't touch list_node */
 
 	list_remove(&entry->list_node);

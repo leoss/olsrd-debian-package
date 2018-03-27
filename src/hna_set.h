@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -100,7 +104,7 @@ void olsr_print_hna_set(void);
 #define olsr_print_hna_set() do { } while(0)
 #endif
 
-bool olsr_input_hna(union olsr_message *, struct interface *, union olsr_ip_addr *);
+bool olsr_input_hna(union olsr_message *, struct interface_olsr *, union olsr_ip_addr *);
 
 #endif /* _OLSR_HNA */
 

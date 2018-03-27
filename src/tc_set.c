@@ -1,8 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
- * LSDB rewrite (c) 2007, Hannes Gredler (hannes@gredler.at)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -157,6 +160,7 @@ olsr_add_tc_entry(union olsr_ip_addr *adr)
   /* Fill entry */
   tc->addr = *adr;
   tc->vertex_node.key = &tc->addr;
+  tc->path_cost = ROUTE_COST_BROKEN;
 
   /*
    * Insert into the global tc tree.
@@ -737,8 +741,8 @@ olsr_calculate_tc_border(uint8_t lower_border, union olsr_ip_addr *lower_border_
     for (i = 0; i < lower_border / 8; i++) {
       lower_border_ip->v6.s6_addr[olsr_cnf->ipsize - i - 1] = 0;
     }
-    lower_border_ip->v6.s6_addr[olsr_cnf->ipsize - lower_border / 8 - 1] &= (0xff << (lower_border & 7));
-    lower_border_ip->v6.s6_addr[olsr_cnf->ipsize - lower_border / 8 - 1] |= (1 << (lower_border & 7));
+    lower_border_ip->v6.s6_addr[olsr_cnf->ipsize - lower_border / 8 - 1] &= (0xffu << (lower_border & 7));
+    lower_border_ip->v6.s6_addr[olsr_cnf->ipsize - lower_border / 8 - 1] |= (1u << (lower_border & 7));
   }
 
   if (upper_border == 0xff) {
@@ -751,8 +755,8 @@ olsr_calculate_tc_border(uint8_t lower_border, union olsr_ip_addr *lower_border_
     for (i = 0; i < upper_border / 8; i++) {
       upper_border_ip->v6.s6_addr[olsr_cnf->ipsize - i - 1] = 0;
     }
-    upper_border_ip->v6.s6_addr[olsr_cnf->ipsize - upper_border / 8 - 1] &= (0xff << (upper_border & 7));
-    upper_border_ip->v6.s6_addr[olsr_cnf->ipsize - upper_border / 8 - 1] |= (1 << (upper_border & 7));
+    upper_border_ip->v6.s6_addr[olsr_cnf->ipsize - upper_border / 8 - 1] &= (0xffu << (upper_border & 7));
+    upper_border_ip->v6.s6_addr[olsr_cnf->ipsize - upper_border / 8 - 1] |= (1u << (upper_border & 7));
   }
   return 1;
 }
@@ -768,7 +772,7 @@ olsr_calculate_tc_border(uint8_t lower_border, union olsr_ip_addr *lower_border_
  * hence the spot we are looking at.
  */
 bool
-olsr_input_tc(union olsr_message * msg, struct interface * input_if __attribute__ ((unused)), union olsr_ip_addr * from_addr)
+olsr_input_tc(union olsr_message * msg, struct interface_olsr * input_if __attribute__ ((unused)), union olsr_ip_addr * from_addr)
 {
   struct ipaddr_str buf;
   uint16_t size, msg_seq, ansn;

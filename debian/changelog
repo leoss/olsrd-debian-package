@@ -1,3 +1,10 @@
+olsrd (0.9.6.1-1) UNRELEASED; urgency=medium
+
+  * New upstream version 0.9.6.1
+  * Update debian/watch
+
+ -- Nicolas Braud-Santoni <nicolas@braud-santoni.eu>  Tue, 27 Mar 2018 08:11:51 +0200
+
 olsrd (0.6.6.2-1) unstable; urgency=medium
 
   * New upstream release

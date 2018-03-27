@@ -1,8 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
- * RIB implementation (c) 2007, Hannes Gredler (hannes@gredler.at)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -56,12 +59,6 @@
 
 #define NETMASK_HOST 0xffffffff
 #define NETMASK_DEFAULT 0x0
-
-/*
- * the kernel FIB does not need to know the metric of a route.
- * this saves us from enqueuing/dequeueing hopcount only changes.
- */
-#define RT_METRIC_DEFAULT 2
 
 /* a composite metric is used for path selection */
 struct rt_metric {

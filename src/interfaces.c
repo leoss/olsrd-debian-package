@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,11 +62,11 @@
 #endif /* _WIN32 */
 
 /* The interface linked-list */
-struct interface *ifnet;
+struct interface_olsr *ifnet;
 
 /* Ifchange functions */
 struct ifchgf {
-  void (*function) (int if_index, struct interface *, enum olsr_ifchg_flag);
+  void (*function) (int if_index, struct interface_olsr *, enum olsr_ifchg_flag);
   struct ifchgf *next;
 };
 
@@ -119,7 +123,7 @@ olsr_init_interfacedb(void)
 }
 
 void
-olsr_trigger_ifchange(int if_index, struct interface *ifp, enum olsr_ifchg_flag flag)
+olsr_trigger_ifchange(int if_index, struct interface_olsr *ifp, enum olsr_ifchg_flag flag)
 {
   struct ifchgf *tmp_ifchgf_list = ifchgf_list;
 
@@ -138,10 +142,10 @@ olsr_trigger_ifchange(int if_index, struct interface *ifp, enum olsr_ifchg_flag 
  *that matched the address.
  */
 
-struct interface *
+struct interface_olsr *
 if_ifwithaddr(const union olsr_ip_addr *addr)
 {
-  struct interface *ifp;
+  struct interface_olsr *ifp;
 
   if (!addr)
     return NULL;
@@ -173,10 +177,10 @@ if_ifwithaddr(const union olsr_ip_addr *addr)
  *@return return the interface struct representing the interface
  *that matched the number.
  */
-struct interface *
+struct interface_olsr *
 if_ifwithsock(int fd)
 {
-  struct interface *ifp;
+  struct interface_olsr *ifp;
   ifp = ifnet;
 
   while (ifp) {
@@ -196,10 +200,10 @@ if_ifwithsock(int fd)
  *@return return the interface struct representing the interface
  *that matched the label.
  */
-struct interface *
+struct interface_olsr *
 if_ifwithname(const char *if_name)
 {
-  struct interface *ifp = ifnet;
+  struct interface_olsr *ifp = ifnet;
   while (ifp) {
     /* good ol' strcmp should be sufficcient here */
     if (strcmp(ifp->int_name, if_name) == 0) {
@@ -240,10 +244,10 @@ olsrif_ifwithname(const char *if_name)
  *@return return the interface struct representing the interface
  *that matched the iif_index.
  */
-struct interface *
+struct interface_olsr *
 if_ifwithindex(const int if_index)
 {
-  struct interface *ifp = ifnet;
+  struct interface_olsr *ifp = ifnet;
   while (ifp != NULL) {
     if (ifp->if_index == if_index) {
       return ifp;
@@ -263,7 +267,7 @@ if_ifwithindex(const int if_index)
 const char *
 if_ifwithindex_name(const int if_index)
 {
-  const struct interface *const ifp = if_ifwithindex(if_index);
+  const struct interface_olsr *const ifp = if_ifwithindex(if_index);
   return ifp == NULL ? "void" : ifp->int_name;
 }
 
@@ -322,7 +326,7 @@ olsr_create_olsrif(const char *name, int hemu)
  *@return always 1
  */
 int
-olsr_add_ifchange_handler(void (*f) (int if_index, struct interface *, enum olsr_ifchg_flag))
+olsr_add_ifchange_handler(void (*f) (int if_index, struct interface_olsr *, enum olsr_ifchg_flag))
 {
 
   struct ifchgf *new_ifchgf;
@@ -341,9 +345,13 @@ olsr_add_ifchange_handler(void (*f) (int if_index, struct interface *, enum olsr
  * Remove an ifchange function
  */
 int
-olsr_remove_ifchange_handler(void (*f) (int if_index, struct interface *, enum olsr_ifchg_flag))
+olsr_remove_ifchange_handler(void (*f) (int if_index, struct interface_olsr *, enum olsr_ifchg_flag))
 {
   struct ifchgf *tmp_ifchgf, *prev;
+
+  if (!f) {
+    return 0;
+  }
 
   tmp_ifchgf = ifchgf_list;
   prev = NULL;
@@ -370,7 +378,7 @@ olsr_remove_ifchange_handler(void (*f) (int if_index, struct interface *, enum o
 void
 olsr_remove_interface(struct olsr_if * iface)
 {
-  struct interface *ifp, *tmp_ifp;
+  struct interface_olsr *ifp, *tmp_ifp;
   ifp = iface->interf;
 
   OLSR_PRINTF(1, "Removing interface %s (%d)\n", iface->name, ifp->if_index);
@@ -423,8 +431,7 @@ olsr_remove_interface(struct olsr_if * iface)
   free(ifp);
 
   if ((ifnet == NULL) && (!olsr_cnf->allow_no_interfaces)) {
-    olsr_syslog(OLSR_LOG_INFO, "No more active interfaces - exiting.\n");
-    olsr_exit("No more active interfaces - exiting.\n", EXIT_FAILURE);
+    olsr_exit("No more active interfaces", EXIT_FAILURE);
   }
 }
 

@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -63,6 +67,8 @@ typedef uint32_t olsr_reltime;
 olsr_reltime me_to_reltime(const uint8_t);
 
 uint8_t reltime_to_me(const olsr_reltime);
+
+olsr_reltime reltime_minimum_interval(void);
 
 #endif /* _OLSR_MANTISSA */
 

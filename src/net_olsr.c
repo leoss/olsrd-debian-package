@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -116,7 +120,7 @@ init_net(void)
  *  for the given interface
  */
 int
-net_add_buffer(struct interface *ifp)
+net_add_buffer(struct interface_olsr *ifp)
 {
   /* Can the interfaces MTU actually change? If not, we can elimiate
    * the "bufsize" field in "struct olsr_netbuf".
@@ -149,7 +153,7 @@ net_add_buffer(struct interface *ifp)
  * @return 0 on success, negative if no buffer is found
  */
 int
-net_remove_buffer(struct interface *ifp)
+net_remove_buffer(struct interface_olsr *ifp)
 {
   /* Flush pending data */
   if (ifp->netbuf.pending)
@@ -176,7 +180,7 @@ net_remove_buffer(struct interface *ifp)
  *  bytes to reserve
  */
 int
-net_reserve_bufspace(struct interface *ifp, int size)
+net_reserve_bufspace(struct interface_olsr *ifp, int size)
 {
   if (size > ifp->netbuf.maxsize)
     return -1;
@@ -196,7 +200,7 @@ net_reserve_bufspace(struct interface *ifp, int size)
  * @return the number of bytes currently pending
  */
 uint16_t
-net_output_pending(const struct interface * ifp)
+net_output_pending(const struct interface_olsr * ifp)
 {
   return ifp->netbuf.pending;
 }
@@ -213,7 +217,7 @@ net_output_pending(const struct interface * ifp)
  *  success
  */
 int
-net_outbuffer_push(struct interface *ifp, const void *data, const uint16_t size)
+net_outbuffer_push(struct interface_olsr *ifp, const void *data, const uint16_t size)
 {
   if ((ifp->netbuf.pending + size) > ifp->netbuf.maxsize)
     return 0;
@@ -236,7 +240,7 @@ net_outbuffer_push(struct interface *ifp, const void *data, const uint16_t size)
  *  success
  */
 int
-net_outbuffer_push_reserved(struct interface *ifp, const void *data, const uint16_t size)
+net_outbuffer_push_reserved(struct interface_olsr *ifp, const void *data, const uint16_t size)
 {
   if ((ifp->netbuf.pending + size) > (ifp->netbuf.maxsize + ifp->netbuf.reserved))
     return 0;
@@ -256,9 +260,16 @@ net_outbuffer_push_reserved(struct interface *ifp, const void *data, const uint1
  * @return the number of bytes available in the buffer or
  */
 int
-net_outbuffer_bytes_left(const struct interface *ifp)
+net_outbuffer_bytes_left(const struct interface_olsr *ifp)
 {
-  return ifp->netbuf.maxsize - ifp->netbuf.pending;
+  /* IPv6 minimum MTU - IPv6 header - UDP header - VLAN-Tag */
+  static int MAX_REMAINING = 1280 - 40 - 8 - 4;
+  int remaining = ifp->netbuf.maxsize - ifp->netbuf.pending;
+
+  if (remaining > MAX_REMAINING) {
+    return MAX_REMAINING;
+  }
+  return remaining;
 }
 
 /**
@@ -323,7 +334,7 @@ del_ptf(packet_transform_function f)
  *@return negative on error
  */
 int
-net_output(struct interface *ifp)
+net_output(struct interface_olsr *ifp)
 {
   struct sockaddr_in *sin = NULL;
   struct sockaddr_in6 *sin6 = NULL;
@@ -377,7 +388,7 @@ net_output(struct interface *ifp)
         0) {
       perror("sendto(v4)");
 #ifndef _WIN32
-      olsr_syslog(OLSR_LOG_ERR, "OLSR: sendto IPv4 %m");
+      olsr_syslog(OLSR_LOG_ERR, "OLSR: sendto IPv4 '%s' on interface %s", strerror(errno), ifp->int_name);
 #endif /* _WIN32 */
       retval = -1;
     }
@@ -388,7 +399,7 @@ net_output(struct interface *ifp)
       struct ipaddr_str buf;
       perror("sendto(v6)");
 #ifndef _WIN32
-      olsr_syslog(OLSR_LOG_ERR, "OLSR: sendto IPv6 %m");
+      olsr_syslog(OLSR_LOG_ERR, "OLSR: sendto IPv6 '%s' on interface %s", strerror(errno), ifp->int_name);
 #endif /* _WIN32 */
       fprintf(stderr, "Socket: %d interface: %d\n", ifp->olsr_socket, ifp->if_index);
       fprintf(stderr, "To: %s (size: %u)\n", ip6_to_string(&buf, &sin6->sin6_addr), (unsigned int)sizeof(*sin6));
@@ -435,7 +446,7 @@ olsr_validate_address(const union olsr_ip_addr *adr)
       OLSR_PRINTF(1, "Validation of address %s failed!\n", olsr_ip_to_string(&buf, adr));
       return false;
     }
-    if (deny_entry == (struct deny_address_entry *)&olsr_cnf->main_addr)
+    if (&deny_entry->addr == &olsr_cnf->main_addr)
       break;
   }
   return true;

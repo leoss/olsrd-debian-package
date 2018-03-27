@@ -1,33 +1,46 @@
 /*
- * OLSR Basic Multicast Forwarding (BMF) plugin.
- * Copyright (c) 2005 - 2007, Thales Communications, Huizen, The Netherlands.
- * Written by Erik Tromp.
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without 
- * modification, are permitted provided that the following conditions 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
  * are met:
  *
- * * Redistributions of source code must retain the above copyright 
+ * * Redistributions of source code must retain the above copyright
  *   notice, this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright 
- *   notice, this list of conditions and the following disclaimer in 
- *   the documentation and/or other materials provided with the 
+ * * Redistributions in binary form must reproduce the above copyright
+ *   notice, this list of conditions and the following disclaimer in
+ *   the documentation and/or other materials provided with the
  *   distribution.
- * * Neither the name of Thales, BMF nor the names of its 
- *   contributors may be used to endorse or promote products derived 
+ * * Neither the name of olsr.org, olsrd nor the names of its
+ *   contributors may be used to endorse or promote products derived
  *   from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. 
- * IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, 
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY 
- * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE 
- * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED 
- * OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Visit http://www.olsr.org for more information.
+ *
+ * If you find this software useful feel free to make a donation
+ * to the project. For more information see the website or contact
+ * the copyright holders.
+ *
  */
 
 /* -------------------------------------------------------------------------
@@ -50,6 +63,7 @@
 #include <assert.h> /* assert() */
 #include <net/if.h> /* socket(), ifreq, if_indextoname(), if_nametoindex() */
 #include <netinet/in.h> /* htons() */
+#include <netinet/udp.h> /* struct udphdr */
 #include <linux/if_ether.h> /* ETH_P_IP */
 #include <linux/if_packet.h> /* packet_mreq, PACKET_MR_PROMISC, PACKET_ADD_MEMBERSHIP */
 #include <linux/if_tun.h> /* IFF_TAP */
@@ -201,14 +215,14 @@ int SetBmfInterfaceIp(
   EtherTunTapIpMask = 0;
   for (i = 0; i < prefixLen; i++)
   {
-    EtherTunTapIpMask |= (1 << (IPV4_MAX_PREFIXLEN - 1 - i));
+    EtherTunTapIpMask |= (1u << (IPV4_MAX_PREFIXLEN - 1 - i));
   }
 
   /* Compose IP broadcast address in host byte order */
   EtherTunTapIpBroadcast = EtherTunTapIp;
   for (i = prefixLen; i < IPV4_MAX_PREFIXLEN; i++)
   {
-    EtherTunTapIpBroadcast |= (1 << (IPV4_MAX_PREFIXLEN - 1 - i));
+    EtherTunTapIpBroadcast |= (1u << (IPV4_MAX_PREFIXLEN - 1 - i));
   }
 
   TunTapIpOverruled = 1;
@@ -289,12 +303,12 @@ int SetBmfMechanism(
   void* data __attribute__((unused)),
   set_plugin_parameter_addon addon __attribute__((unused)))
 {
-  if (strcmp(mechanism, "Broadcast") == 0)
+  if (strcasecmp(mechanism, "Broadcast") == 0)
   {
     BmfMechanism = BM_BROADCAST;
     return 0;
   }
-  else if (strcmp(mechanism, "UnicastPromiscuous") == 0)
+  else if (strcasecmp(mechanism, "UnicastPromiscuous") == 0)
   {
     BmfMechanism = BM_UNICAST_PROMISCUOUS;
     return 0;
@@ -657,7 +671,7 @@ void FindNeighbors(
         }
         else
         {
-          struct interface* bestIntf = if_ifwithaddr(&bestLinkToNeighbor->local_iface_addr);
+          struct interface_olsr * bestIntf = if_ifwithaddr(&bestLinkToNeighbor->local_iface_addr);
 
           OLSR_PRINTF(
             9,
@@ -758,7 +772,10 @@ void FindNeighbors(
       union olsr_ip_addr* neighborMainIp;
       struct link_entry* bestLinkToNeighbor;
       struct tc_entry* tcLastHop;
-      float currEtx;
+      olsr_linkcost currEtx;
+#ifndef NODEBUG
+      struct lqtextbuffer lqbuffer;
+#endif /* NODEBUG */
  
       /* Consider only links from the specified interface */
       if (! ipequal(&intf->intAddr, &walker->local_iface_addr))
@@ -831,10 +848,10 @@ void FindNeighbors(
       /* Compare costs to check if the candidate neighbor is best reached via 'intf' */
       OLSR_PRINTF(
         9,
-        "%s: ----> forwarding pkt to %s will cost ETX %5.2f\n",
+        "%s: ----> forwarding pkt to %s will cost ETX %s\n",
         PLUGIN_NAME_SHORT,
         olsr_ip_to_string(&buf, &walker->neighbor_iface_addr),
-        (double)currEtx);
+        get_linkcost_text(currEtx, false, &lqbuffer));
 
       /* If the candidate neighbor is best reached via another interface, then skip 
        * the candidate neighbor; the candidate neighbor has been / will be selected via that
@@ -854,8 +871,7 @@ void FindNeighbors(
         else
         {
 #ifndef NODEBUG
-          struct interface* bestIntf = if_ifwithaddr(&bestLinkToNeighbor->local_iface_addr);
-          struct lqtextbuffer lqbuffer;
+          struct interface_olsr * bestIntf = if_ifwithaddr(&bestLinkToNeighbor->local_iface_addr);
 #endif /* NODEBUG */
           OLSR_PRINTF(
             9,
@@ -873,7 +889,6 @@ void FindNeighbors(
       {
 #ifndef NODEBUG
         struct ipaddr_str forwardedByBuf, niaBuf;
-        struct lqtextbuffer lqbuffer;
 #endif /* NODEBUG */
         OLSR_PRINTF(
           9,
@@ -881,7 +896,7 @@ void FindNeighbors(
           PLUGIN_NAME_SHORT,
           olsr_ip_to_string(&forwardedByBuf, forwardedBy),
           olsr_ip_to_string(&niaBuf, &walker->neighbor_iface_addr),
-          get_linkcost_text(previousLinkEtx + currEtx, true, &lqbuffer));
+          get_linkcost_text(previousLinkEtx + currEtx, false, &lqbuffer));
       }
 
       /* Check the topology table whether the 'forwardedBy' node is itself a direct
@@ -905,7 +920,6 @@ void FindNeighbors(
             {
 #ifndef NODEBUG
               struct ipaddr_str neighbor_iface_buf, forw_buf;
-              struct lqtextbuffer lqbuffer;
               olsr_ip_to_string(&neighbor_iface_buf, &walker->neighbor_iface_addr);
 #endif /* NODEBUG */
               OLSR_PRINTF(
@@ -915,7 +929,7 @@ void FindNeighbors(
                 neighbor_iface_buf.buf,
                 olsr_ip_to_string(&forw_buf, forwardedBy),
                 neighbor_iface_buf.buf,
-                get_linkcost_text(tcEtx, false, &lqbuffer));
+                get_linkcost_text(tcEtx, true, &lqbuffer));
 
               continue; /* for */
             } /* if */
@@ -1271,17 +1285,23 @@ static int CreateLocalEtherTunTap(void)
     EtherTunTapIp = ETHERTUNTAPDEFAULTIP;
   }
 
-  ((struct sockaddr_in*) ARM_NOWARN_ALIGN(&ifreq.ifr_addr))->sin_addr.s_addr = htonl(EtherTunTapIp);
+  {
+    struct sockaddr* ifra = &ifreq.ifr_addr;
+    ((struct sockaddr_in*) ARM_NOWARN_ALIGN(ifra))->sin_addr.s_addr = htonl(EtherTunTapIp);
+  }
   ioctlres = ioctl(ioctlSkfd, SIOCSIFADDR, &ifreq);
   if (ioctlres >= 0)
   {
+    struct sockaddr* ifrn = &ifreq.ifr_netmask;
+    struct sockaddr* ifrb = &ifreq.ifr_broadaddr;
+
     /* Set net mask */
-    ((struct sockaddr_in*) ARM_NOWARN_ALIGN(&ifreq.ifr_netmask))->sin_addr.s_addr = htonl(EtherTunTapIpMask);
+    ((struct sockaddr_in*) ARM_NOWARN_ALIGN(ifrn))->sin_addr.s_addr = htonl(EtherTunTapIpMask);
     ioctlres = ioctl(ioctlSkfd, SIOCSIFNETMASK, &ifreq);
     if (ioctlres >= 0)
     {
       /* Set broadcast IP */
-      ((struct sockaddr_in*) ARM_NOWARN_ALIGN(&ifreq.ifr_broadaddr))->sin_addr.s_addr = htonl(EtherTunTapIpBroadcast);
+      ((struct sockaddr_in*) ARM_NOWARN_ALIGN(ifrb))->sin_addr.s_addr = htonl(EtherTunTapIpBroadcast);
       ioctlres = ioctl(ioctlSkfd, SIOCSIFBRDADDR, &ifreq);
       if (ioctlres >= 0)
       {
@@ -1368,7 +1388,7 @@ static int CreateLocalEtherTunTap(void)
  * ------------------------------------------------------------------------- */
 static int CreateInterface(
   const char* ifName,
-  struct interface* olsrIntf)
+  struct interface_olsr * olsrIntf)
 {
   int capturingSkfd = -1;
   int encapsulatingSkfd = -1;
@@ -1493,7 +1513,8 @@ static int CreateInterface(
     else
     {
       /* Downcast to correct sockaddr subtype */
-      newIf->intAddr.v4 = ((struct sockaddr_in *) ARM_NOWARN_ALIGN(&ifr.ifr_addr))->sin_addr;
+      struct sockaddr* ifra = &ifr.ifr_addr;
+      newIf->intAddr.v4 = ((struct sockaddr_in *) ARM_NOWARN_ALIGN(ifra))->sin_addr;
     }
 
     /* For a non-OLSR interface, retrieve the IP broadcast address ourselves */
@@ -1509,7 +1530,8 @@ static int CreateInterface(
     else
     {
       /* Downcast to correct sockaddr subtype */
-      newIf->broadAddr.v4 = ((struct sockaddr_in *) ARM_NOWARN_ALIGN(&ifr.ifr_broadaddr))->sin_addr;
+      struct sockaddr* ifrb = &ifr.ifr_broadaddr;
+      newIf->broadAddr.v4 = ((struct sockaddr_in *) ARM_NOWARN_ALIGN(ifrb))->sin_addr;
     }
   }
 
@@ -1562,7 +1584,7 @@ static int CreateInterface(
  * Return     : fail (-1) or success (0)
  * Data Used  : none
  * ------------------------------------------------------------------------- */
-int CreateBmfNetworkInterfaces(struct interface* skipThisIntf)
+int CreateBmfNetworkInterfaces(struct interface_olsr * skipThisIntf)
 {
   int skfd;
   struct ifconf ifc;
@@ -1586,7 +1608,7 @@ int CreateBmfNetworkInterfaces(struct interface* skipThisIntf)
   for (;;)
   {
     ifc.ifc_len = sizeof(struct ifreq) * numreqs;
-    ifc.ifc_buf = realloc(ifc.ifc_buf, ifc.ifc_len);
+    ifc.ifc_buf = olsr_realloc(ifc.ifc_buf, ifc.ifc_len, "BMF: CreateBmfNetworkInterfaces ifc");
 
     if (ioctl(skfd, SIOCGIFCONF, &ifc) < 0)
     {
@@ -1612,7 +1634,7 @@ int CreateBmfNetworkInterfaces(struct interface* skipThisIntf)
   ifr = ifc.ifc_req;
   for (n = ifc.ifc_len / sizeof(struct ifreq); --n >= 0; ifr++)
   {
-    struct interface* olsrIntf;
+    struct interface_olsr * olsrIntf;
     union olsr_ip_addr ipAddr;
 
     /* Skip the BMF network interface itself */
@@ -1622,7 +1644,10 @@ int CreateBmfNetworkInterfaces(struct interface* skipThisIntf)
     }
 
     /* ...find the OLSR interface structure, if any */
-    ipAddr.v4 =  ((struct sockaddr_in*) ARM_NOWARN_ALIGN(&ifr->ifr_addr))->sin_addr;
+    {
+      struct sockaddr* ifra = &ifr->ifr_addr;
+      ipAddr.v4 =  ((struct sockaddr_in*) ARM_NOWARN_ALIGN(ifra))->sin_addr;
+    }
     olsrIntf = if_ifwithaddr(&ipAddr);
 
     if (skipThisIntf != NULL && olsrIntf == skipThisIntf)
@@ -1653,11 +1678,11 @@ int CreateBmfNetworkInterfaces(struct interface* skipThisIntf)
 
   if (BmfInterfaces == NULL)
   {
-    olsr_printf(1, "%s: could not initialize any network interface\n", PLUGIN_NAME);
+    olsr_printf(1, "%s: could not initialize any network interface\n", PLUGIN_NAME_SHORT);
   }
   else
   {
-    olsr_printf(1, "%s: opened %d sockets\n", PLUGIN_NAME, nOpenedSockets);
+    olsr_printf(1, "%s: opened %d sockets\n", PLUGIN_NAME_SHORT, nOpenedSockets);
   }
   return 0;
 } /* CreateBmfNetworkInterfaces */
@@ -1809,7 +1834,7 @@ int AddNonOlsrBmfIf(
     olsr_printf(
       1,
       "%s: too many non-OLSR interfaces specified, maximum is %d\n",
-      PLUGIN_NAME,
+      PLUGIN_NAME_SHORT,
       MAX_NON_OLSR_IFS);
     return 1;
   }
@@ -1893,7 +1918,11 @@ void CheckAndUpdateLocalBroadcast(unsigned char* ipPacket, union olsr_ip_addr* b
 
       /* RFC 1624, Eq. 3: HC' = ~(~HC - m + m') */
 
+#if defined(__GLIBC__) || defined(__BIONIC__)
       check = ntohs(udph->check);
+#else
+      check = ntohs(udph->uh_sum);
+#endif
 
       check = ~ (~ check - ((origDaddr >> 16) & 0xFFFF) + ((newDaddr >> 16) & 0xFFFF));
       check = ~ (~ check - (origDaddr & 0xFFFF) + (newDaddr & 0xFFFF));
@@ -1901,7 +1930,11 @@ void CheckAndUpdateLocalBroadcast(unsigned char* ipPacket, union olsr_ip_addr* b
       /* Add carry */
       check = check + (check >> 16);
 
+#if defined(__GLIBC__) || defined(__BIONIC__)
       udph->check = htons(check);
+#else
+      udph->uh_sum = htons(check);
+#endif
      } /* if */
   } /* if */
 } /* CheckAndUpdateLocalBroadcast */
@@ -1932,8 +1965,12 @@ void AddMulticastRoute(void)
   ((struct sockaddr *) ARM_NOWARN_ALIGN(&kernel_route.rt_genmask))->sa_family = AF_INET;
 
   /* 224.0.0.0/4 */
-  ((struct sockaddr_in *) ARM_NOWARN_ALIGN(&kernel_route.rt_dst))->sin_addr.s_addr = htonl(0xE0000000);
-  ((struct sockaddr_in *) ARM_NOWARN_ALIGN(&kernel_route.rt_genmask))->sin_addr.s_addr = htonl(0xF0000000);
+  {
+    struct sockaddr* rdst = &kernel_route.rt_dst;
+    struct sockaddr* rmask = &kernel_route.rt_genmask;
+    ((struct sockaddr_in *) ARM_NOWARN_ALIGN(rdst))->sin_addr.s_addr = htonl(0xE0000000);
+    ((struct sockaddr_in *) ARM_NOWARN_ALIGN(rmask))->sin_addr.s_addr = htonl(0xF0000000);
+  }
 
   kernel_route.rt_metric = 0;
   kernel_route.rt_flags = RTF_UP;
@@ -1977,8 +2014,12 @@ void DeleteMulticastRoute(void)
     ((struct sockaddr *) ARM_NOWARN_ALIGN(&kernel_route.rt_genmask))->sa_family = AF_INET;
 
     /* 224.0.0.0/4 */
-    ((struct sockaddr_in *) ARM_NOWARN_ALIGN(&kernel_route.rt_dst))->sin_addr.s_addr = htonl(0xE0000000);
-    ((struct sockaddr_in *) ARM_NOWARN_ALIGN(&kernel_route.rt_genmask))->sin_addr.s_addr = htonl(0xF0000000);
+    {
+      struct sockaddr* rdst = &kernel_route.rt_dst;
+      struct sockaddr* rmask = &kernel_route.rt_genmask;
+      ((struct sockaddr_in *) ARM_NOWARN_ALIGN(rdst))->sin_addr.s_addr = htonl(0xE0000000);
+      ((struct sockaddr_in *) ARM_NOWARN_ALIGN(rmask))->sin_addr.s_addr = htonl(0xF0000000);
+    }
 
     kernel_route.rt_metric = 0;
     kernel_route.rt_flags = RTF_UP;

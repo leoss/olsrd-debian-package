@@ -1,32 +1,37 @@
-# The olsr.org Optimized Link-State Routing daemon(olsrd)
-# Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+# The olsr.org Optimized Link-State Routing daemon (olsrd)
+#
+# (c) by the OLSR project
+#
+# See our Git repository to find out who worked on this file
+# and thus is a copyright holder on it.
+#
 # All rights reserved.
 #
-# Redistribution and use in source and binary forms, with or without 
-# modification, are permitted provided that the following conditions 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
 # are met:
 #
-# * Redistributions of source code must retain the above copyright 
+# * Redistributions of source code must retain the above copyright
 #   notice, this list of conditions and the following disclaimer.
-# * Redistributions in binary form must reproduce the above copyright 
-#   notice, this list of conditions and the following disclaimer in 
-#   the documentation and/or other materials provided with the 
+# * Redistributions in binary form must reproduce the above copyright
+#   notice, this list of conditions and the following disclaimer in
+#   the documentation and/or other materials provided with the
 #   distribution.
-# * Neither the name of olsr.org, olsrd nor the names of its 
-#   contributors may be used to endorse or promote products derived 
+# * Neither the name of olsr.org, olsrd nor the names of its
+#   contributors may be used to endorse or promote products derived
 #   from this software without specific prior written permission.
 #
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
-# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS 
-# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE 
-# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, 
-# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
-# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT 
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN 
-# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 #
 # Visit http://www.olsr.org for more information.
@@ -39,14 +44,14 @@
 # Please also write a new version to:
 # gui/win32/Main/Frontend.rc (line 71, around "CAPTION [...]")
 # gui/win32/Inst/installer.nsi (line 57, around "MessageBox MB_YESNO [...]")
-VERS =		0.6.6.2
+VERS =		0.9.6.1
 
-TOPDIR = .
+TOPDIR = $(shell pwd)
 INSTALLOVERWRITE ?=
 include Makefile.inc
 
 # pass generated variables to save time
-MAKECMD = $(MAKE) OS="$(OS)" WARNINGS="$(WARNINGS)" VERBOSE="$(VERBOSE)"
+MAKECMD = $(MAKE) OS="$(OS)" WARNINGS="$(WARNINGS)" VERBOSE="$(VERBOSE)" SANITIZE_ADDRESS="$(SANITIZE_ADDRESS)"
 
 LIBS +=		$(OS_LIB_DYNLOAD)
 ifeq ($(OS), win32)
@@ -71,7 +76,16 @@ endif
 .PHONY: default_target switch
 default_target: $(EXENAME)
 
-$(EXENAME):	$(OBJS) src/builddata.o
+ANDROIDREGEX=
+ifeq ($(OS),android)
+# On Android Google forgot to include regex engine code for Froyo version (but also there was
+# no support in older versions for it) so we have here this missing code.
+# http://groups.google.com/group/android-ndk/browse_thread/thread/5ea6f0650f0e3fc
+CFLAGS += -D__POSIX_VISIBLE
+ANDROIDREGEX=$(REGEX_LIB)
+endif
+
+$(EXENAME):	$(OBJS) $(ANDROIDREGEX) src/builddata.o
 ifeq ($(VERBOSE),0)
 		@echo "[LD] $@"
 endif
@@ -84,16 +98,15 @@ switch:
 	$(MAKECMDPREFIX)$(MAKECMD) -C $(SWITCHDIR)
 
 # generate it always
-.PHONY: src/builddata.c
-src/builddata.c:
-	$(MAKECMDPREFIX)$(RM) "$@"
-	$(MAKECMDPREFIX)echo "#include \"defs.h\"" >> "$@" 
-	$(MAKECMDPREFIX)echo "const char olsrd_version[] = \"olsr.org -  $(VERS)`./make/hash_source.sh`\";"  >> "$@"
-	$(MAKECMDPREFIX)date +"const char build_date[] = \"%Y-%m-%d %H:%M:%S\";" >> "$@" 
-	$(MAKECMDPREFIX)echo "const char build_host[] = \"$(shell hostname)\";" >> "$@" 
+.PHONY: builddata.txt
+builddata.txt:
+	$(MAKECMDPREFIX)./make/hash_source.sh "$@" "$(VERS)" "$(VERBOSE)"
 
+# only overwrite it when it doesn't exists or when it has changed
+src/builddata.c: builddata.txt
+	$(MAKECMDPREFIX)if [ ! -f "$@" ] || [ -n "$$(diff "$<" "$@")" ]; then cp -p "$<" "$@"; fi
 
-.PHONY: help libs clean_libs libs_clean clean distclean uberclean install_libs uninstall_libs libs_install libs_uninstall install_bin uninstall_bin install_olsrd uninstall_olsrd install uninstall build_all install_all uninstall_all clean_all gui clean_gui 
+.PHONY: help libs clean_libs libs_clean clean distclean uberclean install_libs uninstall_libs libs_install libs_uninstall install_bin uninstall_bin install_olsrd uninstall_olsrd install uninstall build_all install_all uninstall_all clean_all gui clean_gui cfgparser_install cfgparser_clean
 
 clean:
 	-rm -f $(OBJS) $(SRCS:%.c=%.d) $(EXENAME) $(EXENAME).exe src/builddata.c $(TMPFILES)
@@ -122,10 +135,17 @@ uberclean:	clean clean_libs clean_gui
 	find . \( -name '*.[od]' -o -name '*~' \) -not -path "*/.hg*" -type f -print0 | xargs -0 rm -f
 	$(MAKECMDPREFIX)$(MAKECMD) -C $(SWITCHDIR) clean
 	$(MAKECMDPREFIX)$(MAKECMD) -C $(CFGDIR) clean
+	$(MAKECMDPREFIX)rm -f builddata.txt
 
 install: install_olsrd
 
 uninstall: uninstall_olsrd
+
+cfgparser_install: cfgparser
+		$(MAKECMDPREFIX)$(MAKECMD) -C $(CFGDIR) install
+
+cfgparser_clean:
+		$(MAKECMDPREFIX)$(MAKECMD) -C $(CFGDIR) clean
 
 install_bin:
 		mkdir -p $(SBINDIR)
@@ -142,7 +162,7 @@ endif
 
 uninstall_bin:
 		rm -f $(SBINDIR)/$(EXENAME)
-		rmdir -p --ignore-fail-on-non-empty $(SBINDIR)
+		rmdir -p $(SBINDIR) || true
 
 install_olsrd:	install_bin
 		@echo ========= C O N F I G U R A T I O N - F I L E ============
@@ -171,16 +191,23 @@ ifneq ($(MANDIR),)
 		mkdir -p $(MANDIR)/man5/
 		cp files/olsrd.conf.5.gz $(MANDIR)/man5/$(CFGNAME).5.gz
 endif
+ifneq ($(RCDIR),)
+		cp $(RCFILE) $(RCDIR)/olsrd
+endif
 
 uninstall_olsrd:	uninstall_bin
 ifneq ($(MANDIR),)
 		rm -f $(MANDIR)/man5/$(CFGNAME).5.gz
-		rmdir -p --ignore-fail-on-non-empty $(MANDIR)/man5/
+		rmdir -p $(MANDIR)/man5/ || true
 		rm -f $(MANDIR)/man8/$(EXENAME).8.gz
-		rmdir -p --ignore-fail-on-non-empty $(MANDIR)/man8/
+		rmdir -p $(MANDIR)/man8/ || true
 endif
 		rm -f $(CFGFILE) $(CFGFILE).new
-		rmdir -p --ignore-fail-on-non-empty $(ETCDIR)
+		rmdir -p $(ETCDIR) || true
+ifneq ($(RCDIR),)
+		rm -f $(RCDIR)/olsrd
+		rmdir -p $(RCDIR) || true
+endif
 
 tags:
 		$(TAGCMD) -o $(TAGFILE) $(TAG_SRCS)
@@ -197,15 +224,15 @@ rpm:
 
 # This is quite ugly but at least it works
 ifeq ($(OS),linux)
-SUBDIRS := arprefresh bmf dot_draw dyn_gw dyn_gw_plain httpinfo jsoninfo mdns mini nameservice p2pd pgraph pud quagga secure sgwdynspeed txtinfo watchdog
+SUBDIRS := arprefresh bmf dot_draw dyn_gw dyn_gw_plain httpinfo info jsoninfo mdns mini nameservice netjson p2pd pgraph pud quagga secure sgwdynspeed txtinfo watchdog
 else
 ifeq ($(OS),win32)
-SUBDIRS := dot_draw httpinfo jsoninfo mini pgraph secure txtinfo
+SUBDIRS := dot_draw httpinfo info jsoninfo mini netjson pgraph secure txtinfo
 else
 ifeq ($(OS),android)
-SUBDIRS := arprefresh bmf dot_draw dyn_gw dyn_gw_plain httpinfo jsoninfo mdns mini nameservice p2pd pgraph pud secure sgwdynspeed txtinfo watchdog
+SUBDIRS := arprefresh bmf dot_draw dyn_gw dyn_gw_plain httpinfo info jsoninfo mdns mini nameservice netjson p2pd pgraph secure sgwdynspeed txtinfo watchdog
 else
-SUBDIRS := dot_draw httpinfo jsoninfo mini nameservice pgraph secure txtinfo watchdog
+SUBDIRS := dot_draw httpinfo info jsoninfo mini nameservice netjson pgraph secure txtinfo watchdog
 endif
 endif
 endif
@@ -221,7 +248,7 @@ libs_install install_libs:
 
 libs_uninstall uninstall_libs:
 		$(MAKECMDPREFIX)set -e;for dir in $(SUBDIRS);do $(MAKECMD) -C lib/$$dir LIBDIR=$(LIBDIR) uninstall;done
-		rmdir -p --ignore-fail-on-non-empty $(LIBDIR)
+		rmdir -p $(LIBDIR) || true
 
 #
 # DOCUMENTATION
@@ -229,6 +256,9 @@ libs_uninstall uninstall_libs:
 .PHONY: doc doc_clean
 doc:
 		$(MAKECMDPREFIX)$(MAKECMD) -C doc OS=$(OS)
+
+doc-pdf:
+		$(MAKECMDPREFIX)$(MAKECMD) -C doc-pdf OS=$(OS)
 
 doc_clean:
 		$(MAKECMDPREFIX)$(MAKECMD) -C doc OS=$(OS) clean
@@ -309,16 +339,34 @@ httpinfo_install:
 httpinfo_uninstall:
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/httpinfo DESTDIR=$(DESTDIR) uninstall
 
-jsoninfo:
+info:
+		$(MAKECMDPREFIX)$(MAKECMD) -C lib/info
+
+info_clean:
+		$(MAKECMDPREFIX)$(MAKECMD) -C lib/info DESTDIR=$(DESTDIR) clean
+
+info_install:
+		$(MAKECMDPREFIX)$(MAKECMD) -C lib/info DESTDIR=$(DESTDIR) install
+
+info_uninstall:
+		$(MAKECMDPREFIX)$(MAKECMD) -C lib/info DESTDIR=$(DESTDIR) uninstall
+
+info_java:
+		$(MAKECMDPREFIX)$(MAKECMD) -C lib/info.java
+
+info_java_clean:
+		$(MAKECMDPREFIX)$(MAKECMD) -C lib/info.java DESTDIR=$(DESTDIR) clean
+
+jsoninfo: info
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/jsoninfo
 
-jsoninfo_clean:
+jsoninfo_clean: info_clean
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/jsoninfo DESTDIR=$(DESTDIR) clean
 
-jsoninfo_install:
+jsoninfo_install: info_install
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/jsoninfo DESTDIR=$(DESTDIR) install
 
-jsoninfo_uninstall:
+jsoninfo_uninstall: info_uninstall
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/jsoninfo DESTDIR=$(DESTDIR) uninstall
 
 mdns:
@@ -337,9 +385,6 @@ mdns_uninstall:
 # no targets for mini: it's an example plugin
 #
 
-# nameserver uses regex, which was only recently added to Android.  On
-# Android, $(REGEX_OBJS) will have all of the files needed, on all
-# other platforms, it'll be empty and therefore ignored.
 nameservice:
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/nameservice clean
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/nameservice
@@ -352,6 +397,18 @@ nameservice_install:
 
 nameservice_uninstall:
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/nameservice DESTDIR=$(DESTDIR) uninstall
+
+netjson: info
+		$(MAKECMDPREFIX)$(MAKECMD) -C lib/netjson
+
+netjson_clean: info_clean
+		$(MAKECMDPREFIX)$(MAKECMD) -C lib/netjson DESTDIR=$(DESTDIR) clean
+
+netjson_install: info_install
+		$(MAKECMDPREFIX)$(MAKECMD) -C lib/netjson DESTDIR=$(DESTDIR) install
+
+netjson_uninstall: info_uninstall
+		$(MAKECMDPREFIX)$(MAKECMD) -C lib/netjson DESTDIR=$(DESTDIR) uninstall
 
 p2pd:
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/p2pd
@@ -389,6 +446,15 @@ pud_install:
 pud_uninstall:
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/pud DESTDIR=$(DESTDIR) uninstall
 
+pud_java: pud
+		$(MAKECMDPREFIX)$(MAKECMD) -C lib/pud DESTDIR=$(DESTDIR) java
+
+pud_java_install:
+		$(MAKECMDPREFIX)$(MAKECMD) -C lib/pud DESTDIR=$(DESTDIR) java-install
+
+pud_java_uninstall:
+		$(MAKECMDPREFIX)$(MAKECMD) -C lib/pud DESTDIR=$(DESTDIR) java-uninstall
+
 quagga:
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/quagga
 
@@ -425,16 +491,16 @@ sgwdynspeed_install:
 sgwdynspeed_uninstall:
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/sgwdynspeed DESTDIR=$(DESTDIR) uninstall
 
-txtinfo:
+txtinfo: info
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/txtinfo
 
-txtinfo_clean:
+txtinfo_clean: info_clean
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/txtinfo DESTDIR=$(DESTDIR) clean
 
-txtinfo_install:
+txtinfo_install: info_install
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/txtinfo DESTDIR=$(DESTDIR) install
 
-txtinfo_uninstall:
+txtinfo_uninstall: info_uninstall
 		$(MAKECMDPREFIX)$(MAKECMD) -C lib/txtinfo DESTDIR=$(DESTDIR) uninstall
 
 watchdog:

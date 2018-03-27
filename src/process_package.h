@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,11 +50,11 @@
 #include "packet.h"
 #include "neighbor_table.h"
 
-bool olsr_input_hello(union olsr_message *, struct interface *, union olsr_ip_addr *);
+bool olsr_input_hello(union olsr_message *, struct interface_olsr *, union olsr_ip_addr *);
 
 void olsr_init_package_process(void);
 
-void olsr_hello_tap(struct hello_message *, struct interface *, const union olsr_ip_addr *);
+void olsr_hello_tap(struct hello_message *, struct interface_olsr *, const union olsr_ip_addr *);
 
 #endif /* _OLSR_PROCESS_PACKAGE */
 

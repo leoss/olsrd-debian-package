@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -115,9 +119,9 @@ reltime_to_me(const olsr_reltime interval)
        */
 
       if (b >= 5) {
-        a = (interval - (125 << (b - 1))) / (125 << (b - 5));
+        a = (interval - (125u << (b - 1))) / (125u << (b - 5));
       } else {
-        a = (interval - (125 << (b - 1))) * (1 << (5 - b)) / 125;
+        a = (interval - (125u << (b - 1))) * (1u << (5 - b)) / 125;
       }
 
       b += a >> 4;
@@ -150,7 +154,7 @@ reltime_to_me(const olsr_reltime interval)
  *     value = C * (16 + a) * 2^b / 16
  * so that we can make a shift from the multiplication
  *     value = C * ((16 + a) << b) / 16
- * and sionce C and 16 are constants
+ * and since C and 16 are constants
  *     value = ((16 + a) << b) * C / 16
  *
  * VTIME_SCALE_FACTOR = 1/16
@@ -173,6 +177,16 @@ me_to_reltime(const uint8_t me)
     return ((16 + a) << (b - 8)) * 1000;
   }
   return ((16 + a) * 1000) >> (8 - b);
+}
+
+static olsr_reltime minimum_interval = UINT32_MAX;
+
+olsr_reltime reltime_minimum_interval(void) {
+  if (minimum_interval == UINT32_MAX) {
+    minimum_interval = me_to_reltime(reltime_to_me(0));
+  }
+
+  return minimum_interval;
 }
 
 /*

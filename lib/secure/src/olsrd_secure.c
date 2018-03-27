@@ -1,14 +1,16 @@
-
 /*
- * Secure OLSR plugin
- * http://www.olsr.org
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
  *
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or
- * without modification, are permitted provided that the following
- * conditions are met:
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
  *
  * * Redistributions of source code must retain the above copyright
  *   notice, this list of conditions and the following disclaimer.
@@ -16,7 +18,7 @@
  *   notice, this list of conditions and the following disclaimer in
  *   the documentation and/or other materials provided with the
  *   distribution.
- * * Neither the name of olsrd, olsr.org nor the names of its
+ * * Neither the name of olsr.org, olsrd nor the names of its
  *   contributors may be used to endorse or promote products derived
  *   from this software without specific prior written permission.
  *
@@ -32,6 +34,12 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Visit http://www.olsr.org for more information.
+ *
+ * If you find this software useful feel free to make a donation
+ * to the project. For more information see the website or contact
+ * the copyright holders.
  *
  */
 
@@ -61,6 +69,7 @@
 #include "parser.h"
 #include "scheduler.h"
 #include "net_olsr.h"
+#include "olsr_random.h"
 
 #ifdef USE_OPENSSL
 
@@ -138,18 +147,18 @@ char keyfile[FILENAME_MAX + 1];
 char aes_key[16];
 
 /* Event function to register with the sceduler */
-static int send_challenge(struct interface *olsr_if, const union olsr_ip_addr *);
-static int send_cres(struct interface *olsr_if, union olsr_ip_addr *, union olsr_ip_addr *, uint32_t, struct stamp *);
-static int send_rres(struct interface *olsr_if, union olsr_ip_addr *, union olsr_ip_addr *, uint32_t);
-static int parse_challenge(struct interface *olsr_if, char *);
-static int parse_cres(struct interface *olsr_if, char *);
+static int send_challenge(struct interface_olsr *olsr_if, const union olsr_ip_addr *);
+static int send_cres(struct interface_olsr *olsr_if, union olsr_ip_addr *, union olsr_ip_addr *, uint32_t, struct stamp *);
+static int send_rres(struct interface_olsr *olsr_if, union olsr_ip_addr *, union olsr_ip_addr *, uint32_t);
+static int parse_challenge(struct interface_olsr *olsr_if, char *);
+static int parse_cres(struct interface_olsr *olsr_if, char *);
 static int parse_rres(char *);
-static int check_auth(struct interface *olsr_if, char *, int *);
+static int check_auth(struct interface_olsr *olsr_if, char *, int *);
 static int add_signature(uint8_t *, int *);
-static int validate_packet(struct interface *olsr_if, const char *, int *);
-static char *secure_preprocessor(char *packet, struct interface *olsr_if, union olsr_ip_addr *from_addr, int *length);
+static int validate_packet(struct interface_olsr *olsr_if, const char *, int *);
+static char *secure_preprocessor(char *packet, struct interface_olsr *olsr_if, union olsr_ip_addr *from_addr, int *length);
 static void timeout_timestamps(void *);
-static int check_timestamp(struct interface *olsr_if, const union olsr_ip_addr *, time_t);
+static int check_timestamp(struct interface_olsr *olsr_if, const union olsr_ip_addr *, time_t);
 static struct stamp *lookup_timestamp_entry(const union olsr_ip_addr *);
 static int read_key_from_file(const char *);
 
@@ -178,12 +187,14 @@ secure_plugin_init(void)
   i = read_key_from_file(keyfile);
 
   if (i < 0) {
-    olsr_printf(1, "[ENC]Could not read key from file %s!\nExitting!\n\n", keyfile);
-    exit(1);
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "SECURE: Could not read key from file %s", keyfile);
+    olsr_exit(buf, EXIT_FAILURE);
   }
   if (i == 0) {
-    olsr_printf(1, "[ENC]There was a problem reading key from file %s. Is the key long enough?\nExitting!\n\n", keyfile);
-    exit(1);
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "SECURE: There was a problem reading key from file %s. Is the key long enough?", keyfile);
+    olsr_exit(buf, EXIT_FAILURE);
   }
 
   /* Register the packet transform function */
@@ -213,7 +224,7 @@ secure_plugin_exit(void)
 }
 
 static char *
-secure_preprocessor(char *packet, struct interface *olsr_if, union olsr_ip_addr *from_addr, int *length)
+secure_preprocessor(char *packet, struct interface_olsr *olsr_if, union olsr_ip_addr *from_addr, int *length)
 {
   struct olsr *olsr = (struct olsr *)packet;
   struct ipaddr_str buf;
@@ -247,7 +258,7 @@ secure_preprocessor(char *packet, struct interface *olsr_if, union olsr_ip_addr 
  *
  */
 static int
-check_auth(struct interface *olsr_if, char *pck, int *size __attribute__ ((unused)))
+check_auth(struct interface_olsr *olsr_if, char *pck, int *size __attribute__ ((unused)))
 {
 
   olsr_printf(3, "[ENC]Checking packet for challenge response message...\n");
@@ -353,7 +364,7 @@ add_signature(uint8_t * pck, int *size)
 }
 
 static int
-validate_packet(struct interface *olsr_if, const char *pck, int *size)
+validate_packet(struct interface_olsr *olsr_if, const char *pck, int *size)
 {
   int packetsize;
   uint8_t sha1_hash[SIGNATURE_SIZE];
@@ -474,7 +485,7 @@ one_checksum_SHA:
 }
 
 int
-check_timestamp(struct interface *olsr_if, const union olsr_ip_addr *originator, time_t tstamp)
+check_timestamp(struct interface_olsr *olsr_if, const union olsr_ip_addr *originator, time_t tstamp)
 {
   struct stamp *entry;
   int diff;
@@ -524,7 +535,7 @@ check_timestamp(struct interface *olsr_if, const union olsr_ip_addr *originator,
  */
 
 int
-send_challenge(struct interface *olsr_if, const union olsr_ip_addr *new_host)
+send_challenge(struct interface_olsr *olsr_if, const union olsr_ip_addr *new_host)
 {
   struct challengemsg cmsg;
   struct stamp *entry;
@@ -535,8 +546,8 @@ send_challenge(struct interface *olsr_if, const union olsr_ip_addr *new_host)
 
   /* Set the size including OLSR packet size */
 
-  challenge = rand() << 16;
-  challenge |= rand();
+  challenge = (uint32_t)olsr_random() << 16;
+  challenge |= olsr_random();
 
   /* initialise rrmsg */
   memset(&cmsg, 0, sizeof(cmsg));
@@ -600,7 +611,7 @@ send_challenge(struct interface *olsr_if, const union olsr_ip_addr *new_host)
 }
 
 int
-parse_cres(struct interface *olsr_if, char *in_msg)
+parse_cres(struct interface_olsr *olsr_if, char *in_msg)
 {
   struct c_respmsg *msg;
   uint8_t sha1_hash[SIGNATURE_SIZE];
@@ -795,7 +806,7 @@ parse_rres(char *in_msg)
 }
 
 int
-parse_challenge(struct interface *olsr_if, char *in_msg)
+parse_challenge(struct interface_olsr *olsr_if, char *in_msg)
 {
   struct challengemsg *msg;
   uint8_t sha1_hash[SIGNATURE_SIZE];
@@ -881,7 +892,7 @@ parse_challenge(struct interface *olsr_if, char *in_msg)
  *
  */
 int
-send_cres(struct interface *olsr_if, union olsr_ip_addr *to, union olsr_ip_addr *from, uint32_t chal_in, struct stamp *entry)
+send_cres(struct interface_olsr *olsr_if, union olsr_ip_addr *to, union olsr_ip_addr *from, uint32_t chal_in, struct stamp *entry)
 {
   struct c_respmsg crmsg;
   uint32_t challenge;
@@ -889,8 +900,8 @@ send_cres(struct interface *olsr_if, union olsr_ip_addr *to, union olsr_ip_addr 
 
   olsr_printf(1, "[ENC]Building CRESPONSE message\n");
 
-  challenge = rand() << 16;
-  challenge |= rand();
+  challenge = olsr_random() << 16;
+  challenge |= olsr_random();
 
   entry->challenge = challenge;
 
@@ -964,7 +975,7 @@ send_cres(struct interface *olsr_if, union olsr_ip_addr *to, union olsr_ip_addr 
  *
  */
 static int
-send_rres(struct interface *olsr_if, union olsr_ip_addr *to, union olsr_ip_addr *from, uint32_t chal_in)
+send_rres(struct interface_olsr *olsr_if, union olsr_ip_addr *to, union olsr_ip_addr *from, uint32_t chal_in)
 {
   struct r_respmsg rrmsg;
   struct ipaddr_str buf;

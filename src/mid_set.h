@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -84,7 +88,7 @@ struct mid_entry *mid_lookup_entry_bymain(const union olsr_ip_addr *);
 void olsr_print_mid_set(void);
 int olsr_update_mid_table(const union olsr_ip_addr *, olsr_reltime);
 void olsr_delete_mid_entry(struct mid_entry *);
-bool olsr_input_mid(union olsr_message *, struct interface *, union olsr_ip_addr *);
+bool olsr_input_mid(union olsr_message *, struct interface_olsr *, union olsr_ip_addr *);
 
 #endif /* _OLSR_MID */
 

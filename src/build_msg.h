@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,13 +54,13 @@ void set_empty_tc_timer(uint32_t);
 
 uint32_t get_empty_tc_timer(void);
 
-bool queue_hello(struct hello_message *, struct interface *);
+bool queue_hello(struct hello_message *, struct interface_olsr *);
 
-bool queue_tc(struct tc_message *, struct interface *);
+bool queue_tc(struct tc_message *, struct interface_olsr *);
 
-bool queue_mid(struct interface *);
+bool queue_mid(struct interface_olsr *);
 
-bool queue_hna(struct interface *);
+bool queue_hna(struct interface_olsr *);
 
 #endif /* _BUILD_MSG_H */
 

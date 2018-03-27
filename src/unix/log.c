@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,8 +47,8 @@
  * System logging interface for GNU/Linux systems
  */
 
-#include "../olsr_cfg.h"
-#include "../log.h"
+#include "olsr_cfg.h"
+#include "log.h"
 #include <syslog.h>
 #include <stdarg.h>
 
@@ -58,6 +62,14 @@ olsr_openlog(const char *ident __attribute__((unused)))
 #ifndef __ANDROID__
   openlog(ident, LOG_PID | LOG_ODELAY, LOG_DAEMON);
   setlogmask(LOG_UPTO(LOG_INFO));
+#endif /* __ANDROID__ */
+
+  return;
+}
+
+void olsr_closelog(void) {
+#ifndef __ANDROID__
+  closelog();
 #endif /* __ANDROID__ */
 
   return;

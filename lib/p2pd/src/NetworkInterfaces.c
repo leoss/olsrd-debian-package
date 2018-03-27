@@ -1,6 +1,11 @@
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004-2009, the olsr.org team - see HISTORY file
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -173,7 +178,7 @@ CreateCaptureSocket(const char *ifName)
 //FOR MDNS IS ALWAYS CALLED WITH NULL AS SECOND ARG
 
 static int
-CreateInterface(const char *ifName, struct interface *olsrIntf)
+CreateInterface(const char *ifName, struct interface_olsr *olsrIntf)
 {
   int capturingSkfd = -1;
   int encapsulatingSkfd = -1;
@@ -193,7 +198,7 @@ CreateInterface(const char *ifName, struct interface *olsrIntf)
 
   /* Create socket for capturing and sending of multicast packets on
    * non-OLSR interfaces, and on OLSR-interfaces if configured. */
-  if ((olsrIntf == NULL)) {
+  if (!olsrIntf) {
     capturingSkfd = CreateCaptureSocket(ifName);
     if (capturingSkfd < 0) {
       free(newIf);
@@ -244,7 +249,8 @@ CreateInterface(const char *ifName, struct interface *olsrIntf)
       newIf->intAddr.v4.s_addr = inet_addr("0.0.0.0");
     } else {
       /* Downcast to correct sockaddr subtype */
-      newIf->intAddr.v4 = ((struct sockaddr_in *) ARM_NOWARN_ALIGN(&ifr.ifr_addr))->sin_addr;
+      struct sockaddr* ifra = &ifr.ifr_addr;
+      newIf->intAddr.v4 = ((struct sockaddr_in *) ARM_NOWARN_ALIGN(ifra))->sin_addr;
     }
 
     /* For a non-OLSR interface, retrieve the IP broadcast address ourselves */
@@ -257,7 +263,8 @@ CreateInterface(const char *ifName, struct interface *olsrIntf)
       newIf->broadAddr.v4.s_addr = inet_addr("0.0.0.0");
     } else {
       /* Downcast to correct sockaddr subtype */
-      newIf->broadAddr.v4 = ((struct sockaddr_in *) ARM_NOWARN_ALIGN(&ifr.ifr_broadaddr))->sin_addr;
+      struct sockaddr* ifrb = &ifr.ifr_broadaddr;
+      newIf->broadAddr.v4 = ((struct sockaddr_in *) ARM_NOWARN_ALIGN(ifrb))->sin_addr;
     }
   }
 
@@ -310,7 +317,7 @@ CreateInterface(const char *ifName, struct interface *olsrIntf)
  * Data Used  : none
  * ------------------------------------------------------------------------- */
 int
-CreateNonOlsrNetworkInterfaces(struct interface *skipThisIntf)
+CreateNonOlsrNetworkInterfaces(struct interface_olsr *skipThisIntf)
 {
   int skfd;
   struct ifconf ifc;
@@ -332,7 +339,7 @@ CreateNonOlsrNetworkInterfaces(struct interface *skipThisIntf)
   ifc.ifc_buf = NULL;
   for (;;) {
     ifc.ifc_len = sizeof(struct ifreq) * numreqs;
-    ifc.ifc_buf = realloc(ifc.ifc_buf, ifc.ifc_len);
+    ifc.ifc_buf = olsr_realloc(ifc.ifc_buf, ifc.ifc_len, "P2PD: CreateNonOlsrNetworkInterfaces ifc");
 
     if (ioctl(skfd, SIOCGIFCONF, &ifc) < 0) {
       P2pdPError("ioctl(SIOCGIFCONF) error");
@@ -355,7 +362,7 @@ CreateNonOlsrNetworkInterfaces(struct interface *skipThisIntf)
   /* For each item in the interface configuration list... */
   ifr = ifc.ifc_req;
   for (n = ifc.ifc_len / sizeof(struct ifreq); --n >= 0; ifr++) {
-    struct interface *olsrIntf;
+    struct interface_olsr *olsrIntf;
     union olsr_ip_addr ipAddr;
 
     /* Skip the BMF network interface itself */
@@ -365,7 +372,10 @@ CreateNonOlsrNetworkInterfaces(struct interface *skipThisIntf)
     //}
 
     /* ...find the OLSR interface structure, if any */
-    ipAddr.v4 = ((struct sockaddr_in *) ARM_NOWARN_ALIGN(&ifr->ifr_addr))->sin_addr;
+    {
+      struct sockaddr* ifra = &ifr->ifr_addr;
+      ipAddr.v4 = ((struct sockaddr_in *) ARM_NOWARN_ALIGN(ifra))->sin_addr;
+    }
     olsrIntf = if_ifwithaddr(&ipAddr);
 
     if (skipThisIntf != NULL && olsrIntf == skipThisIntf) {
@@ -408,7 +418,7 @@ CreateNonOlsrNetworkInterfaces(struct interface *skipThisIntf)
  * Data Used  : none
  * ------------------------------------------------------------------------- */
 void
-AddInterface(struct interface *newIntf)
+AddInterface(struct interface_olsr *newIntf)
 {
   /* int nOpened; */
 

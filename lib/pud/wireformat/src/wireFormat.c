@@ -1,3 +1,48 @@
+/*
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * * Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ * * Redistributions in binary form must reproduce the above copyright
+ *   notice, this list of conditions and the following disclaimer in
+ *   the documentation and/or other materials provided with the
+ *   distribution.
+ * * Neither the name of olsr.org, olsrd nor the names of its
+ *   contributors may be used to endorse or promote products derived
+ *   from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Visit http://www.olsr.org for more information.
+ *
+ * If you find this software useful feel free to make a donation
+ * to the project. For more information see the website or contact
+ * the copyright holders.
+ *
+ */
+
 #include <OlsrdPudWireFormat/wireFormat.h>
 
 #include <time.h>
@@ -13,10 +58,6 @@ bool isValidNodeIdType(unsigned long long nodeIdType) {
 			(/* (nodeIdType >= PUD_NODEIDTYPE_GLOBAL_FIRST) && */ (nodeIdType <= PUD_NODEIDTYPE_GLOBAL_LAST)) ||
 			(   (nodeIdType >= PUD_NODEIDTYPE_LOCAL_FIRST ) &&    (nodeIdType <= PUD_NODEIDTYPE_LOCAL_LAST ))
 		)
-		&&
-		(
-			(nodeIdType != PUD_NODEIDTYPE_GAP1)
-		)
 	);
 }
 
@@ -26,7 +67,7 @@ bool isValidNodeIdType(unsigned long long nodeIdType) {
  */
 
 /** Determine the validity time in seconds from the OLSR wire format value */
-#define PUD_VALIDITY_TIME_FROM_OLSR(msn, lsn) ((((lsn) + 16) * (1 << (msn))) - 16)
+#define PUD_VALIDITY_TIME_FROM_OLSR(msn, lsn) ((((lsn) + 16) * (1u << (msn))) - 16)
 
 /**
  Get the validity time from a message
@@ -65,7 +106,7 @@ void setValidityTime(uint8_t * validityTimeField, unsigned long long validityTim
 		lsn = 15;
 	} else {
 		unsigned long lowerBound = PUD_VALIDITY_TIME_FROM_OLSR(msn, 0);
-		unsigned long resolution = (1 << msn);
+		unsigned long resolution = (1u << msn);
 		lsn = ((validityTime - lowerBound + (resolution >> 1)) / resolution);
 	}
 
@@ -261,55 +302,29 @@ void setPositionUpdateVersion(
 }
 
 /**
- Get the smask of the position update message
+ Get the presence field of the position update message
 
  @param olsrGpsMessage
  A pointer to the position update message
  @return
- The smask of the position update message
+ The presence field of the position update message
  */
-uint8_t getPositionUpdateSmask(
+uint32_t getPositionUpdatePresent(
 		PudOlsrPositionUpdate * olsrGpsMessage) {
-	return olsrGpsMessage->smask;
+	return ntohl(olsrGpsMessage->present);
 }
 
 /**
- Set the smask of the position update message
+ Set the presence field of the position update message
 
  @param olsrGpsMessage
  A pointer to the position update message
- @param smask
- The smask of the position update message
+ @param present
+ The presence field of the position update message
  */
-void setPositionUpdateSmask(
-		PudOlsrPositionUpdate * olsrGpsMessage, uint8_t smask) {
-	olsrGpsMessage->smask = smask;
-}
-
-/**
- Get the flags of the position update message
-
- @param olsrGpsMessage
- A pointer to the position update message
- @return
- The flags of the position update message
- */
-uint8_t getPositionUpdateFlags(
-		PudOlsrPositionUpdate * olsrGpsMessage) {
-	return olsrGpsMessage->flags;
-}
-
-/**
- Set the flags of the position update message
-
- @param olsrGpsMessage
- A pointer to the position update message
- @param flags
- The flags of the position update message
- */
-void setPositionUpdateFlags(
-		PudOlsrPositionUpdate * olsrGpsMessage, uint8_t flags) {
-	olsrGpsMessage->flags = flags;
+void setPositionUpdatePresent(
+		PudOlsrPositionUpdate * olsrGpsMessage, uint32_t present) {
+	olsrGpsMessage->present = htonl(present);
 }
 
 /*
@@ -399,7 +414,7 @@ double getPositionUpdateLatitude(
 	/* take half of the rounding error */
 	lat += 0.5;
 
-	lat /= (double) (1 << PUD_LATITUDE_BITS);
+	lat /= (double) (1u << PUD_LATITUDE_BITS);
 	/* lat is now in [0, 1> */
 
 	lat -= 0.5;
@@ -433,12 +448,12 @@ void setPositionUpdateLatitude(
 	lat += 0.5;
 	/* lat is now in [0, 1] */
 
-	lat *= (double) (1 << PUD_LATITUDE_BITS);
+	lat *= (double) (1u << PUD_LATITUDE_BITS);
 	/* lat is now in [0, LATITUDE_BITS] */
 
 	/* clip max */
-	if (unlikely(lat > (double)((1 << PUD_LATITUDE_BITS) - 1))) {
-		lat = (double) ((1 << PUD_LATITUDE_BITS) - 1);
+	if (unlikely(lat > (double)((1u << PUD_LATITUDE_BITS) - 1))) {
+		lat = (double) ((1u << PUD_LATITUDE_BITS) - 1);
 	}
 	/* lat is now in [0, 2^LATITUDE_BITS> */
 
@@ -464,7 +479,7 @@ double getPositionUpdateLongitude(
 	/* take half of the rounding error */
 	lon += 0.5;
 
-	lon /= (1 << PUD_LONGITUDE_BITS);
+	lon /= (1u << PUD_LONGITUDE_BITS);
 	/* lon is now in [0, 1> */
 
 	lon -= 0.5;
@@ -498,12 +513,12 @@ void setPositionUpdateLongitude(
 	lon += 0.5;
 	/* lon is now in [0, 1] */
 
-	lon *= (double) (1 << PUD_LONGITUDE_BITS);
+	lon *= (double) (1u << PUD_LONGITUDE_BITS);
 	/* lon is now in [0, LONGITUDE_BITS] */
 
 	/* clip max */
-	if (unlikely(lon > (double)((1 << PUD_LATITUDE_BITS) - 1))) {
-		lon = (double) ((1 << PUD_LATITUDE_BITS) - 1);
+	if (unlikely(lon > (double)((1u << PUD_LATITUDE_BITS) - 1))) {
+		lon = (double) ((1u << PUD_LATITUDE_BITS) - 1);
 	}
 
 	/* lon is now in [0, 2^LONGITUDE_BITS> */
@@ -660,7 +675,7 @@ void setPositionUpdateHdop(PudOlsrPositionUpdate * olsrGpsMessage,
  */
 NodeIdType getPositionUpdateNodeIdType(int ipVersion,
 		PudOlsrPositionUpdate * olsrGpsMessage) {
-	if (getPositionUpdateFlags(olsrGpsMessage) & PUD_FLAGS_ID) {
+	if (getPositionUpdatePresent(olsrGpsMessage) & PUD_PRESENT_ID) {
 		return olsrGpsMessage->nodeInfo.nodeIdType;
 	}
 
@@ -715,10 +730,20 @@ void getPositionUpdateNodeId(int ipVersion, union olsr_message * olsrMessage,
 		break;
 
 	case PUD_NODEIDTYPE_DNS: /* DNS name */
-		*nodeIdSize = strlen((char *) *nodeId);
-		/* FIXME for no '\0' at the end, need to scan from the end until
-		 * encountering a non-zero byte: end of string address and
-		 * subtract the string start address */
+	  {
+	    unsigned int len = 0;
+	    unsigned char * idx = *nodeId;
+	    unsigned char * lastPayloadByte = &((unsigned char *)olsrMessage)[getOlsrMessageSize(ipVersion, olsrMessage) - 1];
+	    while ((*idx != '\0') && (idx <= lastPayloadByte)) {
+	      idx++;
+	      len++;
+	    }
+	    *nodeIdSize = len;
+	  }
+		break;
+
+	case PUD_NODEIDTYPE_UUID: /* a UUID number */
+		*nodeIdSize = PUD_NODEIDTYPE_UUID_BYTES;
 		break;
 
 	case PUD_NODEIDTYPE_MMSI: /* an AIS MMSI number */
@@ -727,6 +752,10 @@ void getPositionUpdateNodeId(int ipVersion, union olsr_message * olsrMessage,
 
 	case PUD_NODEIDTYPE_URN: /* a URN number */
 		*nodeIdSize = PUD_NODEIDTYPE_URN_BYTES;
+		break;
+
+	case PUD_NODEIDTYPE_MIP: /* a MIP OID number */
+		*nodeIdSize = PUD_NODEIDTYPE_MIP_BYTES;
 		break;
 
 	case PUD_NODEIDTYPE_192:
@@ -781,7 +810,7 @@ void setPositionUpdateNodeId(
 /**
  Convert the node information to the node information for an OLSR message and
  put it in the PUD message in the OLSR message. Also updates the PUD message
- smask.
+ presence field to signal whether or not an ID is in the message.
 
  @param ipVersion
  The IP version (AF_INET or AF_INET6)
@@ -810,8 +839,10 @@ size_t setPositionUpdateNodeInfo(int ipVersion,
 	case PUD_NODEIDTYPE_MAC: /* hardware address */
 	case PUD_NODEIDTYPE_MSISDN: /* an MSISDN number */
 	case PUD_NODEIDTYPE_TETRA: /* a Tetra number */
+	case PUD_NODEIDTYPE_UUID: /* a UUID number */
 	case PUD_NODEIDTYPE_MMSI: /* an AIS MMSI number */
 	case PUD_NODEIDTYPE_URN: /* a URN number */
+	case PUD_NODEIDTYPE_MIP: /* a MIP OID number */
 	case PUD_NODEIDTYPE_192:
 	case PUD_NODEIDTYPE_193:
 	case PUD_NODEIDTYPE_194:
@@ -830,6 +861,7 @@ size_t setPositionUpdateNodeInfo(int ipVersion,
 			length = charsAvailable;
 		}
 
+		// FIXME do not pad with a null byte (compatibility breaking change!)
 		setPositionUpdateNodeId(olsrGpsMessage, nodeId, length, true);
 	}
 		break;
@@ -849,8 +881,8 @@ size_t setPositionUpdateNodeInfo(int ipVersion,
 		return 0;
 	}
 
-	setPositionUpdateFlags(olsrGpsMessage,
-			getPositionUpdateFlags(olsrGpsMessage) | PUD_FLAGS_ID);
+	setPositionUpdatePresent(olsrGpsMessage,
+			getPositionUpdatePresent(olsrGpsMessage) | PUD_PRESENT_ID);
 	return ((sizeof(NodeInfo)
 			- (sizeof(olsrGpsMessage->nodeInfo.nodeId) /* nodeId placeholder */))
 			+ length);

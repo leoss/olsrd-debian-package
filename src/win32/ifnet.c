@@ -1,7 +1,11 @@
-
 /*
  * The olsr.org Optimized Link-State Routing daemon (olsrd)
- * Copyright (c) 2004, Thomas Lopatic (thomas@lopatic.de)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,8 +46,6 @@
 #ifdef _WIN32
 
 #include <stdlib.h>
-#define random() rand()
-#define srandom(x) srand(x)
 #include <winsock2.h>
 #include "interfaces.h"
 #include "olsr.h"
@@ -56,6 +58,7 @@
 #include "mantissa.h"
 #include "lq_packet.h"
 #include "net_olsr.h"
+#include "olsr_random.h"
 
 #include <iphlpapi.h>
 #include <iprtrmib.h>
@@ -475,7 +478,7 @@ ListInterfaces(void)
 int
 add_hemu_if(struct olsr_if *iface)
 {
-  struct interface *ifp;
+  struct interface_olsr *ifp;
   union olsr_ip_addr null_addr;
   uint32_t addr[4];
   struct ipaddr_str buf;
@@ -484,9 +487,9 @@ add_hemu_if(struct olsr_if *iface)
   if (!iface->host_emul)
     return -1;
 
-  ifp = olsr_malloc(sizeof(struct interface), "Interface update 2");
+  ifp = olsr_malloc(sizeof(struct interface_olsr), "Interface update 2");
 
-  memset(ifp, 0, sizeof(struct interface));
+  memset(ifp, 0, sizeof(struct interface_olsr));
 
   /* initialize backpointer */
   ifp->olsr_if = iface;
@@ -547,8 +550,7 @@ add_hemu_if(struct olsr_if *iface)
     ifp->olsr_socket = gethemusocket(&sin);
 
     if (ifp->olsr_socket < 0) {
-      fprintf(stderr, "Could not initialize socket... exiting!\n\n");
-      exit(1);
+      olsr_exit("Could not initialize socket", EXIT_FAILURE);
     }
 
   } else {
@@ -605,7 +607,7 @@ int
 chk_if_changed(struct olsr_if *iface)
 {
   struct ipaddr_str buf;
-  struct interface *Int;
+  struct interface_olsr *Int;
   struct InterfaceInfo Info;
   int Res;
   int IsWlan;
@@ -750,7 +752,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
 {
   struct ipaddr_str buf;
   struct InterfaceInfo Info;
-  struct interface *New;
+  struct interface_olsr *New;
   union olsr_ip_addr NullAddr;
   int IsWlan;
   struct sockaddr_in *AddrIn;
@@ -764,7 +766,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
   if (GetIntInfo(&Info, iface->name) < 0)
     return 0;
 
-  New = olsr_malloc(sizeof(struct interface), "Interface 1");
+  New = olsr_malloc(sizeof(struct interface_olsr), "Interface 1");
   /* initialize backpointer */
   New->olsr_if = iface;
 
@@ -822,7 +824,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
   else
     New->int_metric = Info.Metric;
 
-  New->olsr_seqnum = random() & 0xffff;
+  New->olsr_seqnum = olsr_random() & 0xffff;
 
   New->ttl_index = -32;         /* For the first 32 TC's, fish-eye is disabled */
 
@@ -843,8 +845,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
   New->send_socket = getsocket(0, New);
 
   if (New->olsr_socket < 0) {
-    fprintf(stderr, "Could not initialize socket... exiting!\n\n");
-    exit(1);
+    olsr_exit("Could not initialize socket", EXIT_FAILURE);
   }
 
   add_olsr_socket(New->olsr_socket, &olsr_input, NULL, NULL, SP_PR_READ);

@@ -1,39 +1,23 @@
-
-The jsoninfo plugin aims to deliver all of the information about the
-runtime status and configuration of olsrd.  You can request specific
-chunks of information, or overviews of runtime or startup
-configuration, or all of the information in one report. Additionally,
-the jsoninfo plugin will dump the current olsrd config in the
-olsrd.conf format.  The jsoninfo plugin provides all of the
-information that both the txtinfo and httpinfo plugins provide, as
-well as quite a bit more.
-
-There is a Java library called OlsrInfo that provides Java classes for
-parsing the data from jsoninfo (and txtinfo also).  It is based on the
-Jackson JSON processing library
-
-OlsrInfo: https://github.com/guardianproject/OlsrInfo
-Jackson JSON: http://jackson.codehaus.org/
-
-PLUGIN USAGE
+============
+INTRODUCTION
 ============
 
-There are a number of commands for getting information from this
-plugin.  They are designed to be tacked onto a URL, but can also be
-sent directly via a network socket. The commands are similar to the
-txtinfo plugin, but not exactly the same.
+The jsoninfo plugin is an info plugin.
 
-If there is no command or no recognized command, then it sends the
-/status output, which is the combination of /neighbors, /links,
-/routes, /hna, /mid, /topology, /gateways, and /interfaces.
+Please first read what's written in the file lib/info/README_INFO.
 
-grouped information:
-* /all - all of the data in JSON format
-* /runtime - all of the data that reflects the runtime status of olsrd and the mesh
-* /startup - all of the data about the startup configuration
 
-runtime information:
-* /neighbors (including 2-hop)
+==================
+SUPPORTED COMMANDS
+==================
+
+Grouped information:
+* /all
+* /runtime
+* /startup
+
+Runtime information:
+* /neighbors
 * /links
 * /routes
 * /hna
@@ -41,63 +25,44 @@ runtime information:
 * /topology
 * /gateways
 * /interfaces
-* /status - data that changes during runtime (all above commands combined)
+* /2hop
+* /sgw
 
-start-up information:
-* /config - the current configuration, i.e. what was loaded from the olsrd.conf
-* /plugins - currently loaded plugins and their config parameters
+A special case for Freifunk, combining /neighbors and /links:
+* /neighbours
 
-start-up information not in JSON format:
-* /olsrd.conf - the current config, formatted for writing directly to /etc/olsrd.conf
+Start-up information:
+* /version
+* /config
+* /plugins
+
+The current configuration, formatted for writing directly to a configuration
+file, like /etc/olsrd/olsrd.conf:
+* /olsrd.conf
 
 
+====================
 PLUGIN CONFIGURATION
 ====================
 
-The plugin accepts two parameters: "port" and "accept". There are no
-futher parameters.  Here's an example configuration for UNIX systems
-(for Windows, change the plugin to end in .dll):
+The plugin is configured with the generic info plugin configuration parameters
+and with 1 extra parameter.
 
-LoadPlugin "olsrd_jsoninfo.so.0.0"
+The port in the generic info plugin configuration is set to 9090.
+
+LoadPlugin "olsrd_jsoninfo.so.1.1"
 {
-    # the default port is 9090 but you can change it like this:
-    #PlParam     "port"   "8080"
+  # <generic info plugin configuration>
 
-    # You can set a "accept" single address to allow to connect to
-    # jsoninfo. If no address is specified, then localhost (127.0.0.1)
-    # is allowed by default.  jsoninfo will only use the first "accept"
-    # parameter specified and will ignore the rest.
+  # The first line of the specified file will be read. If properly read, then
+  # this line will be included in the JSON reply as the value of the 'uuid'
+  # field.
+  # Default: <not set>
+  # PlParam "uuidfile" "uuid.txt"
 
-    # to allow a specific host:
-    #PlParam      "accept" "172.29.44.23"
-    # if you set it to 0.0.0.0, it will accept all connections
-    #PlParam      "accept" "0.0.0.0"
-
-    # The "httpheaders" parameter prepends HTTP headers to the reply.
-    # If not set it will default to "no" and have the same behaviour as before.
-    # Among with a minimal set of headers also Cross-origin resource sharing
-    # headers (CORS) are included in reply allowing the json retrieval by
-    # javascript applications not served by olsrd itself.
-    # You can enable it uncommenting the following line:
-    #PlParam      "httpheaders" "yes"
-
-    # specify a UUID for this node to track it for debugging
-    #PlParam      "UUIDFile" "/etc/olsrd/olsrd.uuid"
+  # When set to 'true' or 'yes' then the output will be pretty-printed
+  # (multi-line indented). Otherwise the output will not contain
+  # line-breaks and indentation.
+  # Default: false
+  # PlParam "pretty" "false"
 }
-
-
-Example Usage
-=============
-
-You can use http URLs with various web tools to access the information:
-
-  curl http://localhost:9090/all
-
-You can combine the various commands to generate a custom report:
-
-  curl http://localhost:9090/interfaces/routes/links
-
-If you want a copy of the current configuration, you can download it
-using this URL:
-
-  wget http://localhost:9090/olsrd.conf

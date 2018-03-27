@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -98,7 +102,7 @@ bool ipc_check_allowed_ip(const union olsr_ip_addr *);
 
 void ipc_accept(int fd, void *, unsigned int);
 
-bool frontend_msgparser(union olsr_message *, struct interface *, union olsr_ip_addr *);
+bool frontend_msgparser(union olsr_message *, struct interface_olsr *, union olsr_ip_addr *);
 
 int ipc_route_send_rtentry(const union olsr_ip_addr *, const union olsr_ip_addr *, int, int, const char *);
 

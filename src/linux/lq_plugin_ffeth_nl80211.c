@@ -1,8 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2008 Henning Rogge <rogge@fgan.de>
- * Copyright (c) 2012 Fox-IT B.V. <opensource@fox-it.com>
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -184,7 +187,7 @@ lq_ffeth_nl80211_handle_lqchange(void) {
 }
 
 static void
-lq_parser_ffeth_nl80211(struct olsr *olsr, struct interface *in_if, union olsr_ip_addr *from_addr)
+lq_parser_ffeth_nl80211(struct olsr *olsr, struct interface_olsr *in_if, union olsr_ip_addr *from_addr)
 {
   const union olsr_ip_addr *main_addr;
   struct link_entry *lnk;

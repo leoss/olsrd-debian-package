@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,12 +57,12 @@
 
 #define MID_ALIAS_HACK_VTIME  10.0
 
-#define LINK_LOSS_MULTIPLIER (1<<16)
+#define LINK_LOSS_MULTIPLIER (1u<<16)
 
 struct link_entry {
   union olsr_ip_addr local_iface_addr;
   union olsr_ip_addr neighbor_iface_addr;
-  const struct interface *inter;
+  const struct interface_olsr *inter;
   char *if_name;
   struct timer_entry *link_timer;
   struct timer_entry *link_sym_timer;
@@ -94,7 +98,7 @@ struct link_entry {
   uint32_t linkquality[0];
 };
 
-/* inline to recast from link_list back to link_entry */
+/* INLINE to recast from link_list back to link_entry */
 LISTNODE2STRUCT(list2link, struct link_entry, link_list);
 
 #define OLSR_LINK_JITTER       5        /* percent */
@@ -128,10 +132,10 @@ void signal_link_changes(bool);        /* XXX ugly */
 
 struct link_entry *get_best_link_to_neighbor(const union olsr_ip_addr *);
 
-struct link_entry *lookup_link_entry(const union olsr_ip_addr *, const union olsr_ip_addr *remote_main, const struct interface *);
+struct link_entry *lookup_link_entry(const union olsr_ip_addr *, const union olsr_ip_addr *remote_main, const struct interface_olsr *);
 
 struct link_entry *update_link_entry(const union olsr_ip_addr *, const union olsr_ip_addr *, const struct hello_message *,
-                                     const struct interface *);
+                                     const struct interface_olsr *);
 
 int check_neighbor_link(const union olsr_ip_addr *);
 int replace_neighbor_link_set(const struct neighbor_entry *, struct neighbor_entry *);

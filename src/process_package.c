@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -56,13 +60,14 @@
 #include "lq_plugin.h"
 #include "log.h"
 
+#include <assert.h>
 #include <stddef.h>
 
 static void process_message_neighbors(struct neighbor_entry *, const struct hello_message *);
 
 static void linking_this_2_entries(struct neighbor_entry *, struct neighbor_2_entry *, olsr_reltime);
 
-static bool lookup_mpr_status(const struct hello_message *, const struct interface *);
+static bool lookup_mpr_status(const struct hello_message *, const struct interface_olsr *);
 
 /**
  *Processes an list of neighbors from an incoming HELLO message.
@@ -290,7 +295,7 @@ linking_this_2_entries(struct neighbor_entry *neighbor, struct neighbor_2_entry 
  *@return 1 if we are selected as MPR 0 if not
  */
 static bool
-lookup_mpr_status(const struct hello_message *message, const struct interface *in_if)
+lookup_mpr_status(const struct hello_message *message, const struct interface_olsr *in_if)
 {
   struct hello_neighbor *neighbors;
 
@@ -313,10 +318,17 @@ lookup_mpr_status(const struct hello_message *message, const struct interface *i
 static int
 deserialize_hello(struct hello_message *hello, const void *ser)
 {
+  static const int LINK_ORDER[] = HELLO_LINK_ORDER_ARRAY;
   const unsigned char *curr, *limit;
   uint8_t type;
   uint16_t size;
   struct ipaddr_str buf;
+  const unsigned char *curr_saved;
+  unsigned int idx;
+  struct hello_neighbor *neigh_unspec_first_prev = NULL;
+  struct hello_neighbor *neigh_unspec_first = NULL;
+
+  assert(LINK_ORDER[0] == UNSPEC_LINK);
 
   memset (hello, 0, sizeof(*hello));
 
@@ -341,34 +353,81 @@ deserialize_hello(struct hello_message *hello, const void *ser)
   hello->neighbors = NULL;
 
   limit = ((const unsigned char *)ser) + size;
-  while (curr < limit) {
-    const unsigned char *limit2 = curr;
-    uint8_t link_code;
-    uint16_t size2;
 
-    pkt_get_u8(&curr, &link_code);
-    pkt_ignore_u8(&curr);
-    pkt_get_u16(&curr, &size2);
+  curr_saved = curr;
 
-    limit2 += size2;
-    while (curr < limit2) {
-      struct hello_neighbor *neigh = olsr_malloc_hello_neighbor("HELLO deserialization");
-      pkt_get_ipaddress(&curr, &neigh->address);
-      if (type == LQ_HELLO_MESSAGE) {
-        olsr_deserialize_hello_lq_pair(&curr, neigh);
+  for (idx = 0; idx < (sizeof(LINK_ORDER) / sizeof(LINK_ORDER[0])); idx++) {
+    curr = curr_saved;
+
+    while (curr < limit) {
+      const unsigned char *limit2 = curr;
+      uint8_t link_code;
+      uint16_t size2;
+
+      pkt_get_u8(&curr, &link_code);
+      pkt_ignore_u8(&curr);
+      pkt_get_u16(&curr, &size2);
+
+      limit2 += size2;
+
+      if (EXTRACT_LINK(link_code) != LINK_ORDER[idx]) {
+        curr = limit2;
+        continue;
       }
-      neigh->link = EXTRACT_LINK(link_code);
-      neigh->status = EXTRACT_STATUS(link_code);
 
-      neigh->next = hello->neighbors;
-      hello->neighbors = neigh;
+      while (curr < limit2) {
+        struct hello_neighbor *neigh = olsr_malloc_hello_neighbor("HELLO deserialization");
+        pkt_get_ipaddress(&curr, &neigh->address);
+        if (type == LQ_HELLO_MESSAGE) {
+          olsr_deserialize_hello_lq_pair(&curr, neigh);
+        }
+        neigh->link = EXTRACT_LINK(link_code);
+        neigh->status = EXTRACT_STATUS(link_code);
+
+        neigh->next = hello->neighbors;
+        hello->neighbors = neigh;
+
+        if (neigh->link == UNSPEC_LINK) {
+          neigh_unspec_first = neigh;
+        } else if (!neigh_unspec_first_prev) {
+          neigh_unspec_first_prev = neigh;
+        }
+      }
     }
   }
+
+  if (neigh_unspec_first_prev && neigh_unspec_first) {
+    struct hello_neighbor *neigh;
+    for (neigh = hello->neighbors; neigh && (neigh != neigh_unspec_first); neigh = neigh->next) {
+      struct hello_neighbor *neigh_cull;
+      struct hello_neighbor *neigh_cull_prev;
+      struct hello_neighbor *neigh_cull_next;
+
+      for (neigh_cull_prev = neigh_unspec_first_prev, neigh_cull = neigh_unspec_first;
+           neigh_cull;
+           neigh_cull = neigh_cull_next) {
+        neigh_cull_next = neigh_cull->next;
+
+        if (!ipequal(&neigh_cull->address, &neigh->address)) {
+          neigh_cull_prev = neigh_cull;
+          continue;
+        }
+
+        if (neigh_cull == neigh_unspec_first) {
+          neigh_unspec_first = neigh_cull_next;
+        }
+
+        neigh_cull_prev->next = neigh_cull_next;
+        free(neigh_cull);
+      }
+    }
+  }
+
   return 0;
 }
 
 bool
-olsr_input_hello(union olsr_message * ser, struct interface * inif, union olsr_ip_addr * from)
+olsr_input_hello(union olsr_message * ser, struct interface_olsr * inif, union olsr_ip_addr * from)
 {
   struct hello_message hello;
 
@@ -403,7 +462,7 @@ olsr_init_package_process(void)
 }
 
 void
-olsr_hello_tap(struct hello_message *message, struct interface *in_if, const union olsr_ip_addr *from_addr)
+olsr_hello_tap(struct hello_message *message, struct interface_olsr *in_if, const union olsr_ip_addr *from_addr)
 {
   struct neighbor_entry *neighbor;
 

@@ -1,7 +1,11 @@
-
 /*
  * The olsr.org Optimized Link-State Routing daemon (olsrd)
- * Copyright (c) 2004, Thomas Lopatic (thomas@lopatic.de)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -93,6 +97,7 @@ random(void)
   return (RandState ^ (RandState >> 16)) & RAND_MAX;
 }
 
+#if !defined(MINGW_VERSION) || MINGW_VERSION < 40600
 int
 nanosleep(struct timespec *Req, struct timespec *Rem)
 {
@@ -122,6 +127,7 @@ gettimeofday(struct timeval *TVal, void *TZone __attribute__ ((unused)))
   TVal->tv_usec = (unsigned int)(Ticks % 10000000) / 10;
   return 0;
 }
+#endif /* !defined(MINGW_VERSION) || MINGW_VERSION < 40600 */
 
 long
 times(struct tms *Dummy __attribute__ ((unused)))
@@ -129,6 +135,7 @@ times(struct tms *Dummy __attribute__ ((unused)))
   return (long)GetTickCount();
 }
 
+#if !defined(MINGW_VERSION) || MINGW_VERSION < 40600
 int
 inet_aton(const char *AddrStr, struct in_addr *Addr)
 {
@@ -136,6 +143,7 @@ inet_aton(const char *AddrStr, struct in_addr *Addr)
 
   return 1;
 }
+#endif /* !defined(MINGW_VERSION) || MINGW_VERSION < 40600 */
 
 char *
 StrError(unsigned int ErrNo)
@@ -534,6 +542,10 @@ write(int fd, const void *buf, unsigned int count)
     written += rc;
   }
   return written;
+}
+
+int getpid(void) {
+  return (int)GetCurrentProcessId();
 }
 
 #endif /* _WIN32 */

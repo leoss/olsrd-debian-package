@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -64,14 +68,14 @@ int bind_socket_to_device(int, char *);
 int convert_ip_to_mac(union olsr_ip_addr *, struct sockaddr *, char *);
 
 void net_os_set_global_ifoptions(void);
-int net_os_set_ifoptions(const char *if_name, struct interface *iface);
+int net_os_set_ifoptions(const char *if_name, struct interface_olsr *iface);
 int net_os_restore_ifoptions(void);
 
 int gethemusocket(struct sockaddr_in *pin);
 
-int getsocket(int, struct interface *);
+int getsocket(int, struct interface_olsr *);
 
-int getsocket6(int, struct interface *);
+int getsocket6(int, struct interface_olsr *);
 
 int get_ipv6_address(char *, struct sockaddr_in6 *, struct olsr_ip_prefix *);
 
@@ -81,7 +85,7 @@ int check_wireless_interface(char *);
 
 bool is_if_link_up(char *);
 
-int join_mcast(struct interface *, int);
+int join_mcast(struct interface_olsr *, int);
 
 bool olsr_if_isup(const char * dev);
 int olsr_if_set_state(const char *dev, bool up);

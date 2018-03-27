@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,6 +61,7 @@
 #include "lq_packet.h"
 #include "log.h"
 #include "link_set.h"
+#include "olsr_random.h"
 
 #include <assert.h>
 #include <signal.h>
@@ -68,6 +73,10 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
+#if defined(__linux__) && !defined(__ANDROID__)
+#include <linux/ethtool.h>
+#include <linux/sockios.h>
+#endif /* defined(__linux__) && !defined(__ANDROID__) */
 
 /**
  * Fix bug in GLIBC, see https://bugzilla.redhat.com/show_bug.cgi?id=635260
@@ -79,35 +88,7 @@
 
 #define BUFSPACE  (127*1024)    /* max. input buffer size to request */
 
-int
-set_flag(char *ifname, short flag __attribute__ ((unused)))
-{
-  struct ifreq ifr;
-
-  strscpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-
-  /* Get flags */
-  if (ioctl(olsr_cnf->ioctl_s, SIOCGIFFLAGS, &ifr) < 0) {
-    fprintf(stderr, "ioctl (get interface flags)");
-    return -1;
-  }
-
-  strscpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-
-  //printf("Setting flags for if \"%s\"\n", ifr.ifr_name);
-
-  if (!(ifr.ifr_flags & (IFF_UP | IFF_RUNNING))) {
-    /* Add UP */
-    ifr.ifr_flags |= (IFF_UP | IFF_RUNNING);
-    /* Set flags + UP */
-    if (ioctl(olsr_cnf->ioctl_s, SIOCSIFFLAGS, &ifr) < 0) {
-      fprintf(stderr, "ERROR(%s): %s\n", ifr.ifr_name, strerror(errno));
-      return -1;
-    }
-  }
-  return 1;
-
-}
+static const uint8_t  zero_v6[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
 void
 check_interface_updates(void *foo __attribute__ ((unused)))
@@ -154,7 +135,7 @@ check_interface_updates(void *foo __attribute__ ((unused)))
 int
 chk_if_changed(struct olsr_if *iface)
 {
-  struct interface *ifp;
+  struct interface_olsr *ifp;
   struct ifreq ifr;
   struct sockaddr_in6 tmp_saddr6;
   int if_changes;
@@ -190,7 +171,7 @@ chk_if_changed(struct olsr_if *iface)
    * First check if the interface is set DOWN
    */
 
-  if ((ifp->int_flags & IFF_UP) == 0 || (ifp->int_flags & IFF_RUNNING) == 0) {
+  if ((getInterfaceLinkState(iface->name) == LINKSTATE_DOWN) || (ifp->int_flags & IFF_UP) == 0) {
     OLSR_PRINTF(1, "\tInterface %s not up and running - removing it...\n", iface->name);
     goto remove_interface;
   }
@@ -289,21 +270,25 @@ chk_if_changed(struct olsr_if *iface)
     OLSR_PRINTF(3, "\tAddress:%s\n", sockaddr4_to_string(&buf, &ifr.ifr_addr));
 #endif /* DEBUG */
 
-    if (memcmp
-        (&((struct sockaddr_in *)ARM_NOWARN_ALIGN(&ifp->int_addr))->sin_addr.s_addr, &((struct sockaddr_in *)ARM_NOWARN_ALIGN(&ifr.ifr_addr))->sin_addr.s_addr,
-         olsr_cnf->ipsize) != 0) {
-      /* New address */
-      OLSR_PRINTF(1, "IPv4 address changed for %s\n", ifr.ifr_name);
-      OLSR_PRINTF(1, "\tOld:%s\n", ip4_to_string(&buf, ifp->int_addr.sin_addr));
-      OLSR_PRINTF(1, "\tNew:%s\n", sockaddr4_to_string(&buf, &ifr.ifr_addr));
+    {
+      struct sockaddr_in* ifpa = &ifp->int_addr;
+      struct sockaddr* ifra = &ifr.ifr_addr;
+      if (memcmp
+          (&((struct sockaddr_in *)ARM_NOWARN_ALIGN(ifpa))->sin_addr.s_addr, &((struct sockaddr_in *)ARM_NOWARN_ALIGN(ifra))->sin_addr.s_addr,
+          olsr_cnf->ipsize) != 0) {
+        /* New address */
+        OLSR_PRINTF(1, "IPv4 address changed for %s\n", ifr.ifr_name);
+        OLSR_PRINTF(1, "\tOld:%s\n", ip4_to_string(&buf, ifp->int_addr.sin_addr));
+        OLSR_PRINTF(1, "\tNew:%s\n", sockaddr4_to_string(&buf, ifra));
 
-      ifp->int_addr = *(struct sockaddr_in *)ARM_NOWARN_ALIGN(&ifr.ifr_addr);
-      memcpy(&ifp->ip_addr, &((struct sockaddr_in *)ARM_NOWARN_ALIGN(&ifr.ifr_addr))->sin_addr.s_addr, olsr_cnf->ipsize);
+        ifp->int_addr = *(struct sockaddr_in *)ARM_NOWARN_ALIGN(ifra);
+        memcpy(&ifp->ip_addr, &((struct sockaddr_in *)ARM_NOWARN_ALIGN(ifra))->sin_addr.s_addr, olsr_cnf->ipsize);
 
-      /* we have to make sure that olsrd uses the new source address of this interface */
-      olsr_remove_interface(iface); /* so we remove the interface completely */
-      chk_if_up(iface,3); /* and create it again to get new sockets,..*/
-      return 0;
+        /* we have to make sure that olsrd uses the new source address of this interface */
+        olsr_remove_interface(iface); /* so we remove the interface completely */
+        chk_if_up(iface,3); /* and create it again to get new sockets,..*/
+        return 0;
+      }
     }
 
     /* Check netmask */
@@ -315,36 +300,49 @@ chk_if_changed(struct olsr_if *iface)
     OLSR_PRINTF(3, "\tNetmask:%s\n", sockaddr4_to_string(&buf, &ifr.ifr_netmask));
 #endif /* DEBUG */
 
-    if (memcmp
-        (&((struct sockaddr_in *)ARM_NOWARN_ALIGN(&ifp->int_netmask))->sin_addr.s_addr, &((struct sockaddr_in *)ARM_NOWARN_ALIGN(&ifr.ifr_netmask))->sin_addr.s_addr,
-         olsr_cnf->ipsize) != 0) {
-      /* New address */
-      OLSR_PRINTF(1, "IPv4 netmask changed for %s\n", ifr.ifr_name);
-      OLSR_PRINTF(1, "\tOld:%s\n", ip4_to_string(&buf, ifp->int_netmask.sin_addr));
-      OLSR_PRINTF(1, "\tNew:%s\n", sockaddr4_to_string(&buf, &ifr.ifr_netmask));
+    {
+      struct sockaddr_in* ifpn = &ifp->int_netmask;
+      struct sockaddr* ifrn = &ifr.ifr_netmask;
+      if (memcmp
+          (&((struct sockaddr_in *)ARM_NOWARN_ALIGN(ifpn))->sin_addr.s_addr, &((struct sockaddr_in *)ARM_NOWARN_ALIGN(ifrn))->sin_addr.s_addr,
+          olsr_cnf->ipsize) != 0) {
+        /* New address */
+        OLSR_PRINTF(1, "IPv4 netmask changed for %s\n", ifr.ifr_name);
+        OLSR_PRINTF(1, "\tOld:%s\n", ip4_to_string(&buf, ifp->int_netmask.sin_addr));
+        OLSR_PRINTF(1, "\tNew:%s\n", sockaddr4_to_string(&buf, ifrn));
 
-      ifp->int_netmask = *(struct sockaddr_in *)ARM_NOWARN_ALIGN(&ifr.ifr_netmask);
+        ifp->int_netmask = *(struct sockaddr_in *)ARM_NOWARN_ALIGN(ifrn);
 
-      if_changes = 1;
+        if_changes = 1;
+      }
     }
 
     if (!iface->cnf->ipv4_multicast.v4.s_addr) {
+      struct sockaddr_in *ptr;
+
       /* Check broadcast address */
       if (ioctl(olsr_cnf->ioctl_s, SIOCGIFBRDADDR, &ifr) < 0) {
         olsr_syslog(OLSR_LOG_ERR, "%s: ioctl (get broadaddr)", ifr.ifr_name);
         goto remove_interface;
       }
+
+      ptr = (struct sockaddr_in *)ARM_NOWARN_ALIGN(&ifr.ifr_broadaddr);
+      if (ptr->sin_addr.s_addr == 0) {
+        memset(&ptr->sin_addr, 255, 4);
+      }
+
 #ifdef DEBUG
       OLSR_PRINTF(3, "\tBroadcast address:%s\n", sockaddr4_to_string(&buf, &ifr.ifr_broadaddr));
 #endif /* DEBUG */
 
-      if (ifp->int_broadaddr.sin_addr.s_addr != ((struct sockaddr_in *)ARM_NOWARN_ALIGN(&ifr.ifr_broadaddr))->sin_addr.s_addr) {
+      if (ifp->int_broadaddr.sin_addr.s_addr != ptr->sin_addr.s_addr) {
         /* New address */
+        struct sockaddr* ifrb = &ifr.ifr_broadaddr;
         OLSR_PRINTF(1, "IPv4 broadcast changed for %s\n", ifr.ifr_name);
         OLSR_PRINTF(1, "\tOld:%s\n", ip4_to_string(&buf, ifp->int_broadaddr.sin_addr));
-        OLSR_PRINTF(1, "\tNew:%s\n", sockaddr4_to_string(&buf, &ifr.ifr_broadaddr));
+        OLSR_PRINTF(1, "\tNew:%s\n", sockaddr4_to_string(&buf, ifrb));
 
-        ifp->int_broadaddr = *(struct sockaddr_in *)ARM_NOWARN_ALIGN(&ifr.ifr_broadaddr);
+        ifp->int_broadaddr = *(struct sockaddr_in *)ARM_NOWARN_ALIGN(ifrb);
         if_changes = 1;
       }
     }
@@ -368,7 +366,7 @@ remove_interface:
 int
 add_hemu_if(struct olsr_if *iface)
 {
-  struct interface *ifp;
+  struct interface_olsr *ifp;
   union olsr_ip_addr null_addr;
   uint32_t addr[4];
   struct ipaddr_str buf;
@@ -377,9 +375,9 @@ add_hemu_if(struct olsr_if *iface)
   if (!iface->host_emul)
     return -1;
 
-  ifp = olsr_malloc(sizeof(struct interface), "Interface update 2");
+  ifp = olsr_malloc(sizeof(struct interface_olsr), "Interface update 2");
 
-  memset(ifp, 0, sizeof(struct interface));
+  memset(ifp, 0, sizeof(struct interface_olsr));
 
   /* initialize backpointer */
   ifp->olsr_if = iface;
@@ -441,13 +439,7 @@ add_hemu_if(struct olsr_if *iface)
     ifp->olsr_socket = gethemusocket(&sin);
 
     if (ifp->olsr_socket < 0) {
-      fprintf(stderr, "Could not initialize socket... exiting!\n\n");
-      olsr_syslog(OLSR_LOG_ERR, "Could not initialize socket... exiting!\n\n");
-      olsr_cnf->exit_value = EXIT_FAILURE;
-      kill(getpid(), SIGINT);
-
-      /* the kill command should not come back, just to be sure */
-      exit(1);
+      olsr_exit("Could not initialize socket", EXIT_FAILURE);
     }
 
   } else {
@@ -495,6 +487,7 @@ add_hemu_if(struct olsr_if *iface)
   ifp->valtimes.tc = reltime_to_me(iface->cnf->tc_params.validity_time * MSEC_PER_SEC);
   ifp->valtimes.mid = reltime_to_me(iface->cnf->mid_params.validity_time * MSEC_PER_SEC);
   ifp->valtimes.hna = reltime_to_me(iface->cnf->hna_params.validity_time * MSEC_PER_SEC);
+  ifp->valtimes.hna_reltime = me_to_reltime(ifp->valtimes.hna);
 
   ifp->mode = iface->cnf->mode;
 
@@ -526,7 +519,7 @@ if_basename(const char *name)
 int
 chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
 {
-  struct interface ifs, *ifp;
+  struct interface_olsr ifs, *ifp;
   struct ifreq ifr;
   union olsr_ip_addr null_addr;
   size_t name_size;
@@ -539,7 +532,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
     return -1;
 
   memset(&ifr, 0, sizeof(struct ifreq));
-  memset(&ifs, 0, sizeof(struct interface));
+  memset(&ifs, 0, sizeof(struct interface_olsr));
   strscpy(ifr.ifr_name, iface->name, sizeof(ifr.ifr_name));
 
   OLSR_PRINTF(debuglvl, "Checking %s:\n", ifr.ifr_name);
@@ -552,7 +545,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
 
   ifs.int_flags = ifr.ifr_flags;
 
-  if ( ( (ifs.int_flags & IFF_UP) == 0) || ( (ifs.int_flags & IFF_RUNNING) == 0) ) {
+  if ((getInterfaceLinkState(iface->name) == LINKSTATE_DOWN) || ((ifs.int_flags & IFF_UP) == 0)) {
     OLSR_PRINTF(debuglvl, "\tInterface not up & running - skipping it...\n");
     return 0;
   }
@@ -598,6 +591,10 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
     ifs.int6_multaddr.sin6_port = htons(olsr_cnf->olsrport);
     ifs.int6_multaddr.sin6_addr =  iface->cnf->ipv6_multicast.v6;
 
+    if (memcmp(zero_v6, &ifs.int6_multaddr.sin6_addr, 16) == 0) {
+      memset(&ifs.int6_multaddr.sin6_addr, 255, 16);
+    }
+
 #ifdef __APPLE__
     ifs.int6_multaddr.sin6_scope_id = 0;
 #endif /* __APPLE__ */
@@ -612,12 +609,14 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
       ifs.int_addr.sin_addr = iface->cnf->ipv4_src.v4;
     }
     else {
+      struct sockaddr* ifra;
+
       if (ioctl(olsr_cnf->ioctl_s, SIOCGIFADDR, &ifr) < 0) {
         OLSR_PRINTF(debuglvl, "\tCould not get address of interface - skipping it\n");
         return 0;
       }
-
-      ifs.int_addr = *(struct sockaddr_in *)ARM_NOWARN_ALIGN(&ifr.ifr_addr);
+      ifra = &ifr.ifr_addr;
+      ifs.int_addr = *(struct sockaddr_in *)ARM_NOWARN_ALIGN(ifra);
     }
     /* Find netmask */
     if (ioctl(olsr_cnf->ioctl_s, SIOCGIFNETMASK, &ifr) < 0) {
@@ -625,7 +624,10 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
       return 0;
     }
 
-    ifs.int_netmask = *(struct sockaddr_in *)ARM_NOWARN_ALIGN(&ifr.ifr_netmask);
+    {
+      struct sockaddr* ifrn = &ifr.ifr_netmask;
+      ifs.int_netmask = *(struct sockaddr_in *)ARM_NOWARN_ALIGN(ifrn);
+    }
 
     /* Find broadcast address */
     if (iface->cnf->ipv4_multicast.v4.s_addr) {
@@ -633,12 +635,17 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
       memcpy(&((struct sockaddr_in *)&ifs.int_broadaddr)->sin_addr.s_addr, &iface->cnf->ipv4_multicast.v4, sizeof(uint32_t));
     } else {
       /* Autodetect */
+      struct sockaddr* ifrb;
       if (ioctl(olsr_cnf->ioctl_s, SIOCGIFBRDADDR, &ifr) < 0) {
         olsr_syslog(OLSR_LOG_ERR, "%s: ioctl (get broadaddr)", ifr.ifr_name);
         return 0;
       }
 
-      ifs.int_broadaddr = *(struct sockaddr_in *)ARM_NOWARN_ALIGN(&ifr.ifr_broadaddr);
+      ifrb = &ifr.ifr_broadaddr;
+      ifs.int_broadaddr = *(struct sockaddr_in *)ARM_NOWARN_ALIGN(ifrb);
+      if (ifs.int_broadaddr.sin_addr.s_addr == 0) {
+        memset(&ifs.int_broadaddr.sin_addr, 255, 4);
+      }
     }
 
     /* Deactivate IP spoof filter */
@@ -666,9 +673,6 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
   ifs.int_mtu -= (olsr_cnf->ip_version == AF_INET6) ? UDP_IPV6_HDRSIZE : UDP_IPV4_HDRSIZE;
 
   ifs.ttl_index = -32;          /* For the first 32 TC's, fish-eye is disabled */
-
-  /* Set up buffer */
-  net_add_buffer(&ifs);
 
   OLSR_PRINTF(1, "\tMTU - IPhdr: %d\n", ifs.int_mtu);
 
@@ -748,13 +752,13 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
     join_mcast(&ifs, ifs.send_socket);
   }
 
-  ifp = olsr_malloc(sizeof(struct interface), "Interface update 2");
+  ifp = olsr_malloc(sizeof(struct interface_olsr), "Interface update 2");
 
   iface->configured = 1;
   iface->interf = ifp;
 
   /* XXX bad code */
-  memcpy(ifp, &ifs, sizeof(struct interface));
+  memcpy(ifp, &ifs, sizeof(struct interface_olsr));
 
   /* initialize backpointer */
   ifp->olsr_if = iface;
@@ -790,17 +794,19 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
     }
   } else {
     /* IP version 6 */
+#ifdef IPV6_TCLASS
     if (setsockopt(ifp->send_socket, IPPROTO_IPV6, IPV6_TCLASS, (char *)&tos_bits, sizeof(tos_bits)) < 0) {
       perror("setsockopt(IPV6_TCLASS)");
       olsr_syslog(OLSR_LOG_ERR, "setsockopt(IPV6_TCLASS) error %m");
     }
+#endif
   }
 #endif /* __linux__ */
 
   /*
    *Initialize sequencenumber as a random 16bit value
    */
-  ifp->olsr_seqnum = random() & 0xFFFF;
+  ifp->olsr_seqnum = olsr_random() & 0xFFFF;
 
   /*
    * Set main address if this is the only interface
@@ -839,8 +845,12 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
   ifp->valtimes.tc = reltime_to_me(iface->cnf->tc_params.validity_time * MSEC_PER_SEC);
   ifp->valtimes.mid = reltime_to_me(iface->cnf->mid_params.validity_time * MSEC_PER_SEC);
   ifp->valtimes.hna = reltime_to_me(iface->cnf->hna_params.validity_time * MSEC_PER_SEC);
+  ifp->valtimes.hna_reltime = me_to_reltime(ifp->valtimes.hna);
 
   ifp->mode = iface->cnf->mode;
+
+  /* Set up buffer */
+  net_add_buffer(ifp);
 
   /*
    *Call possible ifchange functions registered by plugins
@@ -849,6 +859,42 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
 
   return 1;
 }
+
+#if defined(__linux__) && !defined(__ANDROID__)
+LinkState getInterfaceLinkState(const char * iface) {
+  LinkState r = LINKSTATE_UNKNOWN;
+  int fd;
+  struct ethtool_value edata;
+  struct ifreq ifr;
+
+  if (!iface) {
+    return r;
+  }
+
+  memset(&ifr, 0, sizeof(ifr));
+
+  fd = socket(AF_INET, SOCK_DGRAM, 0);
+  if (fd < 0) {
+    return r;
+  }
+
+  edata.cmd = ETHTOOL_GLINK;
+  strncpy(ifr.ifr_name, iface, sizeof(ifr.ifr_name));
+  ifr.ifr_name[sizeof(ifr.ifr_name) - 1] = '\0'; /* ensure string termination */
+  ifr.ifr_data = (caddr_t) &edata;
+  errno = 0;
+  if (!ioctl(fd, SIOCETHTOOL, &ifr)) {
+    /* ioctl success */
+    r = edata.data ? LINKSTATE_UP : LINKSTATE_DOWN;
+  } else {
+    /* no kernel support (errno == EOPNOTSUPP) or other error */
+    r = LINKSTATE_UNKNOWN;
+  }
+
+  close(fd);
+  return r;
+}
+#endif /* defined(__linux__) && !defined(__ANDROID__) */
 
 /*
  * Local Variables:
