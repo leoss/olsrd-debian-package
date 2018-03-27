@@ -49,6 +49,7 @@
 #include "../parser.h"          /* dnc: needed for call to packet_parser() */
 #include "../olsr_protocol.h"
 #include "../olsr_cfg.h"
+#include "../olsr.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -177,36 +178,27 @@ set_sysctl_int(const char *name, int new)
   return old;
 }
 
-int
-enable_ip_forwarding(int version)
-{
-  const char *name = version == AF_INET ? "net.inet.ip.forwarding" : "net.inet6.ip6.forwarding";
+void
+net_os_set_global_ifoptions(void) {
+  const char *name = olsr_cnf->ip_version == AF_INET ? "net.inet.ip.forwarding" : "net.inet6.ip6.forwarding";
 
   gateway = set_sysctl_int(name, 1);
   if (gateway < 0) {
     fprintf(stderr, "Cannot enable IP forwarding. Please enable IP forwarding manually." " Continuing in 3 seconds...\n");
-    sleep(3);
+    olsr_startup_sleep(3);
   }
-
-  return 1;
-}
-
-int
-disable_redirects_global(int version)
-{
-  const char *name;
 
   /* do not accept ICMP redirects */
 
 #if defined(__OpenBSD__) || defined(__NetBSD__)
-  if (version == AF_INET)
+  if (olsr_cnf->ip_version == AF_INET)
     name = "net.inet.icmp.rediraccept";
   else
     name = "net.inet6.icmp6.rediraccept";
 
   ignore_redir = set_sysctl_int(name, 0);
 #elif defined __FreeBSD__ || defined __FreeBSD_kernel__ || defined __MacOSX__
-  if (version == AF_INET) {
+  if (olsr_cnf->ip_version == AF_INET) {
     name = "net.inet.icmp.drop_redirect";
     ignore_redir = set_sysctl_int(name, 1);
   } else {
@@ -214,7 +206,7 @@ disable_redirects_global(int version)
     ignore_redir = set_sysctl_int(name, 0);
   }
 #else
-  if (version == AF_INET)
+  if (olsr_cnf->ip_version == AF_INET)
     name = "net.inet.icmp.drop_redirect";
   else
     name = "net.inet6.icmp6.drop_redirect";
@@ -225,12 +217,12 @@ disable_redirects_global(int version)
   if (ignore_redir < 0) {
     fprintf(stderr,
             "Cannot disable incoming ICMP redirect messages. " "Please disable them manually. Continuing in 3 seconds...\n");
-    sleep(3);
+    olsr_startup_sleep(3);
   }
 
   /* do not send ICMP redirects */
 
-  if (version == AF_INET)
+  if (olsr_cnf->ip_version == AF_INET)
     name = "net.inet.ip.redirect";
   else
     name = "net.inet6.ip6.redirect";
@@ -239,53 +231,34 @@ disable_redirects_global(int version)
   if (send_redir < 0) {
     fprintf(stderr,
             "Cannot disable outgoing ICMP redirect messages. " "Please disable them manually. Continuing in 3 seconds...\n");
-    sleep(3);
+    olsr_startup_sleep(3);
   }
+}
 
-  return 1;
+int net_os_set_ifoptions(const char *if_name __attribute__ ((unused)), struct interface *iface __attribute__ ((unused))) {
+  return -1;
 }
 
 int
-disable_redirects(const char *if_name __attribute__ ((unused)), struct interface *iface __attribute__ ((unused)), int version
-                  __attribute__ ((unused)))
-{
-  /*
-   *  this function gets called for each interface olsrd uses; however,
-   * FreeBSD can only globally control ICMP redirects, and not on a
-   * per-interface basis; hence, only disable ICMP redirects in the "global"
-   * function
-   */
-  return 1;
-}
-
-int
-deactivate_spoof(const char *if_name __attribute__ ((unused)), struct interface *iface __attribute__ ((unused)), int version
-                 __attribute__ ((unused)))
-{
-  return 1;
-}
-
-int
-restore_settings(int version)
-{
+net_os_restore_ifoptions(void) {
   /* reset IP forwarding */
-  const char *name = version == AF_INET ? "net.inet.ip.forwarding" : "net.inet6.ip6.forwarding";
+  const char *name = olsr_cnf->ip_version == AF_INET ? "net.inet.ip.forwarding" : "net.inet6.ip6.forwarding";
 
   set_sysctl_int(name, gateway);
 
   /* reset incoming ICMP redirects */
 
 #ifdef __OpenBSD__
-  name = version == AF_INET ? "net.inet.icmp.rediraccept" : "net.inet6.icmp6.rediraccept";
+  name = olsr_cnf->ip_version == AF_INET ? "net.inet.icmp.rediraccept" : "net.inet6.icmp6.rediraccept";
 #elif defined __FreeBSD__ || defined __FreeBSD_kernel__ || defined __MacOSX__
-  name = version == AF_INET ? "net.inet.icmp.drop_redirect" : "net.inet6.icmp6.rediraccept";
+  name = olsr_cnf->ip_version == AF_INET ? "net.inet.icmp.drop_redirect" : "net.inet6.icmp6.rediraccept";
 #else
-  name = version == AF_INET ? "net.inet.icmp.drop_redirect" : "net.inet6.icmp6.drop_redirect";
+  name = olsr_cnf->ip_version == AF_INET ? "net.inet.icmp.drop_redirect" : "net.inet6.icmp6.drop_redirect";
 #endif
   set_sysctl_int(name, ignore_redir);
 
   /* reset outgoing ICMP redirects */
-  name = version == AF_INET ? "net.inet.ip.redirect" : "net.inet6.ip6.redirect";
+  name = olsr_cnf->ip_version == AF_INET ? "net.inet.ip.redirect" : "net.inet6.ip6.redirect";
   set_sysctl_int(name, send_redir);
   return 1;
 }
@@ -329,7 +302,7 @@ gethemusocket(struct sockaddr_in *pin)
 }
 
 int
-getsocket(int bufspace, char *int_name __attribute__ ((unused)))
+getsocket(int bufspace, struct interface *ifp __attribute__ ((unused)))
 {
   struct sockaddr_in sin;
   int on;
@@ -366,20 +339,26 @@ getsocket(int bufspace, char *int_name __attribute__ ((unused)))
     return -1;
   }
 
-  for (on = bufspace;; on -= 1024) {
-    if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *)&on, sizeof(on)) == 0)
-      break;
-    if (on <= 8 * 1024) {
-      perror("setsockopt");
-      syslog(LOG_ERR, "setsockopt SO_RCVBUF: %m");
-      break;
+  if(bufspace > 0) {
+    for (on = bufspace;; on -= 1024) {
+      if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *)&on, sizeof(on)) == 0)
+        break;
+      if (on <= 8 * 1024) {
+        perror("setsockopt");
+        syslog(LOG_ERR, "setsockopt SO_RCVBUF: %m");
+        break;
+      }
     }
   }
 
   memset(&sin, 0, sizeof(sin));
   sin.sin_family = AF_INET;
   sin.sin_port = htons(olsr_cnf->olsrport);
-  sin.sin_addr.s_addr = INADDR_ANY;
+
+  if(bufspace <= 0) {
+    sin.sin_addr.s_addr = ifp->int_addr.sin_addr.s_addr;
+  }
+
   if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
     perror("bind");
     syslog(LOG_ERR, "bind: %m");
@@ -399,7 +378,7 @@ getsocket(int bufspace, char *int_name __attribute__ ((unused)))
 }
 
 int
-getsocket6(int bufspace, char *int_name __attribute__ ((unused)))
+getsocket6(int bufspace, struct interface *ifp __attribute__ ((unused)))
 {
   struct sockaddr_in6 sin;
   int on;
@@ -411,13 +390,15 @@ getsocket6(int bufspace, char *int_name __attribute__ ((unused)))
     return -1;
   }
 
-  for (on = bufspace;; on -= 1024) {
-    if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *)&on, sizeof(on)) == 0)
-      break;
-    if (on <= 8 * 1024) {
-      perror("setsockopt");
-      syslog(LOG_ERR, "setsockopt SO_RCVBUF: %m");
-      break;
+  if(bufspace > 0) {
+    for (on = bufspace;; on -= 1024) {
+      if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *)&on, sizeof(on)) == 0)
+        break;
+      if (on <= 8 * 1024) {
+        perror("setsockopt");
+        syslog(LOG_ERR, "setsockopt SO_RCVBUF: %m");
+        break;
+      }
     }
   }
 
@@ -449,6 +430,11 @@ getsocket6(int bufspace, char *int_name __attribute__ ((unused)))
   memset(&sin, 0, sizeof(sin));
   sin.sin6_family = AF_INET6;
   sin.sin6_port = htons(olsr_cnf->olsrport);
+
+  if(bufspace <= 0) {
+    memcpy(&sin.sin6_addr, &ifp->int6_addr.sin6_addr, sizeof(struct in6_addr));
+  }
+
   if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
     perror("bind");
     syslog(LOG_ERR, "bind: %m");
@@ -480,20 +466,23 @@ join_mcast(struct interface *ifs, int sock)
   mcastreq.ipv6mr_multiaddr = ifs->int6_multaddr.sin6_addr;
   mcastreq.ipv6mr_interface = ifs->if_index;
 
-  OLSR_PRINTF(3, "Interface %s joining multicast %s...", ifs->int_name,
-              olsr_ip_to_string(&addrstr, (union olsr_ip_addr *)&ifs->int6_multaddr.sin6_addr));
+  if (ifs->olsr_socket == sock) {
 
-  /* rfc 3493 */
+    OLSR_PRINTF(3, "Interface %s joining multicast %s...", ifs->int_name,
+                olsr_ip_to_string(&addrstr, (union olsr_ip_addr *)&ifs->int6_multaddr.sin6_addr));
+
+    /* rfc 3493 */
 #ifdef IPV6_JOIN_GROUP
-  /* Join reciever group */
-  if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, (char *)&mcastreq, sizeof(struct ipv6_mreq)) < 0)
+    /* Join reciever group */
+    if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, (char *)&mcastreq, sizeof(struct ipv6_mreq)) < 0)
 #else /* rfc 2133, obsoleted */
-  /* Join receiver group */
-  if (setsockopt(sock, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (char *)&mcastreq, sizeof(struct ipv6_mreq)) < 0)
+    /* Join receiver group */
+    if (setsockopt(sock, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (char *)&mcastreq, sizeof(struct ipv6_mreq)) < 0)
 #endif
-  {
-    perror("Join multicast send");
-    return -1;
+    {
+      perror("Join multicast send");
+      return -1;
+    }
   }
 
   if (setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_IF, (char *)&mcastreq.ipv6mr_interface, sizeof(mcastreq.ipv6mr_interface)) < 0) {
@@ -519,10 +508,11 @@ join_mcast(struct interface *ifs, int sock)
 }
 
 int
-get_ipv6_address(char *ifname, struct sockaddr_in6 *saddr6, int scope_in)
+get_ipv6_address(char *ifname, struct sockaddr_in6 *saddr6, struct olsr_ip_prefix *prefix)
 {
   struct ifaddrs *ifap, *ifa;
   const struct sockaddr_in6 *sin6 = NULL;
+  const union olsr_ip_addr *tmp_ip;
   struct in6_ifreq ifr6;
   int found = 0;
   int s6;
@@ -553,18 +543,13 @@ get_ipv6_address(char *ifname, struct sockaddr_in6 *saddr6, int scope_in)
       flags6 = ifr6.ifr_ifru.ifru_flags6;
       if ((flags6 & IN6_IFF_ANYCAST) != 0)
         continue;
-      if (IN6_IS_ADDR_SITELOCAL(&sin6->sin6_addr)) {
-        if (scope_in) {
-          memcpy(&saddr6->sin6_addr, &sin6->sin6_addr, sizeof(struct in6_addr));
-          found = 1;
-          break;
-        }
-      } else {
-        if (scope_in == 0) {
-          memcpy(&saddr6->sin6_addr, &sin6->sin6_addr, sizeof(struct in6_addr));
-          found = 1;
-          break;
-        }
+
+      tmp_ip = (const union olsr_ip_addr *) &sin6->sin6_addr;
+      if ((prefix == NULL && !IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr))
+          || (prefix != NULL && ip_in_net(tmp_ip, prefix))) {
+        memcpy(&saddr6->sin6_addr, &sin6->sin6_addr, sizeof(struct in6_addr));
+        found = 1;
+        break;
       }
     }
   }

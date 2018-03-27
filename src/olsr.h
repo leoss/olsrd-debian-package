@@ -52,6 +52,9 @@ extern bool changes_force;
 
 extern union olsr_ip_addr all_zero;
 
+void olsr_startup_sleep(int);
+void olsr_do_startup_sleep(void);
+
 void register_pcf(int (*)(int, int, int));
 
 void olsr_process_changes(void);
@@ -59,6 +62,8 @@ void olsr_process_changes(void);
 void init_msg_seqno(void);
 
 uint16_t get_msg_seqno(void);
+
+bool olsr_is_bad_duplicate_msg_seqno(uint16_t seqno);
 
 int olsr_forward_message(union olsr_message *, struct interface *, union olsr_ip_addr *);
 

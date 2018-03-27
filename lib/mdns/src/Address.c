@@ -1,7 +1,6 @@
-
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * Copyright (c) 2004-2009, the olsr.org team - see HISTORY file
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,28 +38,41 @@
  *
  */
 
-#ifndef _OLSR_SOCKET_PARSER
-#define _OLSR_SOCKET_PARSER
 
-struct olsr_socket_entry {
-  int fd;
-  int arp_type;
-  void (*process_function) (int fd);
-  struct olsr_socket_entry *next;
-};
+#include "Address.h"
 
-extern struct olsr_socket_entry *olsr_socket_entries;
-void olsr_poll_sockets(void);
+/* System includes */
+#include <stddef.h>             /* NULL */
+#include <string.h>             /* strcmp */
+#include <assert.h>             /* assert() */
+#include <netinet/ip.h>         /* struct ip */
+#include <netinet/udp.h>        /* struct udphdr */
 
-void add_olsr_socket(int, void (*)(int));
-int remove_olsr_socket(int, void (*)(int));
-void listen_loop(void);
+/* OLSRD includes */
+#include "defs.h"               /* ipequal */
+#include "olsr_protocol.h"      /* OLSRPORT */
 
-#endif
+/* Plugin includes */
+#include "mdns.h"               /* BMF_ENCAP_PORT */
+#include "NetworkInterfaces.h"  /* TBmfInterface */
 
-/*
- * Local Variables:
- * c-basic-offset: 2
- * indent-tabs-mode: nil
- * End:
- */
+/* Whether or not to flood local broadcast packets (e.g. packets with IP
+ * destination 192.168.1.255). May be overruled by setting the plugin
+ * parameter "DoLocalBroadcast" to "no" */
+//int EnableLocalBroadcast = 1;
+
+/* -------------------------------------------------------------------------
+ * Function   : IsMulticast
+ * Description: Check if an IP address is a multicast address
+ * Input      : ipAddress
+ * Output     : none
+ * Return     : true (1) or false (0)
+ * Data Used  : none
+ * ------------------------------------------------------------------------- */
+int
+IsMulticast(union olsr_ip_addr *ipAddress)
+{
+  assert(ipAddress != NULL);
+
+  return (ntohl(ipAddress->v4.s_addr) & 0xF0000000) == 0xE0000000;
+}

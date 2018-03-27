@@ -52,6 +52,8 @@
 #include "net_olsr.h"
 #include "lq_plugin.h"
 #include "olsr_cookie.h"
+#include "duplicate_set.h"
+#include "gateway.h"
 
 #include <assert.h>
 
@@ -205,6 +207,14 @@ olsr_init_tc(void)
   tc_myself = olsr_add_tc_entry(&olsr_cnf->main_addr);
 }
 
+void olsr_delete_all_tc_entries(void) {
+  struct tc_entry *tc;
+
+  OLSR_FOR_ALL_TC_ENTRIES(tc) {
+    olsr_delete_tc_entry(tc);
+  } OLSR_FOR_ALL_TC_ENTRIES_END(tc)
+}
+
 /**
  * The main ip address has changed.
  * Do the needful.
@@ -275,6 +285,10 @@ olsr_delete_tc_entry(struct tc_entry *tc)
   OLSR_PRINTF(1, "TC: del entry %s\n", olsr_ip_to_string(&buf, &tc->addr));
 #endif
 
+  /* delete gateway if available */
+#ifdef LINUX_NETLINK_ROUTING
+  olsr_delete_gateway_entry(&tc->addr, FORCE_DELETE_GW_ENTRY);
+#endif
   /*
    * Delete the rt_path for ourselves.
    */
@@ -654,9 +668,7 @@ olsr_tc_update_edge(struct tc_entry *tc, uint16_t ansn, const unsigned char **cu
      * Update the etx.
      */
     if (olsr_calc_tc_edge_entry_etx(tc_edge)) {
-      if (tc->msg_hops <= olsr_cnf->lq_dlimit) {
-        edge_change = 1;
-      }
+      edge_change = 1;
     }
 #if DEBUG
     if (edge_change) {
@@ -784,6 +796,7 @@ olsr_input_tc(union olsr_message * msg, struct interface * input_if __attribute_
   union olsr_ip_addr originator;
   const unsigned char *limit, *curr;
   struct tc_entry *tc;
+  bool emptyTC;
 
   union olsr_ip_addr lower_border_ip, upper_border_ip;
   int borderSet = 0;
@@ -886,6 +899,7 @@ olsr_input_tc(union olsr_message * msg, struct interface * input_if __attribute_
 
   limit = (unsigned char *)msg + size;
   borderSet = 0;
+  emptyTC = curr >= limit;
   while (curr < limit) {
     if (olsr_tc_update_edge(tc, ansn, &curr, &upper_border_ip)) {
       changes_topology = true;
@@ -908,7 +922,14 @@ olsr_input_tc(union olsr_message * msg, struct interface * input_if __attribute_
    * Set or change the expiration timer accordingly.
    */
   olsr_set_timer(&tc->validity_timer, vtime, OLSR_TC_VTIME_JITTER, OLSR_TIMER_ONESHOT, &olsr_expire_tc_entry, tc,
-                 tc_validity_timer_cookie->ci_id);
+                 tc_validity_timer_cookie);
+
+  if (emptyTC && lower_border == 0xff && upper_border == 0xff) {
+    /* handle empty TC with border flags 0xff */
+    memset(&lower_border_ip, 0x00, sizeof(lower_border_ip));
+    memset(&upper_border_ip, 0xff, sizeof(upper_border_ip));
+    borderSet = 1;
+  }
 
   if (borderSet) {
 
@@ -923,9 +944,19 @@ olsr_input_tc(union olsr_message * msg, struct interface * input_if __attribute_
      * all edges belonging to a multipart neighbor set will arrive.
      */
     olsr_set_timer(&tc->edge_gc_timer, OLSR_TC_EDGE_GC_TIME, OLSR_TC_EDGE_GC_JITTER, OLSR_TIMER_ONESHOT, &olsr_expire_tc_edge_gc,
-                   tc, tc_edge_gc_timer_cookie->ci_id);
+                   tc, tc_edge_gc_timer_cookie);
   }
 
+  if (emptyTC && borderSet) {
+    /* cleanup MIDs and HNAs if all edges have been erased by
+     * an empty TC, then alert the duplicate set and kill the
+     * tc entry */
+    olsr_cleanup_mid(&originator);
+    olsr_cleanup_hna(&originator);
+    olsr_cleanup_duplicates(&originator);
+
+    olsr_delete_tc_entry(tc);
+  }
   /* Forward the message */
   return true;
 }

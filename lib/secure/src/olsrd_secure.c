@@ -51,7 +51,6 @@
 #include "defs.h"
 #include "ipcalc.h"
 #include "olsr.h"
-#include "socket_parser.h"
 #include "parser.h"
 #include "scheduler.h"
 #include "net_olsr.h"
@@ -313,7 +312,7 @@ add_signature(uint8_t * pck, int *size)
   olsr_printf(2, "[ENC]Adding signature for packet size %d\n", *size);
   fflush(stdout);
 
-  msg = (struct s_olsrmsg *)(ARM_NOWARN_ALIGN)&pck[*size];
+  msg = (struct s_olsrmsg *)ARM_NOWARN_ALIGN(&pck[*size]);
   /* Update size */
   ((struct olsr *)pck)->olsr_packlen = htons(*size + sizeof(struct s_olsrmsg));
 
@@ -333,8 +332,9 @@ add_signature(uint8_t * pck, int *size)
 
   /* Add timestamp */
   msg->sig.timestamp = htonl(now.tv_sec);
+#ifndef WIN32
   olsr_printf(3, "[ENC]timestamp: %lld\n", (long long)now.tv_sec);
-
+#endif
   /* Set the new size */
   *size += sizeof(struct s_olsrmsg);
 
@@ -391,7 +391,7 @@ validate_packet(struct interface *olsr_if, const char *pck, int *size)
   if (packetsize < 4)
     return 0;
 
-  sig = (const struct s_olsrmsg *)(const ARM_NOWARN_ALIGN)&pck[packetsize];
+  sig = (const struct s_olsrmsg *)CONST_ARM_NOWARN_ALIGN(&pck[packetsize]);
 
   //olsr_printf(1, "Size: %d\n", packetsize);
 
@@ -483,9 +483,9 @@ one_checksum_SHA:
                 olsr_ip_to_string(&buf, (const union olsr_ip_addr *)&sig->originator));
     return 0;
   }
-
+#ifndef WIN32
   olsr_printf(1, "[ENC]Received timestamp %lld diff: %lld\n", (long long)rec_time, (long long)now.tv_sec - (long long)rec_time);
-
+#endif
   /* Remove signature message */
   *size = packetsize;
   return 1;
@@ -622,7 +622,7 @@ parse_cres(struct interface *olsr_if, char *in_msg)
   struct stamp *entry;
   struct ipaddr_str buf;
 
-  msg = (struct c_respmsg *)(ARM_NOWARN_ALIGN)in_msg;
+  msg = (struct c_respmsg *)ARM_NOWARN_ALIGN(in_msg);
 
   olsr_printf(1, "[ENC]Challenge-response message received\n");
   olsr_printf(3, "[ENC]To: %s\n", olsr_ip_to_string(&buf, (union olsr_ip_addr *)&msg->destination));
@@ -710,7 +710,7 @@ parse_rres(char *in_msg)
   struct stamp *entry;
   struct ipaddr_str buf;
 
-  msg = (struct r_respmsg *)(ARM_NOWARN_ALIGN)in_msg;
+  msg = (struct r_respmsg *)ARM_NOWARN_ALIGN(in_msg);
 
   olsr_printf(1, "[ENC]Response-response message received\n");
   olsr_printf(3, "[ENC]To: %s\n", olsr_ip_to_string(&buf, (union olsr_ip_addr *)&msg->destination));
@@ -794,7 +794,7 @@ parse_challenge(struct interface *olsr_if, char *in_msg)
   uint32_t hash;
   struct ipaddr_str buf;
 
-  msg = (struct challengemsg *)(ARM_NOWARN_ALIGN)in_msg;
+  msg = (struct challengemsg *)ARM_NOWARN_ALIGN(in_msg);
 
   olsr_printf(1, "[ENC]Challenge message received\n");
   olsr_printf(3, "[ENC]To: %s\n", olsr_ip_to_string(&buf, (union olsr_ip_addr *)&msg->destination));
@@ -894,7 +894,9 @@ send_cres(struct interface *olsr_if, union olsr_ip_addr *to, union olsr_ip_addr 
 
   /* set timestamp */
   crmsg.timestamp = now.tv_sec;
+#ifndef WIN32
   olsr_printf(3, "[ENC]Timestamp %lld\n", (long long)crmsg.timestamp);
+#endif
 
   /* Fill subheader */
   memcpy(&crmsg.destination, to, olsr_cnf->ipsize);
@@ -962,8 +964,10 @@ send_rres(struct interface *olsr_if, union olsr_ip_addr *to, union olsr_ip_addr 
 
   /* set timestamp */
   rrmsg.timestamp = now.tv_sec;
-  olsr_printf(3, "[ENC]Timestamp %lld\n", (long long)rrmsg.timestamp);
 
+#ifndef WIN32
+  olsr_printf(3, "[ENC]Timestamp %lld\n", (long long)rrmsg.timestamp);
+#endif
   /* Fill subheader */
   memcpy(&rrmsg.destination, to, olsr_cnf->ipsize);
 

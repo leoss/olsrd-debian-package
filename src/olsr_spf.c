@@ -66,6 +66,7 @@
 #include "olsr_spf.h"
 #include "net_olsr.h"
 #include "lq_plugin.h"
+#include "gateway.h"
 
 struct timer_entry *spf_backoff_timer = NULL;
 
@@ -215,6 +216,12 @@ olsr_spf_relax(struct avl_tree *cand_tree, struct tc_entry *tc)
       continue;
     }
 
+    if (tc_edge->cost == LINK_COST_BROKEN) {
+#ifdef DEBUG
+      OLSR_PRINTF(2, "SPF:   ignore edge %s (broken)\n", olsr_ip_to_string(&buf, &tc_edge->T_dest_addr));
+#endif
+      continue;
+    }
     /*
      * total quality of the path through this vertex
      * to the destination of this edge
@@ -302,7 +309,7 @@ olsr_expire_spf_backoff(void *context __attribute__ ((unused)))
 }
 
 void
-olsr_calculate_routing_table(void)
+olsr_calculate_routing_table(bool force)
 {
 #ifdef SPF_PROFILING
   struct timeval t1, t2, t3, t4, t5, spf_init, spf_run, route, kernel, total;
@@ -318,10 +325,13 @@ olsr_calculate_routing_table(void)
   int path_count = 0;
 
   /* We are done if our backoff timer is running */
-  if (!spf_backoff_timer) {
+  if (!force) {
+    if (spf_backoff_timer) {
+      return;
+    }
+
+    /* start new backoff timer */
     spf_backoff_timer = olsr_start_timer(1000, 5, OLSR_TIMER_ONESHOT, &olsr_expire_spf_backoff, NULL, 0);
-  } else {
-    return;
   }
 
 #ifdef SPF_PROFILING
@@ -371,11 +381,16 @@ olsr_calculate_routing_table(void)
    */
   OLSR_FOR_ALL_NBR_ENTRIES(neigh) {
 
-    if (neigh->status == SYM) {
-
+    if (neigh->status != SYM) {
+      tc_edge = olsr_lookup_tc_edge(tc_myself, &neigh->neighbor_main_addr);
+      if (tc_edge) {
+        olsr_delete_tc_edge_entry(tc_edge);
+      }
+    }
+    else {
       tc_edge = olsr_lookup_tc_edge(tc_myself, &neigh->neighbor_main_addr);
       link = get_best_link_to_neighbor(&neigh->neighbor_main_addr);
-      if (!link) {
+      if (!link || lookup_link_status(link) == LOST_LINK) {
 
         /*
          * If there is no best link to this neighbor
@@ -478,6 +493,10 @@ olsr_calculate_routing_table(void)
       }
     }
   }
+#if defined linux
+  /* check gateway tunnels */
+  olsr_trigger_gatewayloss_check();
+#endif
 
   /* Update the RIB based on the new SPF results */
 

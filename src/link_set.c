@@ -74,6 +74,7 @@ static int check_link_status(const struct hello_message *message, const struct i
 static struct link_entry *add_link_entry(const union olsr_ip_addr *, const union olsr_ip_addr *, const union olsr_ip_addr *,
                                          olsr_reltime, olsr_reltime, const struct interface *);
 static int get_neighbor_status(const union olsr_ip_addr *);
+static void olsr_expire_link_sym_timer(void *context);
 
 void
 olsr_init_link_set(void)
@@ -81,6 +82,31 @@ olsr_init_link_set(void)
 
   /* Init list head */
   list_head_init(&link_entry_head);
+}
+
+/**
+ * This function resets all links to lost, so that
+ * a final "lost all links" hello can be generated to
+ * tell your neighbors that you are gone now.
+ */
+void olsr_reset_all_links(void) {
+  struct link_entry *link;
+
+  OLSR_FOR_ALL_LINK_ENTRIES(link) {
+    link->ASYM_time = now_times-1;
+
+    olsr_stop_timer(link->link_sym_timer);
+    link->link_sym_timer = NULL;
+
+    link->neighbor->is_mpr = false;
+    link->neighbor->status = NOT_SYM;
+  } OLSR_FOR_ALL_LINK_ENTRIES_END(link)
+
+
+  OLSR_FOR_ALL_LINK_ENTRIES(link) {
+    olsr_expire_link_sym_timer(link);
+    olsr_clear_hello_lq(link);
+  } OLSR_FOR_ALL_LINK_ENTRIES_END(link)
 }
 
 /**
@@ -478,7 +504,7 @@ olsr_set_link_timer(struct link_entry *link, unsigned int rel_timer)
 
   OLSR_PRINTF(3, "reset link timer: %s = %u\n",
     olsr_ip_to_string(&buf, &link->neighbor_iface_addr),
-    (unsigned int)(olsr_times() + rel_timer/1000));
+    (unsigned int)(now_times + rel_timer/1000));
   olsr_set_timer(&link->link_timer, rel_timer, OLSR_LINK_JITTER, OLSR_TIMER_ONESHOT, &olsr_expire_link_entry, link, 0);
 }
 
@@ -634,9 +660,10 @@ lookup_link_entry(const union olsr_ip_addr *remote, const union olsr_ip_addr *re
       if (NULL != remote_main && !ipequal(remote_main, &link->neighbor->neighbor_main_addr)) {
         /* Neighbor has changed it's main_addr, update */
         struct ipaddr_str oldbuf, newbuf;
+
         OLSR_PRINTF(1, "Neighbor changed main_ip, updating %s -> %s\n",
                     olsr_ip_to_string(&oldbuf, &link->neighbor->neighbor_main_addr), olsr_ip_to_string(&newbuf, remote_main));
-        link->neighbor->neighbor_main_addr = *remote_main;
+        olsr_update_neighbor_main_addr(link->neighbor, remote_main);
       }
       return link;
     }
