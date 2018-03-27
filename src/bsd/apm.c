@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: apm.c,v 1.4 2005/02/27 10:43:38 kattemat Exp $
  */
 
 #include "apm.h"
@@ -44,16 +43,16 @@
 #include <stdio.h>
 #include <string.h>
 
-int apm_init()
+int apm_init(void)
 {
   return -1;
 }
 
-void apm_printinfo(struct olsr_apm_info *ApmInfo)
+void apm_printinfo(struct olsr_apm_info *ApmInfo __attribute__((unused)))
 {
 }
 
-int apm_read(struct olsr_apm_info *ApmInfo)
+int apm_read(struct olsr_apm_info *ApmInfo __attribute__((unused)))
 {
   return -1;
 }

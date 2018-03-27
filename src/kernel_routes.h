@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: kernel_routes.h,v 1.10 2007/09/17 22:55:40 bernd67 Exp $
  */
 
 #ifndef _OLSR_KERNEL_RT
@@ -46,15 +45,15 @@
 #include "routing_table.h"
 
 int
-olsr_ioctl_add_route(struct rt_entry *);
+olsr_ioctl_add_route(const struct rt_entry *);
 
 int
-olsr_ioctl_add_route6(struct rt_entry *);
+olsr_ioctl_add_route6(const struct rt_entry *);
 
 int
-olsr_ioctl_del_route(struct rt_entry *);
+olsr_ioctl_del_route(const struct rt_entry *);
 
 int
-olsr_ioctl_del_route6(struct rt_entry *);
+olsr_ioctl_del_route6(const struct rt_entry *);
 
 #endif

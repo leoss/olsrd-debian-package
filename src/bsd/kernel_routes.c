@@ -36,20 +36,22 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: kernel_routes.c,v 1.14 2007/10/04 22:27:31 bernd67 Exp $
  */
 
 
 #include "kernel_routes.h"
 #include "olsr.h"
 #include "defs.h"
+#include "process_routes.h"
+#include "net_olsr.h"
+#include "ipcalc.h"
 
 #include <net/if_dl.h>
 #include <ifaddrs.h>
 
 static unsigned int seq = 0;
 
-static int add_del_route(struct rt_entry *rt, int add)
+static int add_del_route(const struct rt_entry *rt, int add)
 {
   struct rt_msghdr *rtm;
   unsigned char buff[512];
@@ -58,7 +60,7 @@ static int add_del_route(struct rt_entry *rt, int add)
   struct sockaddr_dl *sdl;
   struct ifaddrs *addrs;
   struct ifaddrs *awalker;
-  struct rt_nexthop *nexthop;
+  const struct rt_nexthop *nexthop;
   union olsr_ip_addr mask;
   int step, step2;
   int len;
@@ -101,7 +103,7 @@ static int add_del_route(struct rt_entry *rt, int add)
 
   walker = buff + sizeof (struct rt_msghdr);
 
-  sin.sin_addr.s_addr = rt->rt_dst.prefix.v4;
+  sin.sin_addr = rt->rt_dst.prefix.v4;
 
   memcpy(walker, &sin, sizeof (sin));
   walker += step;
@@ -109,7 +111,7 @@ static int add_del_route(struct rt_entry *rt, int add)
   nexthop = olsr_get_nh(rt);
   if ((flags & RTF_GATEWAY) != 0)
   {
-    sin.sin_addr.s_addr = nexthop->gateway.v4;
+    sin.sin_addr = nexthop->gateway.v4;
 
     memcpy(walker, &sin, sizeof (sin));
     walker += step;
@@ -149,7 +151,7 @@ static int add_del_route(struct rt_entry *rt, int add)
   if (!olsr_prefix_to_netmask(&mask, rt->rt_dst.prefix_len)) {
     return -1;
   }
-  sin.sin_addr.s_addr = mask.v4;
+  sin.sin_addr = mask.v4;
 
   memcpy(walker, &sin, sizeof (sin));
   walker += step;
@@ -164,24 +166,24 @@ static int add_del_route(struct rt_entry *rt, int add)
   return 0;
 }
 
-int olsr_ioctl_add_route(struct rt_entry *rt)
+int olsr_ioctl_add_route(const struct rt_entry *rt)
 {
   return add_del_route(rt, 1);
 }
 
-int olsr_ioctl_del_route(struct rt_entry *rt)
+int olsr_ioctl_del_route(const struct rt_entry *rt)
 {
   return add_del_route(rt, 0);
 }
 
-static int add_del_route6(struct rt_entry *rt, int add)
+static int add_del_route6(const struct rt_entry *rt, int add)
 {
   struct rt_msghdr *rtm;
   unsigned char buff[512];
   unsigned char *walker;
   struct sockaddr_in6 sin6;
   struct sockaddr_dl sdl;
-  struct rt_nexthop *nexthop;
+  const struct rt_nexthop *nexthop;
   int step, step_dl;
   int len;
 
@@ -300,12 +302,12 @@ static int add_del_route6(struct rt_entry *rt, int add)
   return 0;
 }
 
-int olsr_ioctl_add_route6(struct rt_entry *rt)
+int olsr_ioctl_add_route6(const struct rt_entry *rt)
 {
   return add_del_route6(rt, 1);
 }
 
-int olsr_ioctl_del_route6(struct rt_entry *rt)
+int olsr_ioctl_del_route6(const struct rt_entry *rt)
 {
   return add_del_route6(rt, 0);
 }

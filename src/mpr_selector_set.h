@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: mpr_selector_set.h,v 1.13 2005/12/16 08:21:59 kattemat Exp $
  */
 
 
@@ -53,8 +52,10 @@ struct mpr_selector
 };
 
 
+#if 0
 olsr_bool
 olsr_is_mpr(void);
+#endif
 
 olsr_u16_t
 get_local_ansn(void);
@@ -62,27 +63,28 @@ get_local_ansn(void);
 void
 increase_local_ansn(void);
 
-int
+void
 olsr_init_mprs_set(void);
 
 
 struct mpr_selector *
-olsr_add_mpr_selector(union olsr_ip_addr *, float);
+olsr_add_mpr_selector(const union olsr_ip_addr *, float);
 
 
 struct mpr_selector *
-olsr_lookup_mprs_set(union olsr_ip_addr *);
+olsr_lookup_mprs_set(const union olsr_ip_addr *);
 
 
 int
-olsr_update_mprs_set(union olsr_ip_addr *, float);
+olsr_update_mprs_set(const union olsr_ip_addr *, float);
 
 
 void
 olsr_time_out_mprs_set(void);
 
-
+#if 0
 void
 olsr_print_mprs_set(void);
+#endif
 
 #endif

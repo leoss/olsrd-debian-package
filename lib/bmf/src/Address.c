@@ -46,7 +46,7 @@
 #include <netinet/udp.h> /* struct udphdr */
 
 /* OLSRD includes */
-#include "defs.h" /* COMP_IP */
+#include "defs.h" /* ipequal */
 
 /* Plugin includes */
 #include "Bmf.h" /* BMF_ENCAP_PORT */
@@ -68,7 +68,10 @@ int EnableLocalBroadcast = 1;
  * Return     : success (0) or fail (1)
  * Data Used  : none
  * ------------------------------------------------------------------------- */
-int DoLocalBroadcast(const char* enable, void* data __attribute__((unused)), set_plugin_parameter_addon addon  __attribute__((unused)))
+int DoLocalBroadcast(
+  const char* enable,
+  void* data __attribute__((unused)),
+  set_plugin_parameter_addon addon __attribute__((unused)))
 {
   if (strcmp(enable, "yes") == 0)
   {
@@ -97,7 +100,7 @@ int IsMulticast(union olsr_ip_addr* ipAddress)
 {
   assert(ipAddress != NULL);
 
-  return (ntohl(ipAddress->v4) & 0xF0000000) == 0xE0000000;
+  return (ntohl(ipAddress->v4.s_addr) & 0xF0000000) == 0xE0000000;
 }
 
 /* -------------------------------------------------------------------------

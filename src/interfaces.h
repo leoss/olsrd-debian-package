@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: interfaces.h,v 1.43 2007/10/13 12:09:11 bernd67 Exp $
  */
 
 
@@ -44,7 +43,12 @@
 #define _OLSR_INTERFACE
 
 #include <sys/types.h>
+#ifdef _MSC_VER
+#include <WS2tcpip.h>
+#undef interface
+#else
 #include <sys/socket.h>
+#endif
 #include <time.h>
 
 #include "olsr_types.h"
@@ -72,25 +76,21 @@
 
 #define MAX_IF_METRIC           100
 
-
-enum olsr_if_wieght
-  {
-    WEIGHT_LOWEST = 0,
-    WEIGHT_LOW,
-    WEIGHT_ETHERNET_1GBP,     /* Ethernet 1Gb+        */
-    WEIGHT_ETHERNET_1GB,      /* Ethernet 1Gb         */
-    WEIGHT_ETHERNET_100MB,    /* Ethernet 100Mb       */
-    WEIGHT_ETHERNET_10MB,     /* Ethernet 10Mb        */
-    WEIGHT_ETHERNET_DEFAULT,  /* Ethernet unknown rate*/
-    WEIGHT_WLAN_HIGH,         /* >54Mb WLAN           */
-    WEIGHT_WLAN_54MB,         /* 54Mb 802.11g         */
-    WEIGHT_WLAN_11MB,         /* 11Mb 802.11b         */
-    WEIGHT_WLAN_LOW,          /* <11Mb WLAN           */
-    WEIGHT_WLAN_DEFAULT,      /* WLAN unknown rate    */
-    WEIGHT_SERIAL,            /* Serial device        */
-    WEIGHT_HIGH,              /* Max                  */
-    WEIGHT_HIGHEST = WEIGHT_HIGH
-  };
+#define WEIGHT_LOWEST           0       /* No weight            */
+#define WEIGHT_LOW              1       /* Low                  */
+#define WEIGHT_ETHERNET_1GBP    2       /* Ethernet 1Gb+        */
+#define WEIGHT_ETHERNET_1GB     4       /* Ethernet 1Gb         */
+#define WEIGHT_ETHERNET_100MB   8       /* Ethernet 100Mb       */
+#define WEIGHT_ETHERNET_10MB    16      /* Ethernet 10Mb        */
+#define WEIGHT_ETHERNET_DEFAULT 32      /* Ethernet unknown rate*/
+#define WEIGHT_WLAN_HIGH        64      /* >54Mb WLAN           */
+#define WEIGHT_WLAN_54MB        128     /* 54Mb 802.11g         */
+#define WEIGHT_WLAN_11MB        256     /* 11Mb 802.11b         */
+#define WEIGHT_WLAN_LOW         512     /* <11Mb WLAN           */
+#define WEIGHT_WLAN_DEFAULT     1024    /* WLAN unknown rate    */
+#define WEIGHT_SERIAL           2048    /* Serial device        */
+#define WEIGHT_HIGH             4096    /* High                 */
+#define WEIGHT_HIGHEST          8192    /* Really high          */
 
 struct if_gen_property
 {
@@ -121,14 +121,14 @@ struct olsr_netbuf
 
 /**
  *A struct containing all necessary information about each
- *interface participating in the OLSD routing
+ *interface participating in the OLSRD routing
  */
 struct interface 
 {
   /* IP version 4 */
-  struct	sockaddr int_addr;		/* address */
-  struct	sockaddr int_netmask;		/* netmask */
-  struct	sockaddr int_broadaddr;         /* broadcast address */
+  struct	sockaddr_in int_addr;		/* address */
+  struct	sockaddr_in int_netmask;		/* netmask */
+  struct	sockaddr_in int_broadaddr;         /* broadcast address */
   /* IP version 6 */
   struct        sockaddr_in6 int6_addr;         /* Address */
   struct        sockaddr_in6 int6_multaddr;     /* Multicast */
@@ -139,10 +139,18 @@ struct interface
   int	        int_metric;			/* metric of interface */
   int           int_mtu;                        /* MTU of interface */
   int	        int_flags;			/* see below */
-  char	        *int_name;			/* from kernel if structure */
   int           if_index;                       /* Kernels index of this interface */
   int           is_wireless;                    /* wireless interface or not*/
+  char	        *int_name;			/* from kernel if structure */
   olsr_u16_t    olsr_seqnum;                    /* Olsr message seqno */
+#ifdef linux
+/* Struct used to store original redirect/ingress setting */
+  struct nic_state
+  {
+    char redirect; /* The original state of icmp redirect */
+    char spoof; /* The original state of the IP spoof filter */
+  } nic_state;
+#endif
 
   float         hello_etime;
   struct        vtimes valtimes;
@@ -154,15 +162,8 @@ struct interface
   struct        if_gen_property *gen_properties;/* Generic interface properties */
   
   int           ttl_index; /* index in TTL array for fish-eye */
-
-#ifdef linux
-/* Struct uesd to store original redirect/ingress setting */
-  struct nic_state
-  {
-    char redirect; /* The original state of icmp redirect */
-    char spoof; /* The original state of the IP spoof filter */
-  } nic_state;
-#endif
+  
+  olsr_bool	immediate_send_tc; /* Hello's are sent immediately normally, this flag prefers to send TC's */
 
   struct	interface *int_next;
 };
@@ -179,25 +180,8 @@ struct interface
 /* The interface linked-list */
 extern struct interface *ifnet;
 
-/* Datastructures to use when creating new sockets */
-extern struct sockaddr_in addrsock;
-extern struct sockaddr_in6 addrsock6;
-
-
 int
 ifinit(void);
-
-olsr_u32_t
-get_if_property_id(void);
-
-olsr_bool
-add_if_geninfo(struct interface *, void *, olsr_u32_t);
-
-void *
-get_if_geninfo(struct interface *, olsr_u32_t);
-
-void *
-del_if_geninfo(struct interface *, olsr_u32_t);
 
 void
 run_ifchg_cbs(struct interface *, int);
@@ -211,14 +195,14 @@ if_ifwithaddr(const union olsr_ip_addr *);
 struct interface *
 if_ifwithname(const char *);
 
-struct interface *
-if_ifwithindex(const int if_index);
-
 const char *
 if_ifwithindex_name(const int if_index);
 
+struct interface *
+if_ifwithindex(const int if_index);
+
 struct olsr_if *
-queue_if(char *, int);
+queue_if(const char *, int);
 
 int
 add_ifchgf(int (*f)(struct interface *, int));

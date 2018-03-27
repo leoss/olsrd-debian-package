@@ -56,12 +56,15 @@
 #include <netinet/udp.h> /* struct udphdr */
 
 /* OLSRD includes */
+#include "plugin_util.h" /* set_plugin_int */
 #include "defs.h" /* olsr_cnf, OLSR_PRINTF */
+#include "ipcalc.h"
 #include "olsr.h" /* olsr_printf */
 #include "scheduler.h" /* olsr_register_scheduler_event */
 #include "mid_set.h" /* mid_lookup_main_addr() */
 #include "mpr_selector_set.h" /* olsr_lookup_mprs_set() */
 #include "link_set.h" /* get_best_link_to_neighbor() */
+#include "net_olsr.h" /* ipequal */
 
 /* BMF includes */
 #include "NetworkInterfaces.h" /* TBmfInterface, CreateBmfNetworkInterfaces(), CloseBmfNetworkInterfaces() */
@@ -71,6 +74,11 @@
 
 static pthread_t BmfThread;
 static int BmfThreadRunning = 0;
+
+/* unicast/broadcast fan out limit */
+int FanOutLimit = 2;
+
+int BroadcastRetransmitCount = 1;
 
 /* -------------------------------------------------------------------------
  * Function   : BmfPError
@@ -83,7 +91,7 @@ static int BmfThreadRunning = 0;
  * Return     : none
  * Data Used  : none
  * ------------------------------------------------------------------------- */
-void BmfPError(char* format, ...)
+void BmfPError(const char* format, ...)
 {
 #define MAX_STR_DESC 255
   char* strErr = strerror(errno);
@@ -150,15 +158,17 @@ static void EncapsulateAndForwardPacket(
 
   /* The next destination(s) */
   struct TBestNeighbors bestNeighborLinks;
-  int nPossibleNeighbors;
-  struct sockaddr_in forwardTo; /* Next destination of encapsulation packet */
+  struct link_entry* bestNeighbor;
 
+  int nPossibleNeighbors = 0;
+  struct sockaddr_in forwardTo; /* Next destination of encapsulation packet */
   int nPacketsToSend;
-  int nBytesWritten;
+  int sendUnicast; /* 0 = send broadcast; 1 = send unicast */
+
   int i;
 
-  /* Retrieve at most two best neigbors to forward the packet to */
-  GetBestTwoNeighbors(&bestNeighborLinks, intf, NULL, NULL, NULL, &nPossibleNeighbors);
+  /* Find at most 'FanOutLimit' best neigbors to forward the packet to */
+  FindNeighbors(&bestNeighborLinks, &bestNeighbor, intf, NULL, NULL, NULL, &nPossibleNeighbors);
 
   if (nPossibleNeighbors <= 0)
   {
@@ -176,30 +186,48 @@ static void EncapsulateAndForwardPacket(
   forwardTo.sin_family = AF_INET;
   forwardTo.sin_port = htons(BMF_ENCAP_PORT);
 
-  /* Start by filling in the local broadcast address */
-  COPY_IP(&forwardTo.sin_addr.s_addr, &intf->broadAddr);
+  /* Start by filling in the local broadcast address. This may be overwritten later. */
+  forwardTo.sin_addr = intf->broadAddr.v4;
 
   /* - If the BMF mechanism is BM_UNICAST_PROMISCUOUS, always send just one
-   *   packet (to the best neighbor).
-   * - If the BMF mechanism is BM_BROADCAST,
-   *   - send one unicast packet if there is one possible neighbor,
-   *   - send two unicast packets if there are two possible neighbors, and
-   *   - only if there are more than two possible neighbors, then send an
-   *     (WLAN-air-expensive, less reliable) broadcast packet. */
-  if (BmfMechanism == BM_UNICAST_PROMISCUOUS || nPossibleNeighbors < 2)
+   *   unicast packet (to the best neighbor).
+   * - But if the BMF mechanism is BM_BROADCAST,
+   *   - send 'nPossibleNeighbors' unicast packets if there are up to
+   *     'FanOutLimit' possible neighbors,
+   *   - if there are more than 'FanOutLimit' possible neighbors, then
+   *     send a (WLAN-air-expensive, less reliable) broadcast packet. */
+  if (BmfMechanism == BM_UNICAST_PROMISCUOUS)
   {
+    /* One unicast packet to the best neighbor */
     nPacketsToSend = 1;
+    sendUnicast = 1;
+    bestNeighborLinks.links[0] = bestNeighbor;
   }
-  else /* BmfMechanism == BM_BROADCAST && nPossibleNeighbors >= 2 */
+  else /* BmfMechanism == BM_BROADCAST */
   {
-    nPacketsToSend = 2;
-  }
+    if (nPossibleNeighbors <= FanOutLimit)
+    {
+      /* 'nPossibleNeighbors' unicast packets */
+      nPacketsToSend = nPossibleNeighbors;
+      sendUnicast = 1;
+    }
+    else /* nPossibleNeighbors > FanOutLimit */
+    {
+      /* One broadcast packet, possibly retransmitted as specified in the
+       * 'BroadcastRetransmitCount' plugin parameter */
+      nPacketsToSend = BroadcastRetransmitCount;
+      sendUnicast = 0;
+    } /* if */
+  } /* if */
 
   for (i = 0; i < nPacketsToSend; i++)
   {
-    if (BmfMechanism == BM_UNICAST_PROMISCUOUS || nPossibleNeighbors <= 2)
+    int nBytesWritten;
+
+    if (sendUnicast == 1)
     {
-      COPY_IP(&forwardTo.sin_addr.s_addr, &bestNeighborLinks.links[i]->neighbor_iface_addr);
+      /* For unicast, overwrite the local broadcast address which was filled in above */
+      forwardTo.sin_addr = bestNeighborLinks.links[i]->neighbor_iface_addr.v4;
     }
 
     /* Forward the BMF packet via the encapsulation socket */
@@ -262,14 +290,16 @@ static void BmfPacketCaptured(
   struct ip* ipHeader; /* The IP header inside the captured IP packet */
   u_int32_t crc32;
   struct TEncapHeader* encapHdr;
-
+#ifndef NODEBUG
+  struct ipaddr_str srcBuf, dstBuf;
+#endif
   ipHeader = GetIpHeader(encapsulationUdpData);
 
-  COPY_IP(&dst, &ipHeader->ip_dst);
+  dst.v4 = ipHeader->ip_dst;
 
   /* Only forward multicast packets. If configured, also forward local broadcast packets */
   if (IsMulticast(&dst) ||
-      (EnableLocalBroadcast != 0 && COMP_IP(&dst, &intf->broadAddr)))
+      (EnableLocalBroadcast != 0 && ipequal(&dst, &intf->broadAddr)))
   {
     /* continue */
   }
@@ -280,8 +310,13 @@ static void BmfPacketCaptured(
 
   ipPacket = GetIpPacket(encapsulationUdpData);
 
-  /* Don't forward fragments of IP packets. Also, don't forward OLSR packets (UDP
-   * port 698) and BMF encapsulated packets */
+  /* Don't forward fragments of IP packets: there is no way to distinguish fragments
+   * of BMF encapsulation packets from other fragments.
+   * Well yes, there is the IP-ID, which can be kept in a list to relate a fragment
+   * to earlier sent BMF packets, but... sometimes the second fragment comes in earlier
+   * than the first fragment, so that the list is not yet up to date and the second
+   * fragment is not recognized as a BMF packet.
+   * Also, don't forward OLSR packets (UDP port 698) and BMF encapsulated packets */
   if (IsIpFragment(ipPacket) || IsOlsrOrBmfPacket(ipPacket))
   {
     return;
@@ -296,7 +331,8 @@ static void BmfPacketCaptured(
   /* Retrieve the length of the captured packet */
   ipPacketLen = GetIpTotalLength(ipPacket);
 
-  COPY_IP(&src, &ipHeader->ip_src);
+  src.v4 = ipHeader->ip_src;
+
   OLSR_PRINTF(
     8,
     "%s: %s pkt of %ld bytes captured on %s interface \"%s\": %s->%s\n",
@@ -305,8 +341,8 @@ static void BmfPacketCaptured(
     (long)ipPacketLen,
     isFromOlsrIntf ? "OLSR" : "non-OLSR",
     intf->ifName,
-    olsr_ip_to_string(&src),
-    olsr_ip_to_string(&dst));
+    olsr_ip_to_string(&srcBuf, &src),
+    olsr_ip_to_string(&dstBuf, &dst));
 
   /* Lookup main address of source in the MID table of OLSR */
   origIp = MainAddressOf(&src);
@@ -403,12 +439,15 @@ static void BmfPacketCaptured(
       {
         /* Case 1.1 */
         {
+#ifndef NODEBUG
+          struct ipaddr_str buf;
+#endif
           OLSR_PRINTF(
             8,
             "%s: --> not encap-forwarding on \"%s\": I am not selected as MPR by neighbor %s\n",
             PLUGIN_NAME_SHORT,
             walker->ifName,
-            olsr_ip_to_string(&src));
+            olsr_ip_to_string(&buf, &src));
         }    
       }
       else if (sllPkttype == PACKET_OUTGOING && intf == walker)
@@ -577,7 +616,9 @@ static void BmfEncapsulationPacketReceived(
   struct TEncapHeader* encapsulationHdr;
   u_int16_t encapsulationUdpDataLen;
   struct TBmfInterface* walker;
-
+#ifndef NODEBUG
+  struct ipaddr_str mcSrcBuf, mcDstBuf, forwardedByBuf, forwardedToBuf;
+#endif
   /* Are we talking to ourselves? */
   if (if_ifwithaddr(forwardedBy) != NULL)
   {
@@ -595,8 +636,8 @@ static void BmfEncapsulationPacketReceived(
   ipPacketLen = GetIpTotalLength(ipPacket);
   ipHeader = GetIpHeader(encapsulationUdpData);
 
-  COPY_IP(&mcSrc, &ipHeader->ip_src);
-  COPY_IP(&mcDst, &ipHeader->ip_dst);
+  mcSrc.v4 = ipHeader->ip_src;
+  mcDst.v4 = ipHeader->ip_dst;
 
   /* Increase counter */
   intf->nBmfPacketsRx++;
@@ -608,10 +649,10 @@ static void BmfEncapsulationPacketReceived(
     PLUGIN_NAME_SHORT,
     (long)ipPacketLen,
     intf->ifName,
-    olsr_ip_to_string(&mcSrc),
-    olsr_ip_to_string(&mcDst),
-    olsr_ip_to_string(forwardedBy),
-    forwardedTo != NULL ? olsr_ip_to_string(forwardedTo) : "me");
+    olsr_ip_to_string(&mcSrcBuf, &mcSrc),
+    olsr_ip_to_string(&mcDstBuf, &mcDst),
+    olsr_ip_to_string(&forwardedByBuf, forwardedBy),
+    forwardedTo != NULL ? olsr_ip_to_string(&forwardedToBuf, forwardedTo) : "me");
 
   /* Get encapsulation header */
   encapsulationHdr = (struct TEncapHeader*) encapsulationUdpData;
@@ -653,7 +694,7 @@ static void BmfEncapsulationPacketReceived(
     /* If the encapsulated IP packet is a local broadcast packet,
      * update its destination address to match the subnet of the EtherTunTap
      * interface */
-    broadAddr.v4 = htonl(EtherTunTapIpBroadcast);
+    broadAddr.v4.s_addr = htonl(EtherTunTapIpBroadcast);
     CheckAndUpdateLocalBroadcast(ipPacket, &broadAddr);
 
     bufferToWrite = ipPacket;
@@ -753,14 +794,16 @@ static void BmfEncapsulationPacketReceived(
     else if (iAmMpr)
     {
       struct TBestNeighbors bestNeighborLinks;
+      struct link_entry* bestNeighbor;
       int nPossibleNeighbors;
-      int nBytesWritten;
       int nPacketsToSend;
+      int sendUnicast; /* 0 = send broadcast; 1 = send unicast */
       int i;
 
       /* Retrieve at most two best neigbors to forward the packet to */
-      GetBestTwoNeighbors(
+      FindNeighbors(
         &bestNeighborLinks,
+        &bestNeighbor,
         walker,
         &mcSrc,
         forwardedBy,
@@ -779,32 +822,48 @@ static void BmfEncapsulationPacketReceived(
       }
 
       /* Compose destination of encapsulation packet.
-       * Start by filling in the local broadcast address. */
-      COPY_IP(&forwardTo.sin_addr.s_addr, &walker->broadAddr);
+       * Start by filling in the local broadcast address. This may be overwritten later. */
+      forwardTo.sin_addr = walker->broadAddr.v4;
 
       /* - If the BMF mechanism is BM_UNICAST_PROMISCUOUS, always send just one
-       *   packet (to the best neighbor). Other neighbors listen promiscuously.
-       * - If the BMF mechanism is BM_BROADCAST,
-       *   - send one unicast packet if there is one possible neighbor,
-       *   - send two unicast packets if there are two possible neighbors, and
-       *   - only if there are more than two possible neighbors, then send an
-       *     (WLAN-air-expensive, less reliable) broadcast packet. */
-      if (BmfMechanism == BM_UNICAST_PROMISCUOUS || nPossibleNeighbors < 2)
+       *   unicast packet (to the best neighbor).
+       * - But if the BMF mechanism is BM_BROADCAST,
+       *   - send 'nPossibleNeighbors' unicast packets if there are up to
+       *     'FanOutLimit' possible neighbors,
+       *   - if there are more than 'FanOutLimit' possible neighbors, then
+       *     send a (WLAN-air-expensive, less reliable) broadcast packet. */
+      if (BmfMechanism == BM_UNICAST_PROMISCUOUS)
       {
+        /* One unicast packet to the best neighbor */
         nPacketsToSend = 1;
+        sendUnicast = 1;
+        bestNeighborLinks.links[0] = bestNeighbor;
       }
-      else /* BmfMechanism == BM_BROADCAST && nPossibleNeighbors >= 2 */
+      else /* BmfMechanism == BM_BROADCAST */
       {
-        nPacketsToSend = 2;
-      }
+        if (nPossibleNeighbors <= FanOutLimit)
+        {
+          /* 'nPossibleNeighbors' unicast packets */
+          nPacketsToSend = nPossibleNeighbors;
+          sendUnicast = 1;
+        }
+        else /* nPossibleNeighbors > FanOutLimit */
+        {
+          /* One broadcast packet, possibly retransmitted as specified in the
+           * 'BroadcastRetransmitCount' plugin parameter */
+          nPacketsToSend = BroadcastRetransmitCount;
+          sendUnicast = 0;
+        } /* if */
+      } /* if */
 
       for (i = 0; i < nPacketsToSend; i++)
       {
-        if (BmfMechanism == BM_UNICAST_PROMISCUOUS || nPossibleNeighbors <= 2)
-        {
-          /* For unicast, overwrite the local broadcast address which was filled in
-           * above */
-          COPY_IP(&forwardTo.sin_addr.s_addr, &bestNeighborLinks.links[i]->neighbor_iface_addr);
+        int nBytesWritten;
+
+        if (sendUnicast)
+        {    
+          /* For unicast, overwrite the local broadcast address which was filled in above */
+          forwardTo.sin_addr = bestNeighborLinks.links[i]->neighbor_iface_addr.v4;
         }
 
         /* Forward the BMF packet via the encapsulation socket */
@@ -838,6 +897,9 @@ static void BmfEncapsulationPacketReceived(
 
     else /* walker->olsrIntf != NULL && !iAmMpr */
     {
+#ifndef NODEBUG
+      struct ipaddr_str buf;
+#endif
       /* 'walker' is an OLSR interface, but I am not selected as MPR. In that
        * case, don't forward. */
       OLSR_PRINTF(
@@ -845,7 +907,7 @@ static void BmfEncapsulationPacketReceived(
         "%s: --> not forwarding on \"%s\": I am not selected as MPR by %s\n",
         PLUGIN_NAME_SHORT,
         walker->ifName,
-        olsr_ip_to_string(forwardedBy));
+        olsr_ip_to_string(&buf, forwardedBy));
     } /* else */
   } /* for */
 } /* BmfEncapsulationPacketReceived */
@@ -872,16 +934,19 @@ static void BmfTunPacketCaptured(unsigned char* encapsulationUdpData)
   struct ip* ipHeader;
   u_int32_t crc32;
   struct TEncapHeader* encapHdr;
-
+#ifndef NODEBUG
+  struct ipaddr_str srcIpBuf, dstIpBuf;
+#endif
   ipPacket = GetIpPacket(encapsulationUdpData);
   ipPacketLen = GetIpTotalLength(ipPacket);
   ipHeader = GetIpHeader(encapsulationUdpData);
 
+  dstIp.v4 = ipHeader->ip_dst;
+  broadAddr.v4.s_addr = htonl(EtherTunTapIpBroadcast);
+
   /* Only forward multicast packets. If configured, also forward local broadcast packets */
-  COPY_IP(&dstIp, &ipHeader->ip_dst);
-  broadAddr.v4 = htonl(EtherTunTapIpBroadcast);
   if (IsMulticast(&dstIp) ||
-      (EnableLocalBroadcast != 0 && COMP_IP(&dstIp, &broadAddr)))
+      (EnableLocalBroadcast != 0 && ipequal(&dstIp, &broadAddr)))
   {
     /* continue */
   }
@@ -890,15 +955,16 @@ static void BmfTunPacketCaptured(unsigned char* encapsulationUdpData)
     return;
   }
 
-  COPY_IP(&srcIp, &ipHeader->ip_src);
+  srcIp.v4 = ipHeader->ip_src;
+
   OLSR_PRINTF(
     8,
     "%s: outgoing pkt of %ld bytes captured on tuntap interface \"%s\": %s->%s\n",
     PLUGIN_NAME_SHORT,
     (long)ipPacketLen,
     EtherTunTapIfName,
-    olsr_ip_to_string(&srcIp),
-    olsr_ip_to_string(&dstIp));
+    olsr_ip_to_string(&srcIpBuf, &srcIp),
+    olsr_ip_to_string(&dstIpBuf, &dstIp));
 
   /* Calculate packet fingerprint */
   crc32 = PacketCrc32(ipPacket, ipPacketLen);
@@ -1173,8 +1239,8 @@ static void DoBmf(void)
           continue; /* for */
         }
 
-        COPY_IP(&forwardedBy, &ipHeader->ip_src);
-        COPY_IP(&forwardedTo, &ipHeader->ip_dst);
+        forwardedBy.v4 = ipHeader->ip_src;
+        forwardedTo.v4 = ipHeader->ip_dst;
         BmfEncapsulationPacketReceived(
           walker,
           &forwardedBy,
@@ -1215,7 +1281,7 @@ static void DoBmf(void)
           continue; /* for */
         } /* if (nBytes < 0) */
 
-        COPY_IP(&forwardedBy, &from.sin_addr.s_addr);
+        forwardedBy.v4 = from.sin_addr;
 
         /* Check if the number of received bytes is large enough for a minimal BMF
          * encapsulation packet, at least:
@@ -1226,12 +1292,13 @@ static void DoBmf(void)
           sizeof(struct ip);
         if (nBytes < minimumLength)
         {
+          struct ipaddr_str buf;
           olsr_printf(
             1,
             "%s: received a too short encapsulation packet (%d bytes) from %s on \"%s\"\n",
             PLUGIN_NAME,
             nBytes,
-            olsr_ip_to_string(&forwardedBy),
+            olsr_ip_to_string(&buf, &forwardedBy),
             walker->ifName);
 
           continue; /* for */
@@ -1395,6 +1462,33 @@ int InterfaceChange(struct interface* interf, int action)
 
   return 0;
 } /* InterfaceChange */
+
+
+/* -------------------------------------------------------------------------
+ * Function   : SetFanOutLimit
+ * Description: Overrule the default fan out limit value (2)
+ * Input      : value - fan out limit value (1...MAX_UNICAST_NEIGHBORS)
+ *              data - not used
+ *              addon - not used
+ * Output     : none
+ * Return     : success (0) or fail (1)
+ * Data Used  : FanOutLimit
+ * ------------------------------------------------------------------------- */
+int SetFanOutLimit(
+  const char* value,
+  void* data __attribute__((unused)),
+  set_plugin_parameter_addon addon __attribute__((unused)))
+{
+  if (set_plugin_int(value, &FanOutLimit, addon) == 0)
+  {
+    /* Extra check if within range */
+    if (FanOutLimit >= 1 && FanOutLimit <= MAX_UNICAST_NEIGHBORS)
+    {
+      return 0;
+    }
+  }
+  return 1;
+}
 
 /* -------------------------------------------------------------------------
  * Function   : InitBmf

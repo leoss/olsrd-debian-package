@@ -36,20 +36,21 @@
 # to the project. For more information see the website or contact
 # the copyright holders.
 #
-# $Id: Makefile,v 1.30 2007/09/17 21:44:15 bernd67 Exp $
 
 TOPDIR=../..
 include $(TOPDIR)/Makefile.inc
 
-SRCS =		olsrd_conf.c  oparse.c  oscan.c cfgfile_gen.c
-HDRS =		olsrd_conf.h  oparse.h
+# delete the variables from above
+SRCS =
+HDRS =
+
+include local.mk
 
 ifeq ($(OS), win32)
 
 LIBNAME ?=	olsrd_cfgparser.dll
 BINNAME ?=	olsrd_cfgparser.exe
-CPPFLAGS +=	-DWIN32_STDIO_HACK
-OBJS +=		../win32/compat.o
+OBJS +=		../win32/compat.o ../ipcalc.o ../builddata.o
 
 else
 
@@ -82,42 +83,19 @@ NAME =		$(LIBNAME)
 
 endif
 
+.PHONY: install clean uberclean
 
+# Targets
 default_target: $(NAME)
 
 $(NAME):	$(OBJS)
-		$(CC) $(LDFLAGS) -o $(NAME) $(OBJS) $(LIBS)
-
-oscan.c:	oscan.lex Makefile
-		$(FLEX) -Cem -ooscan.c-tmp oscan.lex
-		sed	-e '/^static/s/yy_get_next_buffer[\(][\)]/yy_get_next_buffer(void)/' \
-			-e '/^static/s/yy_get_previous_state[\(][\)]/yy_get_previous_state(void)/' \
-			-e '/^static/s/yygrowstack[\(][\)]/yygrowstack(void)/' \
-			-e '/^static/s/input[\(][\)]/input(void)/' \
-			-e '/^static  *void  *yy_fatal_error/s/^\(.*)\);$$/\1 __attribute__((noreturn));/' \
-			-e '/^#line/s/$(subst .,\.,$@-tmp)/$@/' \
-			< oscan.c-tmp >oscan.c
-		$(RM) oscan.c-tmp
-
-oscan.o: CFLAGS := $(filter-out -Wunreachable-code -Wsign-compare, $(CFLAGS)) -Wno-sign-compare
-
-oparse.c:	oparse.y olsrd_conf.h Makefile
-		$(BISON) -d -o oparse.c oparse.y
-
-oparse.o: CFLAGS := $(filter-out -Wunreachable-code, $(CFLAGS))
-
-
-.PHONY: install clean uberclean
+		$(CC) $(LDFLAGS) -o "$@" $^ $(LIBS)
 
 install:
 		install -D -m 755 $(NAME) $(LIBDIR)/$(NAME)
 		/sbin/ldconfig -n $(LIBDIR)
 
 clean:
-		rm -f *.[od~] oscan.c oparse.[ch]
-		rm -f $(LIBNAME)
-		rm -f $(BINNAME)
-		$(RM) oparse.c-tmp
+		rm -f *.[od~] $(LIBNAME) $(BINNAME) $(TMPFILES)
 
 uberclean:	clean
-		rm -f oparse.c oparse.h oscan.c

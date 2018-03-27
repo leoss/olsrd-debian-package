@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas Tï¿½nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: process_package.h,v 1.12 2005/02/20 18:52:18 kattemat Exp $
  */
 
 
@@ -48,33 +47,21 @@
 #include "neighbor_table.h"
 
 void
+olsr_input_hello(union olsr_message *ser, struct interface *inif, union olsr_ip_addr *from);
+
+void
 olsr_init_package_process(void);
 
 void
-olsr_hello_tap(struct hello_message *, struct interface *, union olsr_ip_addr *);
+olsr_hello_tap(struct hello_message *, struct interface *, const union olsr_ip_addr *);
 
 void
 olsr_process_received_hello(union olsr_message *, struct interface *, union olsr_ip_addr *);
-
-void
-olsr_tc_tap(struct tc_message *, struct interface *, union olsr_ip_addr *, union olsr_message *);
-
-void
-olsr_process_received_tc(union olsr_message *, struct interface *, union olsr_ip_addr *);
 
 void
 olsr_process_received_mid(union olsr_message *, struct interface *, union olsr_ip_addr *);
 
 void
 olsr_process_received_hna(union olsr_message *, struct interface *, union olsr_ip_addr *);
-
-void
-olsr_process_message_neighbors(struct neighbor_entry *,struct hello_message *);
-
-void
-olsr_linking_this_2_entries(struct neighbor_entry *,struct neighbor_2_entry *, float);
-
-int
-olsr_lookup_mpr_status(struct hello_message *, struct interface *);
 
 #endif

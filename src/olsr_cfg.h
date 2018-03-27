@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas T�nnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ?Â¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: olsr_cfg.h,v 1.34 2007/09/16 21:20:17 bernd67 Exp $
  */
 
 
@@ -45,10 +44,12 @@
 
 #include "olsr_types.h"
 
+#ifndef LINUX_POLICY_ROUTING
 #if defined linux
 #  define LINUX_POLICY_ROUTING 1
 #else
 #  define LINUX_POLICY_ROUTING 0
+#endif
 #endif
 
 /* Default values not declared in olsr_protocol.h */
@@ -60,10 +61,12 @@
 #define DEF_DEBUGLVL        1
 #define DEF_IPC_CONNECTIONS 0
 #define DEF_USE_HYST        OLSR_FALSE
+#define DEF_FIB_METRIC      FIBM_FLAT
 #define DEF_LQ_LEVEL        2
 #define DEF_LQ_FISH         0
 #define DEF_LQ_DIJK_LIMIT   255
 #define DEF_LQ_DIJK_INTER   0.0
+#define DEF_LQ_NAT_THRESH   1.0
 #define DEF_LQ_WSIZE        12
 #define DEF_CLEAR_SCREEN    OLSR_FALSE
 
@@ -91,6 +94,11 @@
 #define MIN_LQ_LEVEL        0
 #define MAX_LQ_WSIZE        128
 #define MIN_LQ_WSIZE        3
+
+/* Option values */
+#define CFG_FIBM_FLAT          "flat"
+#define CFG_FIBM_CORRECT       "correct"
+#define CFG_FIBM_APPROX        "approx"
 
 #ifndef IPV6_ADDR_SITELOCAL
 #define IPV6_ADDR_SITELOCAL    0x0040U
@@ -146,18 +154,10 @@ struct olsr_if
   struct olsr_if           *next;
 };
 
-struct hna4_entry
+struct ip_prefix_list
 {
-  union olsr_ip_addr       net;
-  union olsr_ip_addr       netmask;
-  struct hna4_entry        *next;
-};
-
-struct hna6_entry
-{
-  union olsr_ip_addr       net;
-  olsr_u16_t               prefix_len;
-  struct hna6_entry        *next;
+  struct olsr_ip_prefix    net;
+  struct ip_prefix_list    *next;
 };
 
 struct hyst_param
@@ -181,18 +181,12 @@ struct plugin_entry
   struct plugin_entry      *next;
 };
 
-struct ipc_host
-{
-  union olsr_ip_addr       host;
-  struct ipc_host          *next;
-};
 
-struct ipc_net
-{
-  union olsr_ip_addr       net;
-  union olsr_ip_addr       mask;
-  struct ipc_net           *next;
-};
+typedef enum {
+  FIBM_FLAT,
+  FIBM_CORRECT,
+  FIBM_APPROX
+} olsr_fib_metric_options;
 
 /*
  * The config struct
@@ -207,51 +201,65 @@ struct olsrd_config
   olsr_bool                allow_no_interfaces;
   olsr_u16_t               tos;
   olsr_u8_t                rttable;
-  olsr_bool                willingness_auto;
+  olsr_u8_t                rttable_default;
   olsr_u8_t                willingness;
+  olsr_bool                willingness_auto;
   int                      ipc_connections;
-  olsr_bool                open_ipc;
   olsr_bool                use_hysteresis;
+  olsr_fib_metric_options  fib_metric;
   struct hyst_param        hysteresis_param;
+  struct plugin_entry      *plugins;
+  struct ip_prefix_list    *hna_entries;
+  struct ip_prefix_list    *ipc_nets;
+  struct olsr_if           *interfaces;
   float                    pollrate;
   float                    nic_chgs_pollrate;
+  olsr_bool                clear_screen;
   olsr_u8_t                tc_redundancy;
   olsr_u8_t                mpr_coverage;
-  olsr_bool                clear_screen;
   olsr_u8_t                lq_level;
-  olsr_u32_t               lq_wsize;
   olsr_u8_t                lq_fish;
-  olsr_u8_t                lq_dlimit;
   float                    lq_dinter;
-  struct plugin_entry      *plugins;
-  struct hna4_entry        *hna4_entries;
-  struct hna6_entry        *hna6_entries;
-  struct ipc_host          *ipc_hosts;
-  struct ipc_net           *ipc_nets;
-  struct olsr_if           *interfaces;
+  olsr_u32_t               lq_wsize;
+  olsr_u8_t                lq_dlimit;
 
   /* Stuff set by olsrd */
-  size_t                   ipsize;               /* Size of address */
-  olsr_8_t                 maxplen;              /* maximum prefix len */
   olsr_u16_t               system_tick_divider;  /* Tick resolution */
+  olsr_u8_t                maxplen;              /* maximum prefix len */
+  size_t                   ipsize;               /* Size of address */
   olsr_bool                del_gws;              /* Delete InternetGWs at startup */
   union olsr_ip_addr       main_addr;            /* Main address of this node */
   float                    will_int;
   float                    max_jitter;
-  int                      exit_value; /* Global return value for process termination */
+  int                      exit_value;           /* Global return value for process termination */
   float                    max_tc_vtime;
 
   int                      ioctl_s;              /* Socket used for ioctl calls */
 #if LINUX_POLICY_ROUTING
   int                      rtnl_s;               /* Socket used for rtnetlink messages */
-#else
+#endif
+
+#if defined __FreeBSD__ || defined __MacOSX__ || defined __NetBSD__ || defined __OpenBSD__
   int                      rts;                  /* Socket used for route changes on BSDs */
 #endif
+  float                    lq_nat_thresh;
 };
 
 #if defined __cplusplus
 extern "C" {
 #endif
+
+
+/*
+ * List functions
+ */
+
+void ip_prefix_list_add(struct ip_prefix_list **, const union olsr_ip_addr *, olsr_u8_t);
+
+int ip_prefix_list_remove(struct ip_prefix_list **, const union olsr_ip_addr *, olsr_u8_t);
+
+struct ip_prefix_list *ip_prefix_list_find(struct ip_prefix_list *, const union olsr_ip_addr *net, olsr_u8_t prefix_len);
+
 
 /*
  * Interface to parser
@@ -281,14 +289,25 @@ get_default_if_config(void);
 struct olsrd_config *
 olsrd_get_default_cnf(void);
 
-void *
-olsrd_cnf_malloc(unsigned int);
+#if defined WIN32
+void 
+win32_stdio_hack(unsigned int);
+
+void*
+win32_olsrd_malloc(size_t size);
 
 void
-olsrd_cnf_free(void *);
+win32_olsrd_free(void* ptr);
+#endif
 
 #if defined __cplusplus
 }
 #endif
 
 #endif
+
+/*
+ * Local Variables:
+ * c-basic-offset: 2
+ * End:
+ */

@@ -1,5 +1,4 @@
 /*
-** $Id: lua.h,v 1.2 2007/04/20 13:46:03 bernd67 Exp $
 ** Lua - An Extensible Extension Language
 ** Tecgraf: Computer Graphics Technology Group, PUC-Rio, Brazil
 ** http://www.lua.org	mailto:info@lua.org
@@ -157,7 +156,7 @@ LUA_API const char *lua_pushvfstring (lua_State *L, const char *fmt,
 LUA_API const char *lua_pushfstring (lua_State *L, const char *fmt, ...);
 LUA_API void  lua_pushcclosure (lua_State *L, lua_CFunction fn, int n);
 LUA_API void  lua_pushboolean (lua_State *L, int b);
-LUA_API void  lua_pushlightuserdata (lua_State *L, void *p);
+LUA_API void  lua_pushlightuserdata (lua_State *L, const void *p);
 
 
 /*

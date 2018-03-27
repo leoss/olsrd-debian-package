@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: log.c,v 1.3 2004/11/21 10:50:52 kattemat Exp $
  */
 
 /* 
@@ -58,7 +57,7 @@ olsr_openlog(const char *ident)
 
 
 void
-olsr_syslog(int level, char *format, ...)
+olsr_syslog(int level, const char *format, ...)
 {
 
   int linux_level;

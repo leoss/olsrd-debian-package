@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: ifnet.c,v 1.51 2007/08/23 21:20:02 bernd67 Exp $
  */
 
 
@@ -44,8 +43,9 @@
 #define ifr_netmask ifr_addr
 #endif
 
-#include "interfaces.h"
 #include "ifnet.h"
+#include "ipcalc.h"
+#include "interfaces.h"
 #include "defs.h"
 #include "olsr.h"
 #include "net_os.h"
@@ -68,7 +68,7 @@
 #include <netdb.h>
 #include <unistd.h>
 
-int bufspace = 127*1024;	/* max. input buffer size to request */
+#define BUFSPACE  (127*1024)	/* max. input buffer size to request */
 
 
 int
@@ -128,7 +128,7 @@ check_interface_updates(void *foo __attribute__((unused)))
         {
 #ifdef DEBUG
           /* Don't check this interface */
-          OLSR_PRINTF(3, "Not checking interface %s\n", tmp_if->name)
+          OLSR_PRINTF(3, "Not checking interface %s\n", tmp_if->name);
 #endif
           continue;
         }
@@ -209,7 +209,7 @@ chk_if_changed(struct olsr_if *iface)
 
   /* Check broadcast */
   if ((olsr_cnf->ip_version == AF_INET) && 
-      !iface->cnf->ipv4_broadcast.v4 && /* Skip if fixed bcast */ 
+      !iface->cnf->ipv4_broadcast.v4.s_addr && /* Skip if fixed bcast */ 
       (!(ifp->int_flags & IFF_BROADCAST))) 
     {
       OLSR_PRINTF(3, "\tNo broadcast - removing\n");
@@ -260,6 +260,9 @@ chk_if_changed(struct olsr_if *iface)
   /* IP version 6 */
   if(olsr_cnf->ip_version == AF_INET6)
     {
+#if !defined(NODEBUG) && defined(DEBUG)
+      struct ipaddr_str buf;
+#endif
       /* Get interface address */
       
       if(get_ipv6_address(ifr.ifr_name, &tmp_saddr6, iface->cnf->ipv6_addrtype) <= 0)
@@ -274,14 +277,17 @@ chk_if_changed(struct olsr_if *iface)
 	}
       
 #ifdef DEBUG
-      OLSR_PRINTF(3, "\tAddress: %s\n", ip6_to_string(&tmp_saddr6.sin6_addr));
+      OLSR_PRINTF(3, "\tAddress: %s\n", ip6_to_string(&buf, &tmp_saddr6.sin6_addr));
 #endif
 
       if(memcmp(&tmp_saddr6.sin6_addr, &ifp->int6_addr.sin6_addr, olsr_cnf->ipsize) != 0)
 	{
+#ifndef NODEBUG
+          struct ipaddr_str buf;
+#endif
 	  OLSR_PRINTF(1, "New IP address for %s:\n", ifr.ifr_name);
-	  OLSR_PRINTF(1, "\tOld: %s\n", ip6_to_string(&ifp->int6_addr.sin6_addr));
-	  OLSR_PRINTF(1, "\tNew: %s\n", ip6_to_string(&tmp_saddr6.sin6_addr));
+	  OLSR_PRINTF(1, "\tOld: %s\n", ip6_to_string(&buf, &ifp->int6_addr.sin6_addr));
+	  OLSR_PRINTF(1, "\tNew: %s\n", ip6_to_string(&buf, &tmp_saddr6.sin6_addr));
 
 	  /* Check main addr */
 	  if(memcmp(&olsr_cnf->main_addr, &tmp_saddr6.sin6_addr, olsr_cnf->ipsize) == 0)
@@ -304,6 +310,7 @@ chk_if_changed(struct olsr_if *iface)
   else
   /* IP version 4 */
     {
+      struct ipaddr_str buf;
       /* Check interface address (IPv4)*/
       if(ioctl(olsr_cnf->ioctl_s, SIOCGIFADDR, &ifr) < 0) 
 	{
@@ -312,7 +319,7 @@ chk_if_changed(struct olsr_if *iface)
 	}
 
 #ifdef DEBUG
-      OLSR_PRINTF(3, "\tAddress:%s\n", sockaddr_to_string(&ifr.ifr_addr));
+      OLSR_PRINTF(3, "\tAddress:%s\n", sockaddr4_to_string(&buf, &ifr.ifr_addr));
 #endif
 
       if(memcmp(&((struct sockaddr_in *)&ifp->int_addr)->sin_addr.s_addr,
@@ -321,17 +328,17 @@ chk_if_changed(struct olsr_if *iface)
 	{
 	  /* New address */
 	  OLSR_PRINTF(1, "IPv4 address changed for %s\n", ifr.ifr_name);
-	  OLSR_PRINTF(1, "\tOld:%s\n", sockaddr_to_string(&ifp->int_addr));
-	  OLSR_PRINTF(1, "\tNew:%s\n", sockaddr_to_string(&ifr.ifr_addr));
+	  OLSR_PRINTF(1, "\tOld:%s\n", ip4_to_string(&buf, ifp->int_addr.sin_addr));
+	  OLSR_PRINTF(1, "\tNew:%s\n", sockaddr4_to_string(&buf, &ifr.ifr_addr));
 
-	  ifp->int_addr = ifr.ifr_addr;
+	  ifp->int_addr = *(struct sockaddr_in *)&ifr.ifr_addr;
 
 	  if(memcmp(&olsr_cnf->main_addr, 
 		    &ifp->ip_addr,
 		    olsr_cnf->ipsize) == 0)
 	    {
-	      OLSR_PRINTF(1, "New main address: %s\n", sockaddr_to_string(&ifr.ifr_addr));
-	      olsr_syslog(OLSR_LOG_INFO, "New main address: %s\n", sockaddr_to_string(&ifr.ifr_addr));
+	      OLSR_PRINTF(1, "New main address: %s\n", sockaddr4_to_string(&buf, &ifr.ifr_addr));
+	      olsr_syslog(OLSR_LOG_INFO, "New main address: %s\n", sockaddr4_to_string(&buf, &ifr.ifr_addr));
 	      memcpy(&olsr_cnf->main_addr, 
 		     &((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr.s_addr, 
 		     olsr_cnf->ipsize);
@@ -352,24 +359,27 @@ chk_if_changed(struct olsr_if *iface)
 	}
 
 #ifdef DEBUG
-      OLSR_PRINTF(3, "\tNetmask:%s\n", sockaddr_to_string(&ifr.ifr_netmask));
+      OLSR_PRINTF(3, "\tNetmask:%s\n", sockaddr4_to_string(&buf, &ifr.ifr_netmask));
 #endif
 
       if(memcmp(&((struct sockaddr_in *)&ifp->int_netmask)->sin_addr.s_addr,
 		&((struct sockaddr_in *)&ifr.ifr_netmask)->sin_addr.s_addr, 
 		olsr_cnf->ipsize) != 0)
 	{
+#ifndef NODEBUG
+          struct ipaddr_str buf;
+#endif
 	  /* New address */
 	  OLSR_PRINTF(1, "IPv4 netmask changed for %s\n", ifr.ifr_name);
-	  OLSR_PRINTF(1, "\tOld:%s\n", sockaddr_to_string(&ifp->int_netmask));
-	  OLSR_PRINTF(1, "\tNew:%s\n", sockaddr_to_string(&ifr.ifr_netmask));
+	  OLSR_PRINTF(1, "\tOld:%s\n", ip4_to_string(&buf, ifp->int_netmask.sin_addr));
+	  OLSR_PRINTF(1, "\tNew:%s\n", sockaddr4_to_string(&buf, &ifr.ifr_netmask));
 
-	  ifp->int_netmask = ifr.ifr_netmask;
+	  ifp->int_netmask = *(struct sockaddr_in *)&ifr.ifr_netmask;
 
 	  if_changes = 1;
 	}
       
-      if(!iface->cnf->ipv4_broadcast.v4)
+      if(!iface->cnf->ipv4_broadcast.v4.s_addr)
 	{
 	  /* Check broadcast address */      
 	  if (ioctl(olsr_cnf->ioctl_s, SIOCGIFBRDADDR, &ifr) < 0) 
@@ -379,20 +389,20 @@ chk_if_changed(struct olsr_if *iface)
 	    }
 	  
 #ifdef DEBUG
-	  OLSR_PRINTF(3, "\tBroadcast address:%s\n", sockaddr_to_string(&ifr.ifr_broadaddr));
+	  OLSR_PRINTF(3, "\tBroadcast address:%s\n", sockaddr4_to_string(&buf, &ifr.ifr_broadaddr));
 #endif
 	  
-	  if(memcmp(&((struct sockaddr_in *)&ifp->int_broadaddr)->sin_addr.s_addr,
-		    &((struct sockaddr_in *)&ifr.ifr_broadaddr)->sin_addr.s_addr, 
-		    olsr_cnf->ipsize) != 0)
+	  if(ifp->int_broadaddr.sin_addr.s_addr != ((struct sockaddr_in *)&ifr.ifr_broadaddr)->sin_addr.s_addr)
 	    {
-	      
+#ifndef NODEBUG
+              struct ipaddr_str buf;
+#endif
 	      /* New address */
 	      OLSR_PRINTF(1, "IPv4 broadcast changed for %s\n", ifr.ifr_name);
-	      OLSR_PRINTF(1, "\tOld:%s\n", sockaddr_to_string(&ifp->int_broadaddr));
-	      OLSR_PRINTF(1, "\tNew:%s\n", sockaddr_to_string(&ifr.ifr_broadaddr));
+	      OLSR_PRINTF(1, "\tOld:%s\n", ip4_to_string(&buf, ifp->int_broadaddr.sin_addr));
+	      OLSR_PRINTF(1, "\tNew:%s\n", sockaddr4_to_string(&buf, &ifr.ifr_broadaddr));
 	      
-	      ifp->int_broadaddr = ifr.ifr_broadaddr;
+	      ifp->int_broadaddr = *(struct sockaddr_in *)&ifr.ifr_broadaddr;
 	      if_changes = 1;
 	    }            
 	}
@@ -435,7 +445,7 @@ chk_if_changed(struct olsr_if *iface)
   net_remove_buffer(ifp);
 
   /* Check main addr */
-  if(COMP_IP(&olsr_cnf->main_addr, &ifp->ip_addr))
+  if(ipequal(&olsr_cnf->main_addr, &ifp->ip_addr))
     {
       if(ifnet == NULL)
 	{
@@ -445,9 +455,10 @@ chk_if_changed(struct olsr_if *iface)
 	}
       else
 	{
-	  COPY_IP(&olsr_cnf->main_addr, &ifnet->ip_addr);
-	  OLSR_PRINTF(1, "New main address: %s\n", olsr_ip_to_string(&olsr_cnf->main_addr));
-	  olsr_syslog(OLSR_LOG_INFO, "New main address: %s\n", olsr_ip_to_string(&olsr_cnf->main_addr));
+          struct ipaddr_str buf;
+	  olsr_cnf->main_addr = ifnet->ip_addr;
+	  OLSR_PRINTF(1, "New main address: %s\n", olsr_ip_to_string(&buf, &olsr_cnf->main_addr));
+	  olsr_syslog(OLSR_LOG_INFO, "New main address: %s\n", olsr_ip_to_string(&buf, &olsr_cnf->main_addr));
 	}
     }
 
@@ -529,6 +540,7 @@ add_hemu_if(struct olsr_if *iface)
   struct interface *ifp;
   union olsr_ip_addr null_addr;
   olsr_u32_t addr[4];
+  struct ipaddr_str buf;
 
   if(!iface->host_emul)
     return -1;
@@ -548,7 +560,7 @@ add_hemu_if(struct olsr_if *iface)
 
   OLSR_PRINTF(1, "Adding %s(host emulation):\n", ifp->int_name);
 
-  OLSR_PRINTF(1, "       Address:%s\n", olsr_ip_to_string(&iface->hemu_ip));
+  OLSR_PRINTF(1, "       Address:%s\n", olsr_ip_to_string(&buf, &iface->hemu_ip));
 
   OLSR_PRINTF(1, "       NB! This is a emulated interface\n       that does not exist in the kernel!\n");
 
@@ -556,11 +568,11 @@ add_hemu_if(struct olsr_if *iface)
   ifnet = ifp;
 
   memset(&null_addr, 0, olsr_cnf->ipsize);
-  if(COMP_IP(&null_addr, &olsr_cnf->main_addr))
+  if(ipequal(&null_addr, &olsr_cnf->main_addr))
     {
-      COPY_IP(&olsr_cnf->main_addr, &iface->hemu_ip);
-      OLSR_PRINTF(1, "New main address: %s\n", olsr_ip_to_string(&olsr_cnf->main_addr));
-	olsr_syslog(OLSR_LOG_INFO, "New main address: %s\n", olsr_ip_to_string(&olsr_cnf->main_addr));
+      olsr_cnf->main_addr = iface->hemu_ip;
+      OLSR_PRINTF(1, "New main address: %s\n", olsr_ip_to_string(&buf, &olsr_cnf->main_addr));
+	olsr_syslog(OLSR_LOG_INFO, "New main address: %s\n", olsr_ip_to_string(&buf, &olsr_cnf->main_addr));
     }
 
   ifp->int_mtu = OLSR_DEFAULT_MTU;
@@ -615,7 +627,7 @@ add_hemu_if(struct olsr_if *iface)
        *on what interface the message is transmitted
        */
       
-      ifp->olsr_socket = gethcsocket6(&addrsock6, bufspace, ifp->int_name);
+      ifp->olsr_socket = gethcsocket6(&addrsock6, BUFSPACE, ifp->int_name);
       
       join_mcast(ifp, ifp->olsr_socket);
       
@@ -726,7 +738,7 @@ static const char* if_basename(const char* name)
  *
  */
 int
-chk_if_up(struct olsr_if *iface, int debuglvl)
+chk_if_up(struct olsr_if *iface, int debuglvl __attribute__((unused)))
 {
   struct interface ifs, *ifp;
   struct ifreq ifr;
@@ -763,7 +775,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
 
   /* Check broadcast */
   if ((olsr_cnf->ip_version == AF_INET) &&
-      !iface->cnf->ipv4_broadcast.v4 && /* Skip if fixed bcast */ 
+      !iface->cnf->ipv4_broadcast.v4.s_addr && /* Skip if fixed bcast */ 
       (!(ifs.int_flags & IFF_BROADCAST))) 
     {
       OLSR_PRINTF(debuglvl, "\tNo broadcast - skipping\n");
@@ -792,7 +804,9 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
   if(olsr_cnf->ip_version == AF_INET6)
     {
       /* Get interface address */
-      
+#ifndef NODEBUG
+      struct ipaddr_str buf;
+#endif
       if(get_ipv6_address(ifr.ifr_name, &ifs.int6_addr, iface->cnf->ipv6_addrtype) <= 0)
 	{
 	  if(iface->cnf->ipv6_addrtype == IPV6_ADDR_SITELOCAL)
@@ -803,7 +817,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
 	  return 0;
 	}
       
-      OLSR_PRINTF(debuglvl, "\tAddress: %s\n", ip6_to_string(&ifs.int6_addr.sin6_addr));
+      OLSR_PRINTF(debuglvl, "\tAddress: %s\n", ip6_to_string(&buf, &ifs.int6_addr.sin6_addr));
       
       /* Multicast */
       ifs.int6_multaddr.sin6_addr = (iface->cnf->ipv6_addrtype == IPV6_ADDR_SITELOCAL) ? 
@@ -818,7 +832,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
       ifs.int6_multaddr.sin6_scope_id = 0;
 #endif
 
-      OLSR_PRINTF(debuglvl, "\tMulticast: %s\n", ip6_to_string(&ifs.int6_multaddr.sin6_addr));
+      OLSR_PRINTF(debuglvl, "\tMulticast: %s\n", ip6_to_string(&buf, &ifs.int6_multaddr.sin6_addr));
       
     }
   /* IP version 4 */
@@ -831,7 +845,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
 	  return 0;
 	}
       
-      ifs.int_addr = ifr.ifr_addr;
+      ifs.int_addr = *(struct sockaddr_in *)&ifr.ifr_addr;
       
       /* Find netmask */
       
@@ -841,10 +855,10 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
 	  return 0;
 	}
       
-      ifs.int_netmask = ifr.ifr_netmask;
+      ifs.int_netmask = *(struct sockaddr_in *)&ifr.ifr_netmask;
       
       /* Find broadcast address */
-      if(iface->cnf->ipv4_broadcast.v4)
+      if(iface->cnf->ipv4_broadcast.v4.s_addr)
 	{
 	  /* Specified broadcast */
 	  memset(&ifs.int_broadaddr, 0, sizeof(struct sockaddr));
@@ -861,7 +875,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
 	      return 0;
 	    }
 	  
-	  ifs.int_broadaddr = ifr.ifr_broadaddr;
+	  ifs.int_broadaddr = *(struct sockaddr_in *)&ifr.ifr_broadaddr;
 	}
       
       /* Deactivate IP spoof filter */
@@ -892,7 +906,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
 
   ifs.int_mtu -= (olsr_cnf->ip_version == AF_INET6) ? UDP_IPV6_HDRSIZE : UDP_IPV4_HDRSIZE;
 
-  ifs.ttl_index = 0;
+  ifs.ttl_index = -32; /* For the first 32 TC's, fish-eye is disabled */
 
   /* Set up buffer */
   net_add_buffer(&ifs);
@@ -904,17 +918,25 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
 
   if(olsr_cnf->ip_version == AF_INET)
     {
-      OLSR_PRINTF(1, "\tAddress:%s\n", sockaddr_to_string(&ifs.int_addr));
-      OLSR_PRINTF(1, "\tNetmask:%s\n", sockaddr_to_string(&ifs.int_netmask));
-      OLSR_PRINTF(1, "\tBroadcast address:%s\n", sockaddr_to_string(&ifs.int_broadaddr));
+#ifndef NODEBUG
+      struct ipaddr_str buf;
+#endif
+      OLSR_PRINTF(1, "\tAddress:%s\n", ip4_to_string(&buf, ifs.int_addr.sin_addr));
+      OLSR_PRINTF(1, "\tNetmask:%s\n", ip4_to_string(&buf, ifs.int_netmask.sin_addr));
+      OLSR_PRINTF(1, "\tBroadcast address:%s\n", ip4_to_string(&buf, ifs.int_broadaddr.sin_addr));
     }
   else
     {
-      OLSR_PRINTF(1, "\tAddress: %s\n", ip6_to_string(&ifs.int6_addr.sin6_addr));
-      OLSR_PRINTF(1, "\tMulticast: %s\n", ip6_to_string(&ifs.int6_multaddr.sin6_addr));
+#ifndef NODEBUG
+      struct ipaddr_str buf;
+#endif
+      OLSR_PRINTF(1, "\tAddress: %s\n", ip6_to_string(&buf, &ifs.int6_addr.sin6_addr));
+      OLSR_PRINTF(1, "\tMulticast: %s\n", ip6_to_string(&buf, &ifs.int6_multaddr.sin6_addr));
     }
   
   ifp = olsr_malloc(sizeof (struct interface), "Interface update 2");
+  
+  ifp->immediate_send_tc = (iface->cnf->tc_params.emission_interval < iface->cnf->hello_params.emission_interval);
 
   iface->configured = 1;
   iface->interf = ifp;
@@ -932,14 +954,14 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
   if(olsr_cnf->ip_version == AF_INET)
     {
       /* IP version 4 */
-      ifp->ip_addr.v4 = ((struct sockaddr_in *)&ifp->int_addr)->sin_addr.s_addr;
+      ifp->ip_addr.v4 = ifp->int_addr.sin_addr;
       /*
        *We create one socket for each interface and bind
        *the socket to it. This to ensure that we can control
        *on what interface the message is transmitted
        */
       
-      ifp->olsr_socket = getsocket((struct sockaddr *)&addrsock, bufspace, ifp->int_name);
+      ifp->olsr_socket = getsocket(BUFSPACE, ifp->int_name);
       
       if (ifp->olsr_socket < 0)
 	{
@@ -953,8 +975,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
   else
     {
       /* IP version 6 */
-      memcpy(&ifp->ip_addr, &ifp->int6_addr.sin6_addr, olsr_cnf->ipsize);
-
+      ifp->ip_addr.v6 =  ifp->int6_addr.sin6_addr;
       
       /*
        *We create one socket for each interface and bind
@@ -962,7 +983,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
        *on what interface the message is transmitted
        */
       
-      ifp->olsr_socket = getsocket6(&addrsock6, bufspace, ifp->int_name);
+      ifp->olsr_socket = getsocket6(BUFSPACE, ifp->int_name);
       
       join_mcast(ifp, ifp->olsr_socket);
       
@@ -1005,45 +1026,28 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
    * Set main address if this is the only interface
    */
   memset(&null_addr, 0, olsr_cnf->ipsize);
-  if(COMP_IP(&null_addr, &olsr_cnf->main_addr))
+  if(ipequal(&null_addr, &olsr_cnf->main_addr))
     {
-      COPY_IP(&olsr_cnf->main_addr, &ifp->ip_addr);
-      OLSR_PRINTF(1, "New main address: %s\n", olsr_ip_to_string(&olsr_cnf->main_addr));
-      olsr_syslog(OLSR_LOG_INFO, "New main address: %s\n", olsr_ip_to_string(&olsr_cnf->main_addr));
+      struct ipaddr_str buf;
+      olsr_cnf->main_addr = ifp->ip_addr;
+      OLSR_PRINTF(1, "New main address: %s\n", olsr_ip_to_string(&buf, &olsr_cnf->main_addr));
+      olsr_syslog(OLSR_LOG_INFO, "New main address: %s\n", olsr_ip_to_string(&buf, &olsr_cnf->main_addr));
     }
   
   /*
    * Register scheduled functions 
    */
 
-  if (olsr_cnf->lq_level == 0)
-    {
-      olsr_register_scheduler_event(&generate_hello, 
-                                    ifp, 
-                                    iface->cnf->hello_params.emission_interval, 
-                                    0, 
-                                    NULL);
-      olsr_register_scheduler_event(&generate_tc, 
-                                    ifp, 
-                                    iface->cnf->tc_params.emission_interval,
-                                    0, 
-                                    NULL);
-    }
-
-  else
-    {
-      olsr_register_scheduler_event(&olsr_output_lq_hello, 
-                                    ifp, 
-                                    iface->cnf->hello_params.emission_interval, 
-                                    0, 
-                                    NULL);
-      olsr_register_scheduler_event(&olsr_output_lq_tc, 
-                                    ifp, 
-                                    iface->cnf->tc_params.emission_interval,
-                                    0, 
-                                    NULL);
-    }
-
+  olsr_register_scheduler_event(olsr_cnf->lq_level == 0 ? &generate_hello : &olsr_output_lq_hello,
+                                ifp, 
+                                iface->cnf->hello_params.emission_interval, 
+                                0, 
+                                NULL);
+  olsr_register_scheduler_event(olsr_cnf->lq_level == 0 ? &generate_tc : &olsr_output_lq_tc,
+                                ifp, 
+                                iface->cnf->tc_params.emission_interval,
+                                0, 
+                                NULL);
   olsr_register_scheduler_event(&generate_mid, 
 				ifp, 
 				iface->cnf->mid_params.emission_interval,
@@ -1058,13 +1062,14 @@ chk_if_up(struct olsr_if *iface, int debuglvl)
   /* Recalculate max jitter */
 
   if((olsr_cnf->max_jitter == 0) || 
-     ((iface->cnf->hello_params.emission_interval / 4) < olsr_cnf->max_jitter))
+     ((iface->cnf->hello_params.emission_interval / 4) < olsr_cnf->max_jitter)) {
     olsr_cnf->max_jitter = iface->cnf->hello_params.emission_interval / 4;
+  }
 
   /* Recalculate max topology hold time */
-  if(olsr_cnf->max_tc_vtime < iface->cnf->tc_params.emission_interval)
+  if(olsr_cnf->max_tc_vtime < iface->cnf->tc_params.emission_interval) {
     olsr_cnf->max_tc_vtime = iface->cnf->tc_params.emission_interval;
-
+  }
   ifp->hello_etime = iface->cnf->hello_params.emission_interval;
   ifp->valtimes.hello = double_to_me(iface->cnf->hello_params.validity_time);
   ifp->valtimes.tc = double_to_me(iface->cnf->tc_params.validity_time);

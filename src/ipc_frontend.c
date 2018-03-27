@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: ipc_frontend.c,v 1.36 2007/10/13 12:31:04 bernd67 Exp $
  */
 
 /*
@@ -52,16 +51,17 @@
 #include "log.h"
 #include "parser.h"
 #include "socket_parser.h"
-#include "local_hna_set.h"
+#include "net_olsr.h"
+#include "ipcalc.h"
 
 #ifdef WIN32
 #define close(x) closesocket(x)
 #define perror(x) WinSockPError(x)
 void 
-WinSockPError(char *);
+WinSockPError(const char *);
 #endif
 
-#ifndef linux
+#ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
 #endif
 
@@ -176,29 +176,20 @@ ipc_accept(int fd)
 }
 
 olsr_bool
-ipc_check_allowed_ip(union olsr_ip_addr *addr)
+ipc_check_allowed_ip(const union olsr_ip_addr *addr)
 {
-  struct ipc_host *ipch = olsr_cnf->ipc_hosts;
-  struct ipc_net *ipcn = olsr_cnf->ipc_nets;
+  struct ip_prefix_list *ipcn;
 
-  if(addr->v4 == ntohl(INADDR_LOOPBACK))
+  if(addr->v4.s_addr == ntohl(INADDR_LOOPBACK)) {
     return OLSR_TRUE;
-
-  /* check hosts */
-  while(ipch)
-    {
-      if(addr->v4 == ipch->host.v4)
-	return OLSR_TRUE;
-      ipch = ipch->next;
-    }
+  }
 
   /* check nets */
-  while(ipcn)
-    {
-      if((addr->v4 & ipcn->mask.v4) == (ipcn->net.v4 & ipcn->mask.v4))
-	return OLSR_TRUE;
-      ipcn = ipcn->next;
+  for (ipcn = olsr_cnf->ipc_nets; ipcn != NULL; ipcn = ipcn->next) {
+    if (ip_in_net(addr, &ipcn->net)) { 
+      return OLSR_TRUE;
     }
+  }
 
   return OLSR_FALSE;
 }
@@ -217,7 +208,7 @@ ipc_input(int sock __attribute__((unused)))
   union 
   {
     char	buf[MAXPACKETSIZE+1];
-    struct	olsr olsr;
+    struct olsr	olsr;
   } inbuf;
 
 
@@ -254,7 +245,6 @@ frontend_msgparser(union olsr_message *msg, struct interface *in_if __attribute_
     {
       OLSR_PRINTF(1, "(OUTPUT)IPC connection lost!\n");
       CLOSE(ipc_conn);
-      //olsr_cnf->open_ipc = 0;
       ipc_active = OLSR_FALSE;
     }
 }
@@ -270,30 +260,33 @@ frontend_msgparser(union olsr_message *msg, struct interface *in_if __attribute_
  *@return negative on error
  */
 int
-ipc_route_send_rtentry(union olsr_ip_addr *dst, union olsr_ip_addr *gw,
-                       int met, int add, const char *int_name)
+ipc_route_send_rtentry(const union olsr_ip_addr *dst,
+                       const union olsr_ip_addr *gw,
+                       int met,
+                       int add,
+                       const char *int_name)
 {
   struct ipcmsg packet;
   char *tmp;
 
-  if(!olsr_cnf->open_ipc) {
+  if (olsr_cnf->ipc_connections <= 0) {
     return -1;
   }
 
-  if(!ipc_active)
+  if (!ipc_active) {
     return 0;
-
+  }
   memset(&packet, 0, sizeof(struct ipcmsg));
   packet.size = htons(IPC_PACK_SIZE);
   packet.msgtype = ROUTE_IPC;
 
-  COPY_IP(&packet.target_addr, dst);
+  packet.target_addr = *dst;
 
   packet.add = add;
   if(add && gw)
     {
       packet.metric = met;
-      COPY_IP(&packet.gateway_addr, gw);
+      packet.gateway_addr = *gw;
     }
 
   if(int_name != NULL)
@@ -324,7 +317,6 @@ ipc_route_send_rtentry(union olsr_ip_addr *dst, union olsr_ip_addr *gw,
       OLSR_PRINTF(1, "(RT_ENTRY)IPC connection lost!\n");
       CLOSE(ipc_conn);
 
-      //olsr_cnf->open_ipc = 0;
       ipc_active = OLSR_FALSE;
       return -1;
     }
@@ -351,12 +343,12 @@ ipc_send_all_routes(int fd)
     packet.size = htons(IPC_PACK_SIZE);
     packet.msgtype = ROUTE_IPC;
 	  
-    COPY_IP(&packet.target_addr, &rt->rt_dst.prefix);
-	  
+    packet.target_addr = rt->rt_dst.prefix;
+
     packet.add = 1;
     packet.metric = (olsr_u8_t)(rt->rt_best->rtp_metric.hops);
 
-    COPY_IP(&packet.gateway_addr, &rt->rt_nexthop.gateway);
+    packet.gateway_addr = rt->rt_nexthop.gateway;
 
     memcpy(&packet.device[0], if_ifwithindex_name(rt->rt_nexthop.iif_index), 4);
 
@@ -408,21 +400,7 @@ ipc_send_net_info(int fd)
   net_msg->mids = (ifnet != NULL && ifnet->int_next != NULL) ? 1 : 0;
   
   /* HNAs */
-  if(olsr_cnf->ip_version == AF_INET6)
-    {
-      if(olsr_cnf->hna6_entries == NULL)
-	net_msg->hnas = 0;
-      else
-	net_msg->hnas = 1;
-    }
-
-  if(olsr_cnf->ip_version == AF_INET)
-    {
-      if(olsr_cnf->hna4_entries == NULL)
-	net_msg->hnas = 0;
-      else
-	net_msg->hnas = 1;
-    }
+  net_msg->hnas = olsr_cnf->hna_entries == NULL ? 0 : 1;
 
   /* Different values */
   /* Temporary fixes */
@@ -433,14 +411,10 @@ ipc_send_net_info(int fd)
   net_msg->neigh_hold = 0;//htons((olsr_u16_t)neighbor_hold_time);
   net_msg->topology_hold = 0;//htons((olsr_u16_t)topology_hold_time);
 
-  if(olsr_cnf->ip_version == AF_INET)
-    net_msg->ipv6 = 0;
-  else
-    net_msg->ipv6 = 1;
+  net_msg->ipv6 = olsr_cnf->ip_version == AF_INET ? 0 : 1;
  
   /* Main addr */
-  COPY_IP(&net_msg->main_addr, &olsr_cnf->main_addr);
-
+  net_msg->main_addr = olsr_cnf->main_addr;
 
   /*
   printf("\t");
@@ -464,7 +438,6 @@ ipc_send_net_info(int fd)
     {
       OLSR_PRINTF(1, "(NETINFO)IPC connection lost!\n");
       CLOSE(ipc_conn);
-      //olsr_cnf->open_ipc = 0;
       return -1;
     }
 

@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: dlfcn.h,v 1.4 2004/11/21 01:21:10 tlopatic Exp $
  */
 
 #if !defined TL_DLFCN_H_INCLUDED
@@ -47,7 +46,7 @@
 
 void *dlopen(char *Name, int Flags);
 int dlclose(void *Handle);
-void *dlsym(void *Handle, char *Name);
+void *dlsym(void *Handle, const char *Name);
 char *dlerror(void);
 
 #endif

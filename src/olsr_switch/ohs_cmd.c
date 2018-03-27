@@ -1,7 +1,7 @@
 
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2005, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2005, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -37,13 +37,14 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: ohs_cmd.c,v 1.24 2007/07/28 12:58:23 bernd67 Exp $
  */
 
 #include "olsr_host_switch.h"
 #include "olsr_types.h"
 #include "commands.h"
 #include "link_rules.h"
+#include "ipcalc.h"
+
 #include <string.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -62,7 +63,7 @@ static char tok_buf[TOK_BUF_SIZE];
 static char olsrd_path[FILENAME_MAX];
 
 static int
-get_next_token(char *src, char *dst, size_t buflen)
+get_next_token(const char *src, char *dst, size_t buflen)
 {
   int i = 0, j = 0;
 
@@ -88,7 +89,7 @@ get_next_token(char *src, char *dst, size_t buflen)
 }
 
 int
-ohs_set_olsrd_path(char *path)
+ohs_set_olsrd_path(const char *path)
 {
   strncpy(olsrd_path, path, FILENAME_MAX);
   return 0;
@@ -103,9 +104,9 @@ ohs_cmd_olsrd(char *args __attribute__((unused)))
 }
 #else
 int
-ohs_cmd_olsrd(char *args)
+ohs_cmd_olsrd(const char *args)
 {
-  char *olsrd_args[MAX_OLSRD_ARGS];
+  const char *olsrd_args[MAX_OLSRD_ARGS];
   struct in_addr iaddr;
 
   args += get_next_token(args, tok_buf, TOK_BUF_SIZE);
@@ -152,7 +153,7 @@ ohs_cmd_olsrd(char *args)
       if(fork())
 	return 1;
 
-      if(execve(olsrd_path, olsrd_args, NULL) < 0)
+      if(execve(olsrd_path, (char * const *)olsrd_args, NULL) < 0)
 	{
 	  printf("Error executing olsrd: %s\n", strerror(errno));
 	  exit(1);
@@ -236,7 +237,7 @@ ohs_cmd_olsrd(char *args)
 #endif
 
 int
-ohs_cmd_link(char *args)
+ohs_cmd_link(const char *args)
 {
   olsr_u8_t bi = 0, wildc_src = 0, wildc_dst = 0;
   struct ohs_connection *src, *dst;
@@ -246,142 +247,123 @@ ohs_cmd_link(char *args)
 
   args += get_next_token(args, tok_buf, TOK_BUF_SIZE);
 
-  if(!strlen(tok_buf))
+  if (!strlen(tok_buf)) {
     goto print_usage;
+  }
+  if(!strncmp(tok_buf, "bi", strlen("bi"))) {
+    bi = 1;
+    args += get_next_token(args, tok_buf, TOK_BUF_SIZE);
 
-  if(!strncmp(tok_buf, "bi", strlen("bi")))
-    {
-      bi = 1;
-      args += get_next_token(args, tok_buf, TOK_BUF_SIZE);
-
-      if(!strlen(tok_buf))
-	goto print_usage;
+    if (!strlen(tok_buf)) {
+      goto print_usage;
     }
+  }
 
-  if(tok_buf[0] == '*')
-    {
-      wildc_src = 1;
-      src = ohs_conns;
-    }
-  else
-    {
-      if(!inet_aton(tok_buf, &iaddr))
-	{
-	  printf("Invalid src IP %s\n", tok_buf);
-	  return -1;
-	}
-
-      src = get_client_by_addr((union olsr_ip_addr *)&iaddr.s_addr);
-
-      if(!src)
-	{
-	  printf("No such client: %s!\n", tok_buf);
-	  return -1;
-	}
-    }
-
-  args += get_next_token(args, tok_buf, TOK_BUF_SIZE);
-  
-  if(!strlen(tok_buf))
-    goto print_usage;
-
-  if(tok_buf[0] == '*')
-    {
-      wildc_dst = 1;
-      dst = ohs_conns;
-    }
-  else
-    {
-      
-      if(!inet_aton(tok_buf, &iaddr))
-	{
-	  printf("Invalid src IP %s\n", tok_buf);
-	  return -1;
-	}
-      
-      dst = get_client_by_addr((union olsr_ip_addr *)&iaddr.s_addr);
-      if(!dst)
-	{
-	  printf("No such client: %s!\n", tok_buf);
-	  return -1;
-	}
-    }
-
-  args += get_next_token(args, tok_buf, TOK_BUF_SIZE);
-  
-  if(!strlen(tok_buf))
-    goto print_usage;
-
-  /* No use for bi if both src and dst are widcards */
-  if(wildc_src && wildc_dst)
-    {
-      bi = 0;
-    }
-
-  qual = atoi(tok_buf);
-
-  if(qual < 0 || qual > 100)
-    {
-      printf("Link quality out of range(0-100)\n");
+  if(tok_buf[0] == '*') {
+    wildc_src = 1;
+    src = ohs_conns;
+  } else {
+    if (!inet_aton(tok_buf, &iaddr)) {
+      printf("Invalid src IP %s\n", tok_buf);
       return -1;
     }
 
-  while(src)
-    {
+    src = get_client_by_addr((union olsr_ip_addr *)&iaddr.s_addr);
 
-      while(dst)
-	{
-
-	  if(src == dst)
-	    goto next_iteration;
-
-	  link = get_link(src, &dst->ip_addr);
-	  
-	  inv_link = bi ? get_link(dst, &src->ip_addr) : NULL;
-	  
-	  if(qual == 100)
-	    {
-	      /* Remove link entry */
-	      if(link)
-		remove_link(src, link);
-	      if(inv_link)
-		remove_link(dst, inv_link);
-	    }
-	  else 
-	    {
-	      if(!link)
-		{
-		  /* Create new link */
-		  link = add_link(src, dst);
-		}
-	      
-	      link->quality = qual;
-	      
-	      if(bi)
-		{
-		  if(!inv_link)
-		    {
-		      /* Create new link */
-		      inv_link = add_link(dst, src);
-		    }
-		  inv_link->quality = qual;
-		}
-	    }
-
-	  printf("%s %sdirectional link(s) %s %c=> %s quality %d\n", 
-		 (qual == 100) ? "Removing" : "Setting", bi ? "bi" : "uni",
-		 olsr_ip_to_string(&src->ip_addr), bi ? '<' : '=', 
-		 olsr_ip_to_string(&dst->ip_addr), qual);
-
-	next_iteration:
-	  if(wildc_dst)
-	    dst = dst->next;
-	  else
-	    break;
-	}
-      dst = wildc_dst ? ohs_conns : dst;
-      src = wildc_src ? src->next : NULL;
+    if (!src) {
+        printf("No such client: %s!\n", tok_buf);
+        return -1;
     }
+  }
+
+  args += get_next_token(args, tok_buf, TOK_BUF_SIZE);
+  
+  if (!strlen(tok_buf)) {
+    goto print_usage;
+  }
+
+  if(tok_buf[0] == '*') {
+    wildc_dst = 1;
+    dst = ohs_conns;
+  } else {
+    if(!inet_aton(tok_buf, &iaddr)) {
+      printf("Invalid src IP %s\n", tok_buf);
+      return -1;
+    }
+      
+    dst = get_client_by_addr((union olsr_ip_addr *)&iaddr.s_addr);
+    if (!dst) {
+      printf("No such client: %s!\n", tok_buf);
+      return -1;
+    }
+  }
+
+  args += get_next_token(args, tok_buf, TOK_BUF_SIZE);
+  
+  if (!strlen(tok_buf)) {
+    goto print_usage;
+  }
+
+  /* No use for bi if both src and dst are widcards */
+  if (wildc_src && wildc_dst) {
+    bi = 0;
+  }
+
+  qual = atoi(tok_buf);
+
+  if(qual < 0 || qual > 100) {
+    printf("Link quality out of range(0-100)\n");
+    return -1;
+  }
+
+  while (src) {
+    while (dst) {
+      struct ipaddr_str srcaddrstr, dstaddrstr;
+
+      if(src != dst) {
+        link = get_link(src, &dst->ip_addr);
+        inv_link = bi ? get_link(dst, &src->ip_addr) : NULL;
+        if(qual == 100)  {
+          /* Remove link entry */
+          if (link) {
+	    remove_link(src, link);
+          }
+          if (inv_link) {
+            remove_link(dst, inv_link);
+          }
+        } else  {
+          if (!link) {
+            /* Create new link */
+            link = add_link(src, dst);
+          }
+	      
+          link->quality = qual;
+	      
+          if (bi) {
+            if(!inv_link) {
+              /* Create new link */
+              inv_link = add_link(dst, src);
+            }
+            inv_link->quality = qual;
+          }
+        }
+        printf("%s %sdirectional link(s) %s %c=> %s quality %d\n", 
+               (qual == 100) ? "Removing" : "Setting",
+               bi ? "bi" : "uni",
+               olsr_ip_to_string(&srcaddrstr, &src->ip_addr),
+               bi ? '<' : '=', 
+               olsr_ip_to_string(&dstaddrstr, &dst->ip_addr),
+               qual);
+      }
+      if (wildc_dst) {
+	    dst = dst->next;
+      } else {
+	    break;
+      }
+    }
+    dst = wildc_dst ? ohs_conns : dst;
+    src = wildc_src ? src->next : NULL;
+  }
 
   return 1;
  print_usage:
@@ -390,56 +372,50 @@ ohs_cmd_link(char *args)
 }
 
 int
-ohs_cmd_list(char *args)
+ohs_cmd_list(const char *args)
 {
   struct ohs_connection *oc = ohs_conns;
 
   args += get_next_token(args, tok_buf, TOK_BUF_SIZE);
   
   if(!strlen(tok_buf) || 
-     !strncmp(tok_buf, "clients", strlen("clients")))
-    {
-      printf("All connected clients:\n");
+     !strncmp(tok_buf, "clients", strlen("clients"))) {
+    printf("All connected clients:\n");
       
-      while(oc)
-	{
-	  printf("\t%s - Rx: %d Tx: %d LinkCnt: %d\n", olsr_ip_to_string(&oc->ip_addr), 
-		 oc->rx, oc->tx, oc->linkcnt);
-	  oc = oc->next;
-	}
+    while(oc) {
+      struct ipaddr_str addrstr;
+      printf("\t%s - Rx: %d Tx: %d LinkCnt: %d\n",
+             olsr_ip_to_string(&addrstr, &oc->ip_addr), 
+             oc->rx,
+             oc->tx,
+             oc->linkcnt);
+      oc = oc->next;
     }
-  else if(!strncmp(tok_buf, "links", strlen("links")))
-    {
-      printf("All configured links:\n");
-      
-      while(oc)
-	{
-	  struct ohs_ip_link *links = oc->links;
+  }
+  else if(!strncmp(tok_buf, "links", strlen("links"))) {
+    printf("All configured links:\n");
+    while (oc) {
+      struct ohs_ip_link *links = oc->links;
+      while (links) {
+          struct ipaddr_str addrstr, dststr;
+        printf("\t%s => %s Quality: %d\n", 
+               olsr_ip_to_string(&addrstr, &oc->ip_addr),
+               olsr_ip_to_string(&dststr, &links->dst),
+               links->quality);
 
-	  while(links)
-	    {
-	      printf("\t%s => %s Quality: %d\n", 
-		     olsr_ip_to_string(&oc->ip_addr),
-		     olsr_ip_to_string(&links->dst),
-		     links->quality);
-
-	      links = links->next;
-	    }
-	  oc = oc->next;
-	}
+        links = links->next;
+      }
+      oc = oc->next;
     }
-  else
-    {
-
-      printf("list [clients|links]");
-      return -1;
-    }
-
+  } else {
+    printf("list [clients|links]");
+    return -1;
+  }
   return 1;
 }
 
 int
-ohs_cmd_help(char *args)
+ohs_cmd_help(const char *args)
 {
   int i;
 
@@ -479,7 +455,7 @@ ohs_cmd_help(char *args)
 }
 
 int
-ohs_cmd_log(char *args)
+ohs_cmd_log(const char *args)
 {
   olsr_u8_t set = 0;
 
@@ -540,7 +516,7 @@ ohs_cmd_log(char *args)
 }
 
 int
-ohs_cmd_exit(char *args __attribute__((unused)))
+ohs_cmd_exit(const char *args __attribute__((unused)))
 {
 
   printf("Exitting... bye-bye!\n");

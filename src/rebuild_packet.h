@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: rebuild_packet.h,v 1.8 2004/11/21 11:28:56 kattemat Exp $
  */
 
 
@@ -49,18 +48,12 @@
 #include "packet.h"
 
 void
-hna_chgestruct(struct hna_message *, union olsr_message *);
+mid_chgestruct(struct mid_message *, const union olsr_message *);
 
 void
-mid_chgestruct(struct mid_message *, union olsr_message *);
+unk_chgestruct(struct unknown_message *, const union olsr_message *);
 
 void
-unk_chgestruct(struct unknown_message *, union olsr_message *);
-
-void
-hello_chgestruct(struct hello_message *, union olsr_message *);
-
-void
-tc_chgestruct(struct tc_message *, union olsr_message *, union olsr_ip_addr *);
+hello_chgestruct(struct hello_message *, const union olsr_message *);
 
 #endif

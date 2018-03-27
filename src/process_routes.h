@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,55 +36,25 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: process_routes.h,v 1.12 2007/09/16 21:14:25 bernd67 Exp $
  */
-
-#include "routing_table.h"
- 
 
 #ifndef _OLSR_PROCESS_RT
 #define _OLSR_PROCESS_RT
 
+#include "routing_table.h"
 #include <sys/ioctl.h>
 
-extern struct list_node add_kernel_list;
-extern struct list_node chg_kernel_list;
-extern struct list_node del_kernel_list;
+typedef int (*export_route_function)(const struct rt_entry*);
 
-void
-olsr_init_export_route(void);
+extern export_route_function olsr_addroute_function;
+extern export_route_function olsr_addroute6_function;
+extern export_route_function olsr_delroute_function;
+extern export_route_function olsr_delroute6_function;
 
-void
-olsr_addroute_add_function(int (*)(struct rt_entry*), olsr_u8_t);
-
-int
-olsr_addroute_remove_function(int (*)(struct rt_entry*), olsr_u8_t);
-
-void
-olsr_delroute_add_function(int (*)(struct rt_entry*), olsr_u8_t);
-
-int
-olsr_delroute_remove_function(int (*)(struct rt_entry*), olsr_u8_t);
-
-int
-olsr_export_add_route (struct rt_entry*); 
-
-int
-olsr_export_del_route (struct rt_entry*); 
-
-int
-olsr_export_add_route6 (struct rt_entry*); 
-
-int
-olsr_export_del_route6 (struct rt_entry*); 
-
-void
-olsr_update_kernel_routes(void);
-
-int
-olsr_delete_all_kernel_routes(void);
-
-olsr_u8_t
-olsr_rt_flags(const struct rt_entry *);
+void olsr_init_export_route(void);
+void olsr_update_rib_routes(void);
+void olsr_update_kernel_routes(void);
+void olsr_delete_all_kernel_routes(void);
+olsr_u8_t olsr_rt_flags(const struct rt_entry *);
 
 #endif

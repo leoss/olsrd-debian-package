@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: net_os.h,v 1.13 2007/02/04 23:36:35 bernd67 Exp $
  */
 
 
@@ -51,8 +50,10 @@
 #ifndef _OLSR_NET_OS_H
 #define _OLSR_NET_OS_H
 
-/* OS dependent functions */
+#include "olsr_types.h"
+#include "interfaces.h"
 
+/* OS dependent functions */
 ssize_t
 olsr_sendto(int, 
 	    const void *, 
@@ -101,10 +102,10 @@ int
 gethemusocket(struct sockaddr_in *);
 
 int  
-getsocket(struct sockaddr *, int, char *);
+getsocket(int, char *);
 
 int  
-getsocket6(struct sockaddr_in6 *, int, char *);
+getsocket6(int, char *);
 
 int
 get_ipv6_address(char *, struct sockaddr_in6 *, int);

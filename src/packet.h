@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: packet.h,v 1.17 2005/05/29 12:47:45 br1 Exp $
  */
 
 #ifndef _OLSR_PACKET
@@ -90,34 +89,6 @@ struct tc_message
 };
 
 /*
- *HNA message format:
- *NET
- *NETMASK
- *NET
- *NETMASK
- *......
- */
-
-struct hna_net_addr
-{
-  union olsr_ip_addr  net;
-  union hna_netmask   netmask; /* IPv4 netmask */
-  struct hna_net_addr *next;
-};
-
-
-struct hna_message
-{
-  double               vtime;
-  union olsr_ip_addr   originator;
-  olsr_u16_t           packet_seq_number;
-  olsr_u8_t            hop_count;
-  olsr_u8_t            hna_ttl;
-  struct hna_net_addr  *hna_net;
-};
-
-
-/*
  *MID messages - format:
  *
  *ADDR
@@ -166,8 +137,5 @@ olsr_build_tc_packet(struct tc_message *);
 
 void
 olsr_free_mid_packet(struct mid_message *);
-
-void
-olsr_free_hna_packet(struct hna_message *);
 
 #endif

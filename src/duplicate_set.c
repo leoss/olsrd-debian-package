@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,20 +36,16 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: duplicate_set.c,v 1.16 2007/09/17 22:24:22 bernd67 Exp $
  */
 
-
-
-#include "defs.h"
+#include "ipcalc.h"
 #include "duplicate_set.h"
 #include "scheduler.h"
 #include "olsr.h"
+#include "net_olsr.h"
 
 /* The duplicate table */
 static struct dup_entry dup_set[HASHSIZE];
-
-static float dup_hold_time = DUP_HOLD_TIME;
 
 /**
  *Initialize the duplicate table entrys
@@ -66,7 +62,7 @@ olsr_init_duplicate_table(void)
   /* Since the holdingtime is rather large for duplicate
    * entries the timeoutfunction is only ran every 2 seconds
    */
-  olsr_register_scheduler_event_dijkstra(&olsr_time_out_duplicate_table, NULL, 2, 0, NULL);
+  olsr_register_scheduler_event_dijkstra(&olsr_time_out_duplicate_table, NULL, 2.0, 0.0, NULL);
   
   for(i = 0; i < HASHSIZE; i++)
     {
@@ -85,8 +81,8 @@ olsr_init_duplicate_table(void)
  *
  *@return positive on success
  */
-struct dup_entry *
-olsr_add_dup_entry(union olsr_ip_addr *originator, olsr_u16_t seqno)
+static struct dup_entry *
+olsr_add_dup_entry(const union olsr_ip_addr *originator, const olsr_u16_t seqno)
 {
   olsr_u32_t hash;
   struct dup_entry *new_dup_entry;
@@ -98,11 +94,11 @@ olsr_add_dup_entry(union olsr_ip_addr *originator, olsr_u16_t seqno)
   new_dup_entry = olsr_malloc(sizeof(struct dup_entry), "New dup entry");
 
   /* Address */
-  COPY_IP(&new_dup_entry->addr, originator);
+  new_dup_entry->addr = *originator;
   /* Seqno */
   new_dup_entry->seqno = seqno;
   /* Set timer */
-  new_dup_entry->timer = GET_TIMESTAMP(dup_hold_time*1000);
+  new_dup_entry->timer = GET_TIMESTAMP(DUP_HOLD_TIME*1000);
   /* Interfaces */
   new_dup_entry->ifaces = NULL;
   /* Forwarded */
@@ -125,7 +121,7 @@ olsr_add_dup_entry(union olsr_ip_addr *originator, olsr_u16_t seqno)
  *
  */
 int
-olsr_check_dup_table_proc(union olsr_ip_addr *originator, olsr_u16_t seqno)
+olsr_check_dup_table_proc(const union olsr_ip_addr *originator, const olsr_u16_t seqno)
 {
   olsr_u32_t hash;
   struct dup_entry *tmp_dup_table;
@@ -138,7 +134,7 @@ olsr_check_dup_table_proc(union olsr_ip_addr *originator, olsr_u16_t seqno)
       tmp_dup_table != &dup_set[hash];
       tmp_dup_table = tmp_dup_table->next)
     {
-      if(COMP_IP(&tmp_dup_table->addr, originator) &&
+      if(ipequal(&tmp_dup_table->addr, originator) &&
 	 (tmp_dup_table->seqno == seqno))
 	{
 	  return 0;
@@ -149,15 +145,14 @@ olsr_check_dup_table_proc(union olsr_ip_addr *originator, olsr_u16_t seqno)
 }
 
 
-
 /**
  * Check wether or not a message should be forwarded
  *
  */
 int
-olsr_check_dup_table_fwd(union olsr_ip_addr *originator, 
-		     olsr_u16_t seqno,
-		     union olsr_ip_addr *int_addr)
+olsr_check_dup_table_fwd(const union olsr_ip_addr *originator, 
+                         const olsr_u16_t seqno,
+                         const union olsr_ip_addr *int_addr)
 {
   olsr_u32_t hash;
   struct dup_entry *tmp_dup_table;
@@ -170,7 +165,7 @@ olsr_check_dup_table_fwd(union olsr_ip_addr *originator,
       tmp_dup_table != &dup_set[hash];
       tmp_dup_table = tmp_dup_table->next)
     {
-      if(COMP_IP(&tmp_dup_table->addr, originator) &&
+      if(ipequal(&tmp_dup_table->addr, originator) &&
 	 (tmp_dup_table->seqno == seqno))
 	{
 	  struct dup_iface *tmp_dup_iface;
@@ -181,7 +176,7 @@ olsr_check_dup_table_fwd(union olsr_ip_addr *originator,
 	  tmp_dup_iface = tmp_dup_table->ifaces;
 	  while(tmp_dup_iface)
 	    {
-	      if(COMP_IP(&tmp_dup_iface->addr, int_addr))
+	      if(ipequal(&tmp_dup_iface->addr, int_addr))
 		return 0;
 	      
 	      tmp_dup_iface = tmp_dup_iface->next;
@@ -192,8 +187,6 @@ olsr_check_dup_table_fwd(union olsr_ip_addr *originator,
 
   return 1;
 }
-
-
 
 
 /**
@@ -240,8 +233,11 @@ olsr_time_out_duplicate_table(void *foo __attribute__((unused)))
 	    {
 	      struct dup_entry *entry_to_delete = tmp_dup_table;
 #ifdef DEBUG
+#ifndef NODEBUG
+              struct ipaddr_str buf;
+#endif
 	      OLSR_PRINTF(5, "DUP TIMEOUT[%s] s: %d\n", 
-		          olsr_ip_to_string(&tmp_dup_table->addr),
+		          olsr_ip_to_string(&buf, &tmp_dup_table->addr),
 		          tmp_dup_table->seqno);
 #endif
 	      tmp_dup_table = tmp_dup_table->next;
@@ -256,12 +252,10 @@ olsr_time_out_duplicate_table(void *foo __attribute__((unused)))
 }
 
 
-
-
 int
-olsr_update_dup_entry(union olsr_ip_addr *originator, 
-		      olsr_u16_t seqno, 
-		      union olsr_ip_addr *iface)
+olsr_update_dup_entry(const union olsr_ip_addr *originator, 
+		      const olsr_u16_t seqno, 
+		      const union olsr_ip_addr *iface)
 {
   olsr_u32_t hash;
   struct dup_entry *tmp_dup_table;
@@ -276,7 +270,7 @@ olsr_update_dup_entry(union olsr_ip_addr *originator,
       tmp_dup_table != &dup_set[hash];
       tmp_dup_table = tmp_dup_table->next)
     {
-      if(COMP_IP(&tmp_dup_table->addr, originator) &&
+      if(ipequal(&tmp_dup_table->addr, originator) &&
 	 (tmp_dup_table->seqno == seqno))
 	{
 	  break;
@@ -292,23 +286,23 @@ olsr_update_dup_entry(union olsr_ip_addr *originator,
   
   new_iface = olsr_malloc(sizeof(struct dup_iface), "New dup iface");
 
-  COPY_IP(&new_iface->addr, iface);
+  new_iface->addr = *iface;
   new_iface->next = tmp_dup_table->ifaces;
   tmp_dup_table->ifaces = new_iface;
   
   /* Set timer */
-  tmp_dup_table->timer = GET_TIMESTAMP(dup_hold_time*1000);
+  tmp_dup_table->timer = GET_TIMESTAMP(DUP_HOLD_TIME*1000);
   
   return 1;
 }
 
-
-
-
 int
-olsr_set_dup_forward(union olsr_ip_addr *originator, 
-		     olsr_u16_t seqno)
+olsr_set_dup_forward(const union olsr_ip_addr *originator, 
+		     const olsr_u16_t seqno)
 {
+#if !defined(NODEBUG) && defined(DEBUG)
+  struct ipaddr_str buf;
+#endif
   olsr_u32_t hash;
   struct dup_entry *tmp_dup_table;
 
@@ -320,7 +314,7 @@ olsr_set_dup_forward(union olsr_ip_addr *originator,
       tmp_dup_table != &dup_set[hash];
       tmp_dup_table = tmp_dup_table->next)
     {
-      if(COMP_IP(&tmp_dup_table->addr, originator) &&
+      if(ipequal(&tmp_dup_table->addr, originator) &&
 	 (tmp_dup_table->seqno == seqno))
 	{
 	  break;
@@ -332,14 +326,14 @@ olsr_set_dup_forward(union olsr_ip_addr *originator,
     return 0;
   
 #ifdef DEBUG
-  OLSR_PRINTF(3, "Setting DUP %s/%d forwarded\n", olsr_ip_to_string(&tmp_dup_table->addr), seqno);
+  OLSR_PRINTF(3, "Setting DUP %s/%d forwarded\n", olsr_ip_to_string(&buf, &tmp_dup_table->addr), seqno);
 #endif
 
   /* Set forwarded */
   tmp_dup_table->forwarded = 1;
   
   /* Set timer */
-  tmp_dup_table->timer = GET_TIMESTAMP(dup_hold_time*1000);
+  tmp_dup_table->timer = GET_TIMESTAMP(DUP_HOLD_TIME*1000);
   
   return 1;
 }
@@ -358,8 +352,9 @@ olsr_print_duplicate_table(void)
       //printf("Timeout %d %d\n", i, j);
       while(tmp_dup_table != &dup_set[i])
 	{
-	  printf("[%s] s: %d\n", 
-		 olsr_ip_to_string(&tmp_dup_table->addr),
+          struct ipaddr_str buf;
+          printf("[%s] s: %d\n", 
+		 olsr_ip_to_string(&buf, &tmp_dup_table->addr),
 		 tmp_dup_table->seqno);
 	  tmp_dup_table = tmp_dup_table->next;
 	}

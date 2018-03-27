@@ -37,7 +37,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: lib.c,v 1.2 2005/04/12 19:57:26 tlopatic Exp $
  */
 
 #include "link.h"
@@ -54,7 +53,7 @@
 
 static unsigned int debugMask = 0;
 
-void error(char *form, ...)
+void error(const char *form, ...)
 {
   va_list args;
 
@@ -63,7 +62,7 @@ void error(char *form, ...)
   va_end(args);
 }
 
-void debug(int facility, char *form, ...)
+void debug(int facility, const char *form, ...)
 {
   va_list args;
 

@@ -37,7 +37,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: glua_ext.c,v 1.3 2005/04/13 22:53:13 tlopatic Exp $
  */
 
 #include "lua/lua.h"
@@ -174,7 +173,7 @@ static void addSubTable(lua_State *lua, char **walker)
   }
 }
 
-static void addTable(lua_State *lua, char *name, void (*init)(void),
+static void addTable(lua_State *lua, const char *name, void (*init)(void),
                      int (*next)(char *buff, int len))
 {
   int i;

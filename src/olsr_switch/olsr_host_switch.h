@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2005, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2005, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: olsr_host_switch.h,v 1.10 2007/08/02 10:20:25 bernd67 Exp $
  */
 
 #ifndef _OLSR_HOST_SWITCH
@@ -50,12 +49,7 @@
 
 #define OHS_DEFAULT_OLSRD_PATH "./olsrd"
 
-#define OHS_OUT_OF_MEMORY(s) \
- { printf("ohsd: out of memory \"%s\"!\n", s); ohs_close(0);}
-
-#define COMP_IP(ip1, ip2) (!memcmp(ip1, ip2, ipsize))
-
-#define COPY_IP(to, from) memcpy(to, from, ipsize)
+#define OHS_OUT_OF_MEMORY(s) do { printf("ohsd: out of memory \"%s\"!\n", s); ohs_close(0); } while (0)
 
 #ifdef WIN32
 #define close(x) closesocket(x)
@@ -82,8 +76,6 @@ struct ohs_connection
   struct ohs_connection  *next;
 };
 
-extern int ipsize;
-
 extern olsr_u32_t logbits;
 
 extern struct ohs_connection *ohs_conns;
@@ -101,11 +93,8 @@ void
 ohs_close(int);
 #endif
 
-const char *
-olsr_ip_to_string(const union olsr_ip_addr *);
-
 struct ohs_connection *
-get_client_by_addr(union olsr_ip_addr *);
+get_client_by_addr(const union olsr_ip_addr *);
 
 int
 ohs_delete_connection(struct ohs_connection *);

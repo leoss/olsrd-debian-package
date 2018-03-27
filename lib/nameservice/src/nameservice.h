@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2005, Bruno Randolf <bruno.randolf@4g-systems.biz>
- * Copyright (c) 2004, Andreas Tønnesen(andreto-at-olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto-at-olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -29,7 +29,6 @@
  *
  */
 
-/* $Id: nameservice.h,v 1.14 2007/10/05 20:24:47 bernd67 Exp $ */
  
 /*
  * Dynamic linked library for UniK OLSRd
@@ -47,6 +46,8 @@
 
 #include "olsrd_plugin.h"
 #include "nameservice_msg.h"
+#include "hashing.h"
+#include "mapwrite.h"
 
 #define PLUGIN_NAME	"OLSRD nameservice plugin"
 #define PLUGIN_VERSION	"0.3"
@@ -67,6 +68,10 @@
 #define MAX_NAME 127
 #define MAX_FILE 255
 #define MAX_SUFFIX 63
+
+#define MID_ENTRIES 1
+#define MID_MAXLEN 16
+#define MID_PREFIX "mid%i."
 
 /**
  * a linked list of name_entry
@@ -103,6 +108,9 @@ struct db_entry
 	struct db_entry		*next;		/* linked list */
 };
 
+extern struct name_entry *my_names;
+extern struct db_entry* latlon_list[HASHSIZE];
+extern float my_lat, my_lon;
 
 /* Timeout function to register with the sceduler */
 void
@@ -138,7 +146,7 @@ void
 insert_new_name_in_list(union olsr_ip_addr *originator, struct db_entry **this_list, struct name *from_packet, olsr_bool *this_table_changed, double vtime);
 
 olsr_bool
-allowed_hostname_or_ip_in_service(char *service_line, regmatch_t *hostname_or_ip);
+allowed_hostname_or_ip_in_service(const char *service_line, const regmatch_t *hostname_or_ip);
 
 void
 update_name_entry(union olsr_ip_addr *, struct namemsg *, int, double);
@@ -159,22 +167,22 @@ void
 free_name_entry_list(struct name_entry **list);
 
 olsr_bool
-allowed_ip(union olsr_ip_addr *addr);
+allowed_ip(const union olsr_ip_addr *addr);
 
 olsr_bool
-allowed_service(char *service_line);
+allowed_service(const char *service_line);
 
 olsr_bool
-is_name_wellformed(char *service_line);
+is_name_wellformed(const char *service_line);
 
 olsr_bool
-is_service_wellformed(char *service_line);
+is_service_wellformed(const char *service_line);
 
 olsr_bool
-is_service_wellformed(char *service_line);
+is_service_wellformed(const char *service_line);
 
 olsr_bool
-is_latlon_wellformed(char *latlon_line);
+is_latlon_wellformed(const char *latlon_line);
 
 olsr_bool
 get_isdefhna_latlon(void);
@@ -182,7 +190,7 @@ get_isdefhna_latlon(void);
 void
 lookup_defhna_latlon(union olsr_ip_addr *ip);
 
-char*
+const char*
 lookup_name_latlon(union olsr_ip_addr *ip);
 
 void

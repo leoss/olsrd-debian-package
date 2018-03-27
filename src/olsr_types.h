@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +36,6 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: olsr_types.h,v 1.9 2007/09/05 16:11:11 bernd67 Exp $
  */
 
 /*
@@ -48,67 +47,52 @@
 #define	_OLSR_TYPES_H
 
 /* types */
-#include <sys/types.h>
+#ifdef _MSC_VER
+typedef unsigned char   uint8_t;
+typedef unsigned short  uint16_t;
+typedef unsigned int    uint32_t;
+typedef char            int8_t;
+typedef short           int16_t;
+typedef int             int32_t;
+#else
+#include <inttypes.h>
+#endif
+
 
 typedef enum {
     OLSR_FALSE = 0,
     OLSR_TRUE
 } olsr_bool;
 
-#if defined linux || defined __MacOSX__
+#if defined linux || defined __MacOSX__ || defined WIN32 || defined __FreeBSD__ || defined __NetBSD__ || defined __OpenBSD__
 
-typedef u_int8_t        olsr_u8_t;
-typedef u_int16_t       olsr_u16_t;
-typedef u_int32_t       olsr_u32_t;
+typedef uint8_t         olsr_u8_t;
+typedef uint16_t        olsr_u16_t;
+typedef uint32_t        olsr_u32_t;
 typedef int8_t          olsr_8_t;
 typedef int16_t         olsr_16_t;
 typedef int32_t         olsr_32_t;
-
-#elif defined __FreeBSD__ || defined __NetBSD__ || defined __OpenBSD__
-
-typedef	uint8_t		olsr_u8_t;
-typedef uint16_t       	olsr_u16_t;
-typedef uint32_t       	olsr_u32_t;
-typedef int8_t          olsr_8_t;
-typedef int16_t         olsr_16_t;
-typedef int32_t         olsr_32_t;
-
-#elif defined WIN32
-
-typedef unsigned char   olsr_u8_t;
-typedef unsigned short  olsr_u16_t;
-typedef unsigned int    olsr_u32_t;
-typedef char            olsr_8_t;
-typedef short           olsr_16_t;
-typedef int             olsr_32_t;
 
 #else
 #       error "Unsupported system"
 #endif
 
+/* OpenBSD wants this here */
+#include <sys/types.h>
 /* IPv6 address format in6_addr */
+#ifndef _MSC_VER
 #include <netinet/in.h>
+#endif
 
-union olsr_ip_addr
-{
-  /*
+
+union olsr_ip_addr {
   struct in_addr v4;
-  */
-  olsr_u32_t v4;
   struct in6_addr v6;
 };
 
-struct olsr_ip_prefix
-{
+struct olsr_ip_prefix {
   union olsr_ip_addr prefix;
   olsr_u8_t prefix_len;
 };
-
-union hna_netmask
-{
-  olsr_u32_t v4;
-  olsr_u16_t v6;
-};
-
 
 #endif

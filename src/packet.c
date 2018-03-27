@@ -1,6 +1,6 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas TÃ¸nnesen(andreto@olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,10 +36,10 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: packet.c,v 1.23 2007/08/02 22:07:19 bernd67 Exp $
  */
 
 
+#include "ipcalc.h"
 #include "defs.h"
 #include "link_set.h"
 #include "mpr_selector_set.h"
@@ -47,6 +47,7 @@
 #include "olsr.h"
 #include "neighbor_table.h"
 #include "build_msg.h"
+#include "net_olsr.h"
 
 static olsr_bool sending_tc = OLSR_FALSE;
 
@@ -60,19 +61,17 @@ static olsr_bool sending_tc = OLSR_FALSE;
 void
 olsr_free_hello_packet(struct hello_message *message)
 {
-  struct hello_neighbor *nb, *prev_nb;
+  struct hello_neighbor *nb;
 
   if(!message)
     return;
   
   nb = message->neighbors;
-  
-  while (nb)
-    {
-      prev_nb = nb;
-      nb = nb->next;
-      free(prev_nb);
-    }
+  while (nb) {
+    struct hello_neighbor *prev_nb = nb;
+    nb = nb->next;
+    free(prev_nb);
+  }
 }
 
 /**
@@ -93,7 +92,7 @@ olsr_build_hello_packet(struct hello_message *message, struct interface *outif)
   int                     idx;
 
 #ifdef DEBUG
-  OLSR_PRINTF(3, "\tBuilding HELLO on interface %d\n", outif->if_nr);
+  OLSR_PRINTF(3, "\tBuilding HELLO on interface \"%s\"\n", outif->int_name ? outif->int_name : "<null>");
 #endif
 
   message->neighbors=NULL;
@@ -111,7 +110,7 @@ olsr_build_hello_packet(struct hello_message *message, struct interface *outif)
   /* Set TTL */
 
   message->ttl = 1;  
-  COPY_IP(&message->source_addr, &olsr_cnf->main_addr);
+  message->source_addr = olsr_cnf->main_addr;
 
 #ifdef DEBUG
   OLSR_PRINTF(5, "On link:\n");
@@ -122,11 +121,14 @@ olsr_build_hello_packet(struct hello_message *message, struct interface *outif)
 
   while(links != NULL)
     {      
+#if !defined(NODEBUG) && defined(DEBUG)
+      struct ipaddr_str buf;
+#endif
       int lnk = lookup_link_status(links);
       /* Update the status */
       
       /* Check if this link tuple is registered on the outgoing interface */
-      if(!COMP_IP(&links->local_iface_addr, &outif->ip_addr))
+      if(!ipequal(&links->local_iface_addr, &outif->ip_addr))
 	{
 	  links = links->next;
 	  continue;
@@ -186,13 +188,12 @@ olsr_build_hello_packet(struct hello_message *message, struct interface *outif)
 	}
   
       /* Set the remote interface address */
-      COPY_IP(&message_neighbor->address, &links->neighbor_iface_addr);
+      message_neighbor->address = links->neighbor_iface_addr;
       
       /* Set the main address */
-      COPY_IP(&message_neighbor->main_address, &links->neighbor->neighbor_main_addr);
+      message_neighbor->main_address = links->neighbor->neighbor_main_addr;
 #ifdef DEBUG
-      OLSR_PRINTF(5, "Added: %s - ", olsr_ip_to_string(&message_neighbor->address));
-      OLSR_PRINTF(5, " status %d\n", message_neighbor->status);
+      OLSR_PRINTF(5, "Added: %s -  status %d\n", olsr_ip_to_string(&buf, &message_neighbor->address), message_neighbor->status);
 #endif
       message_neighbor->next=message->neighbors;
       message->neighbors=message_neighbor;	    
@@ -217,12 +218,15 @@ olsr_build_hello_packet(struct hello_message *message, struct interface *outif)
 	    neighbor != &neighbortable[idx];
 	    neighbor=neighbor->next)
 	  {
+#if !defined(NODEBUG) && defined(DEBUG)
+            struct ipaddr_str buf;
+#endif
 	    /* Check that the neighbor is not added yet */
 	    tmp_neigh = message->neighbors;
 	    //printf("Checking that the neighbor is not yet added\n");
 	    while(tmp_neigh)
 	      {
-		if(COMP_IP(&tmp_neigh->main_address, &neighbor->neighbor_main_addr))
+		if(ipequal(&tmp_neigh->main_address, &neighbor->neighbor_main_addr))
 		  {
 		    //printf("Not adding duplicate neighbor %s\n", olsr_ip_to_string(&neighbor->neighbor_main_addr));
 		    break;
@@ -285,12 +289,11 @@ olsr_build_hello_packet(struct hello_message *message, struct interface *outif)
 	      }
 	    
 
-	    COPY_IP(&message_neighbor->address, &neighbor->neighbor_main_addr);
+	    message_neighbor->address = neighbor->neighbor_main_addr;
 
-	    COPY_IP(&message_neighbor->main_address, &neighbor->neighbor_main_addr);
+	    message_neighbor->main_address = neighbor->neighbor_main_addr;
 #ifdef DEBUG
-	    OLSR_PRINTF(5, "Added: %s - ", olsr_ip_to_string(&message_neighbor->address));
-	    OLSR_PRINTF(5, " status  %d\n", message_neighbor->status);
+	    OLSR_PRINTF(5, "Added: %s -  status  %d\n", olsr_ip_to_string(&buf, &message_neighbor->address), message_neighbor->status);
 #endif
 	    message_neighbor->next=message->neighbors;
 	    message->neighbors=message_neighbor;	    
@@ -312,19 +315,17 @@ olsr_build_hello_packet(struct hello_message *message, struct interface *outif)
 void 
 olsr_free_tc_packet(struct tc_message *message)
 {
-  struct tc_mpr_addr *mprs, *prev_mprs;
+  struct tc_mpr_addr *mprs;
 
   if(!message)
     return;
 
   mprs = message->multipoint_relay_selector_address;
-  
-  while (mprs)
-    {
-      prev_mprs = mprs;
-      mprs = mprs->next;
-      free(prev_mprs);
-    }
+  while (mprs != NULL) {
+    struct tc_mpr_addr *prev_mprs = mprs;
+    mprs = mprs->next;
+    free(prev_mprs);
+  }
 }
 
 /**
@@ -351,8 +352,8 @@ olsr_build_tc_packet(struct tc_message *message)
   message->ttl = MAX_TTL;
   message->ansn = get_local_ansn();
 
-  COPY_IP(&message->originator, &olsr_cnf->main_addr);
-  COPY_IP(&message->source_addr, &olsr_cnf->main_addr);
+  message->originator = olsr_cnf->main_addr;
+  message->source_addr = olsr_cnf->main_addr;
   
 
   /* Loop trough all neighbors */  
@@ -373,7 +374,7 @@ olsr_build_tc_packet(struct tc_message *message)
 		//printf("\t%s\n", olsr_ip_to_string(&mprs->mpr_selector_addr));
 		message_mpr = olsr_malloc(sizeof(struct tc_mpr_addr), "Build TC");
 		
-		COPY_IP(&message_mpr->address, &entry->neighbor_main_addr);
+		message_mpr->address = entry->neighbor_main_addr;
 		message_mpr->next = message->multipoint_relay_selector_address;
 		message->multipoint_relay_selector_address = message_mpr;
 		entry_added = OLSR_TRUE;
@@ -389,7 +390,7 @@ olsr_build_tc_packet(struct tc_message *message)
 		    //printf("\t%s\n", olsr_ip_to_string(&mprs->mpr_selector_addr));
 		    message_mpr = olsr_malloc(sizeof(struct tc_mpr_addr), "Build TC 2");
 		    
-		    COPY_IP(&message_mpr->address, &entry->neighbor_main_addr);
+		    message_mpr->address = entry->neighbor_main_addr;
 		    message_mpr->next = message->multipoint_relay_selector_address;
 		    message->multipoint_relay_selector_address = message_mpr;
 		    entry_added = OLSR_TRUE;
@@ -404,7 +405,7 @@ olsr_build_tc_packet(struct tc_message *message)
 		    //printf("\t%s\n", olsr_ip_to_string(&mprs->mpr_selector_addr));
 		    message_mpr = olsr_malloc(sizeof(struct tc_mpr_addr), "Build TC 3");
 		    
-		    COPY_IP(&message_mpr->address, &entry->neighbor_main_addr);
+		    message_mpr->address = entry->neighbor_main_addr;
 		    message_mpr->next = message->multipoint_relay_selector_address;
 		    message->multipoint_relay_selector_address = message_mpr;
 		    entry_added = OLSR_TRUE;
@@ -435,32 +436,6 @@ olsr_build_tc_packet(struct tc_message *message)
 
   return 0;
 }
-
-
-/**
- *Free the memory allocated for a HNA packet.
- *
- *@param message the pointer to the packet to erase
- *
- *@return nada
- */
-
-void
-olsr_free_hna_packet(struct hna_message *message)
-{
-  struct hna_net_addr  *hna_tmp, *hna_tmp2;
-
-  hna_tmp = message->hna_net;
-
-  while(hna_tmp)
-    {
-      hna_tmp2 = hna_tmp;
-      hna_tmp = hna_tmp->next;
-      free(hna_tmp2);
-    }
-}
-
-
 
 /**
  *Free the memory allocated for a MID packet.
