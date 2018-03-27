@@ -203,7 +203,7 @@ chk_if_changed(struct olsr_if *iface)
     goto remove_interface;
   }
 
-  ifp->is_hcif = OLSR_FALSE;
+  ifp->is_hcif = false;
 
   /* trying to detect if interface is wireless. */
   ifp->is_wireless = check_wireless_interface(ifr.ifr_name);
@@ -260,12 +260,14 @@ chk_if_changed(struct olsr_if *iface)
       OLSR_PRINTF(1, "\tOld: %s\n", ip6_to_string(&buf, &ifp->int6_addr.sin6_addr));
       OLSR_PRINTF(1, "\tNew: %s\n", ip6_to_string(&buf, &tmp_saddr6.sin6_addr));
 
+      /* deactivated to prevent change of originator IP */
+#if 0
       /* Check main addr */
       if (memcmp(&olsr_cnf->main_addr, &tmp_saddr6.sin6_addr, olsr_cnf->ipsize) == 0) {
         /* Update main addr */
         memcpy(&olsr_cnf->main_addr, &tmp_saddr6.sin6_addr, olsr_cnf->ipsize);
       }
-
+#endif
       /* Update address */
       memcpy(&ifp->int6_addr.sin6_addr, &tmp_saddr6.sin6_addr, olsr_cnf->ipsize);
       memcpy(&ifp->ip_addr, &tmp_saddr6.sin6_addr, olsr_cnf->ipsize);
@@ -298,13 +300,14 @@ chk_if_changed(struct olsr_if *iface)
       OLSR_PRINTF(1, "\tNew:%s\n", sockaddr4_to_string(&buf, &ifr.ifr_addr));
 
       ifp->int_addr = *(struct sockaddr_in *)&ifr.ifr_addr;
-
+      /* deactivated to prevent change of originator IP */
+#if 0
       if (memcmp(&olsr_cnf->main_addr, &ifp->ip_addr, olsr_cnf->ipsize) == 0) {
         OLSR_PRINTF(1, "New main address: %s\n", sockaddr4_to_string(&buf, &ifr.ifr_addr));
         olsr_syslog(OLSR_LOG_INFO, "New main address: %s\n", sockaddr4_to_string(&buf, &ifr.ifr_addr));
         memcpy(&olsr_cnf->main_addr, &((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr.s_addr, olsr_cnf->ipsize);
       }
-
+#endif
       memcpy(&ifp->ip_addr, &((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr.s_addr, olsr_cnf->ipsize);
 
       if_changes = 1;
@@ -387,6 +390,8 @@ remove_interface:
   net_remove_buffer(ifp);
 
   /* Check main addr */
+  /* deactivated to prevent change of originator IP */
+#if 0
   if (ipequal(&olsr_cnf->main_addr, &ifp->ip_addr)) {
     if (ifnet == NULL) {
       /* No more interfaces */
@@ -399,7 +404,7 @@ remove_interface:
       olsr_syslog(OLSR_LOG_INFO, "New main address: %s\n", olsr_ip_to_string(&buf, &olsr_cnf->main_addr));
     }
   }
-
+#endif
   /*
    * Deregister functions for periodic message generation
    */
@@ -438,7 +443,7 @@ add_hemu_if(struct olsr_if *iface)
 {
   struct interface *ifp;
   union olsr_ip_addr null_addr;
-  olsr_u32_t addr[4];
+  uint32_t addr[4];
   struct ipaddr_str buf;
   size_t name_size;
 
@@ -449,11 +454,11 @@ add_hemu_if(struct olsr_if *iface)
 
   memset(ifp, 0, sizeof(struct interface));
 
-  iface->configured = OLSR_TRUE;
+  iface->configured = true;
   iface->interf = ifp;
 
   name_size = strlen("hcif01") + 1;
-  ifp->is_hcif = OLSR_TRUE;
+  ifp->is_hcif = true;
   ifp->int_name = olsr_malloc(name_size, "Interface update 3");
   ifp->int_metric = 0;
 
@@ -647,7 +652,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
     return 0;
   }
 
-  ifs.is_hcif = OLSR_FALSE;
+  ifs.is_hcif = false;
 
   /* trying to detect if interface is wireless. */
   ifs.is_wireless = check_wireless_interface(ifr.ifr_name);
@@ -677,7 +682,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
     ifs.int6_multaddr.sin6_family = AF_INET6;
     ifs.int6_multaddr.sin6_flowinfo = htonl(0);
     ifs.int6_multaddr.sin6_scope_id = if_nametoindex(ifr.ifr_name);
-    ifs.int6_multaddr.sin6_port = htons(OLSRPORT);
+    ifs.int6_multaddr.sin6_port = htons(olsr_cnf->olsrport);
     ifs.int6_multaddr.sin6_addr =
       (iface->cnf->ipv6_addrtype == IPV6_ADDR_SITELOCAL) ? iface->cnf->ipv6_multi_site.v6 : iface->cnf->ipv6_multi_glbl.v6;
 
@@ -710,7 +715,7 @@ chk_if_up(struct olsr_if *iface, int debuglvl __attribute__ ((unused)))
     /* Find broadcast address */
     if (iface->cnf->ipv4_broadcast.v4.s_addr) {
       /* Specified broadcast */
-      memcpy(&((struct sockaddr_in *)&ifs.int_broadaddr)->sin_addr.s_addr, &iface->cnf->ipv4_broadcast.v4, sizeof(olsr_u32_t));
+      memcpy(&((struct sockaddr_in *)&ifs.int_broadaddr)->sin_addr.s_addr, &iface->cnf->ipv4_broadcast.v4, sizeof(uint32_t));
     } else {
       /* Autodetect */
       if (ioctl(olsr_cnf->ioctl_s, SIOCGIFBRDADDR, &ifr) < 0) {

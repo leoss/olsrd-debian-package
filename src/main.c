@@ -62,6 +62,7 @@
 #include <linux/types.h>
 #include <linux/rtnetlink.h>
 #include <fcntl.h>
+#include "kernel_routes.h"
 #endif
 
 #ifdef WIN32
@@ -69,8 +70,8 @@
 int __stdcall SignalHandler(unsigned long signal) __attribute__ ((noreturn));
 void ListInterfaces(void);
 void DisableIcmpRedirects(void);
-olsr_bool olsr_win32_end_request = OLSR_FALSE;
-olsr_bool olsr_win32_end_flag = OLSR_FALSE;
+bool olsr_win32_end_request = false;
+bool olsr_win32_end_flag = false;
 #else
 static void olsr_shutdown(int) __attribute__ ((noreturn));
 #endif
@@ -109,12 +110,12 @@ main(int argc, char *argv[])
 #endif
 
   /* paranoia checks */
-  assert(sizeof(olsr_u8_t) == 1);
-  assert(sizeof(olsr_u16_t) == 2);
-  assert(sizeof(olsr_u32_t) == 4);
-  assert(sizeof(olsr_8_t) == 1);
-  assert(sizeof(olsr_16_t) == 2);
-  assert(sizeof(olsr_32_t) == 4);
+  assert(sizeof(uint8_t) == 1);
+  assert(sizeof(uint16_t) == 2);
+  assert(sizeof(uint32_t) == 4);
+  assert(sizeof(int8_t) == 1);
+  assert(sizeof(int16_t) == 2);
+  assert(sizeof(int32_t) == 4);
 
   debug_handle = stdout;
 #ifndef WIN32
@@ -143,6 +144,18 @@ main(int argc, char *argv[])
 
   /* Grab initial timestamp */
   now_times = olsr_times();
+  if ((clock_t)-1 == now_times) {
+    const char * const err_msg = strerror(errno);
+    olsr_syslog(OLSR_LOG_ERR, "Error in times(): %s, sleeping for a second", err_msg);
+    OLSR_PRINTF(1, "Error in times(): %s, sleeping for a second", err_msg);
+    sleep(1);
+    now_times = olsr_times();
+    if ((clock_t)-1 == now_times) {
+      olsr_syslog(OLSR_LOG_ERR, "Shutting down because times() does not work");
+      fprintf(stderr, "Shutting down because times() does not work\n");
+      exit(EXIT_FAILURE);
+    }
+  }
 
   printf("\n *** %s ***\n Build date: %s on %s\n http://www.olsr.org\n\n", olsrd_version, build_date, build_host);
 
@@ -320,6 +333,13 @@ main(int argc, char *argv[])
   /* Initialize net */
   init_net();
 
+#if LINUX_POLICY_ROUTING
+  /* Create rule for RtTable to resolve route insertion problems*/
+  if ( ( olsr_cnf->rttable < 253) & ( olsr_cnf->rttable > 0 ) ) {
+    olsr_netlink_rule(olsr_cnf->ip_version, olsr_cnf->rttable, RTM_NEWRULE);
+  }
+#endif
+
   /* Initializing networkinterfaces */
   if (!ifinit()) {
     if (olsr_cnf->allow_no_interfaces) {
@@ -374,7 +394,7 @@ main(int argc, char *argv[])
   /* ctrl-C and friends */
 #ifdef WIN32
 #ifndef WINCE
-  SetConsoleCtrlHandler(SignalHandler, OLSR_TRUE);
+  SetConsoleCtrlHandler(SignalHandler, true);
 #endif
 #else
   signal(SIGHUP, olsr_reconfigure);
@@ -387,7 +407,7 @@ main(int argc, char *argv[])
   signal(SIGPIPE, SIG_IGN);
 #endif
 
-  link_changes = OLSR_FALSE;
+  link_changes = false;
 
   /* Starting scheduler */
   olsr_scheduler();
@@ -405,15 +425,32 @@ main(int argc, char *argv[])
 void
 olsr_reconfigure(int signal __attribute__ ((unused)))
 {
-  if (!fork()) {
-    /* New process */
-    sleep(3);
-    printf("Restarting %s\n", olsr_argv[0]);
-    execv(olsr_argv[0], olsr_argv);
+  /* if we are started with -nofork, we do not weant to go into the
+   * background here. So we can simply stop on -HUP
+   */
+  olsr_syslog(OLSR_LOG_INFO, "sot: olsr_reconfigure()\n");
+  if (!olsr_cnf->no_fork) {
+    if (!fork()) {
+      int i;
+      sigset_t sigs;
+      /* New process */
+      sleep(3);
+      sigemptyset(&sigs);
+      sigaddset(&sigs, SIGHUP);
+      sigprocmask(SIG_UNBLOCK, &sigs, NULL);
+      for (i = sysconf(_SC_OPEN_MAX); --i > STDERR_FILENO; ) {
+        close(i);
+      }
+      printf("Restarting %s\n", olsr_argv[0]);
+      olsr_syslog(OLSR_LOG_INFO, "Restarting %s\n", olsr_argv[0]);
+      execv(olsr_argv[0], olsr_argv);
+      olsr_syslog(OLSR_LOG_ERR, "execv(%s) fails: %s!\n", olsr_argv[0], strerror(errno));
+    }
+    else {
+      olsr_syslog(OLSR_LOG_INFO, "RECONFIGURING!\n");
+    }
   }
   olsr_shutdown(0);
-
-  printf("RECONFIGURING!\n");
 }
 #endif
 
@@ -468,6 +505,11 @@ olsr_shutdown(int signal __attribute__ ((unused)))
   close(olsr_cnf->ioctl_s);
 
 #if LINUX_POLICY_ROUTING
+  /* RtTable (linux only!!) */
+  if ( ( olsr_cnf->rttable < 253) & ( olsr_cnf->rttable > 0 ) ) {
+    olsr_netlink_rule(olsr_cnf->ip_version, olsr_cnf->rttable, RTM_DELRULE);
+  }
+
   close(olsr_cnf->rtnl_s);
 #endif
 
@@ -585,7 +627,7 @@ olsr_process_arguments(int argc, char *argv[], struct olsrd_config *cnf, struct 
         printf("Invalid broadcast address! %s\nSkipping it!\n", *argv);
         continue;
       }
-      memcpy(&ifcnf->ipv4_broadcast.v4, &in.s_addr, sizeof(olsr_u32_t));
+      memcpy(&ifcnf->ipv4_broadcast.v4, &in.s_addr, sizeof(uint32_t));
       continue;
     }
 
@@ -662,12 +704,12 @@ olsr_process_arguments(int argc, char *argv[], struct olsrd_config *cnf, struct 
         olsr_exit(__func__, EXIT_FAILURE);
       }
       printf("Queuing if %s\n", *argv);
-      queue_if(*argv, OLSR_FALSE);
+      queue_if(*argv, false);
 
       while ((argc - 1) && (argv[1][0] != '-')) {
         NEXT_ARG;
         printf("Queuing if %s\n", *argv);
-        queue_if(*argv, OLSR_FALSE);
+        queue_if(*argv, false);
       }
 
       continue;
@@ -734,7 +776,7 @@ olsr_process_arguments(int argc, char *argv[], struct olsrd_config *cnf, struct 
      * Should we display the contents of packages beeing sent?
      */
     if (strcmp(*argv, "-dispin") == 0) {
-      parser_set_disp_pack_in(OLSR_TRUE);
+      parser_set_disp_pack_in(true);
       continue;
     }
 
@@ -742,7 +784,7 @@ olsr_process_arguments(int argc, char *argv[], struct olsrd_config *cnf, struct 
      * Should we display the contents of incoming packages?
      */
     if (strcmp(*argv, "-dispout") == 0) {
-      net_set_disp_pack_out(OLSR_TRUE);
+      net_set_disp_pack_out(true);
       continue;
     }
 
@@ -786,15 +828,15 @@ olsr_process_arguments(int argc, char *argv[], struct olsrd_config *cnf, struct 
       }
       /* Add hemu interface */
 
-      ifa = queue_if("hcif01", OLSR_TRUE);
+      ifa = queue_if("hcif01", true);
 
       if (!ifa)
         continue;
 
       ifa->cnf = get_default_if_config();
-      ifa->host_emul = OLSR_TRUE;
+      ifa->host_emul = true;
       memcpy(&ifa->hemu_ip, &in, sizeof(union olsr_ip_addr));
-      cnf->host_emul = OLSR_TRUE;
+      cnf->host_emul = true;
 
       continue;
     }
@@ -803,12 +845,12 @@ olsr_process_arguments(int argc, char *argv[], struct olsrd_config *cnf, struct 
      * Delete possible default GWs
      */
     if (strcmp(*argv, "-delgw") == 0) {
-      olsr_cnf->del_gws = OLSR_TRUE;
+      olsr_cnf->del_gws = true;
       continue;
     }
 
     if (strcmp(*argv, "-nofork") == 0) {
-      cnf->no_fork = OLSR_TRUE;
+      cnf->no_fork = true;
       continue;
     }
 
@@ -818,18 +860,44 @@ olsr_process_arguments(int argc, char *argv[], struct olsrd_config *cnf, struct 
 }
 
 /*
- * a wrapper around times(2). times(2) has the problem, that it may return -1
- * in case of an err (e.g. EFAULT on the parameter) or immediately before an
- * overrun (though it is not en error) just because the jiffies (or whatever
- * the underlying kernel calls the smallest accountable time unit) are
- * inherently "unsigned" (and always incremented).
+ * A wrapper around times(2). Note, that this function has
+ * some portability problems, e.g. different operating systems
+ * and linux kernel versions may return values counted from
+ * an arbitrary point in time (mostly uptime, some count from
+ * the epoch. The linux man page therefore recommends not to
+ * use this function. On the other hand, this function has
+ * proved it's functions but some olsrd implementations does
+ * error handling in a clumsy way - thus inducing bugs...
+ * 
+ * Analysis of times() in different OSes:
+ * Linux: 
+ *   times() returns the number of clock ticks that have 
+ *   elapsed since an arbitrary point in the past.  The return 
+ *   value may overflow the possible range of type clock_t.   On
+ *     error, (clock_t) -1 is returned, and errno is set appropriately.
+ * 
+ * BSDs:  
+ *  The times() function returns the value of time in CLK_TCK's 
+ *  of a second since 0 hours, 0 minutes, 0 seconds, January 1, 
+ *  1970, Coordinated Universal Time.
+ * 
+ * Values for clock_t in different OSes:
+ *  OSX ............ unsigned long
+ *  linux .......... long int (signed !) 
+ *  win32 cygwin.... unsigned long
+ *  openBSD ........ int
+ * 
+ * We therefore need to be very very careful how to (portably)
+ * handle overflows!!
+ * This current commit does not solve the problem yet. 
+ * it merely documents the problems with times()
+ * 
  */
-unsigned long
+clock_t
 olsr_times(void)
 {
   struct tms tms_buf;
-  const long t = times(&tms_buf);
-  return t < 0 ? -errno : t;
+  return times(&tms_buf);
 }
 
 /*

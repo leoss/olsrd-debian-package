@@ -44,6 +44,7 @@
 #include "../ipcalc.h"
 #include "../parser.h"          /* dnc: needed for call to packet_parser() */
 #include "../olsr_protocol.h"
+#include "../olsr_cfg.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -370,7 +371,7 @@ getsocket(int bufspace, char *int_name __attribute__ ((unused)))
 
   memset(&sin, 0, sizeof(sin));
   sin.sin_family = AF_INET;
-  sin.sin_port = htons(OLSRPORT);
+  sin.sin_port = htons(olsr_cnf->olsrport);
   sin.sin_addr.s_addr = INADDR_ANY;
   if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
     perror("bind");
@@ -440,7 +441,7 @@ getsocket6(int bufspace, char *int_name __attribute__ ((unused)))
 
   memset(&sin, 0, sizeof(sin));
   sin.sin6_family = AF_INET6;
-  sin.sin6_port = htons(OLSRPORT);
+  sin.sin6_port = htons(olsr_cnf->olsrport);
   if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
     perror("bind");
     syslog(LOG_ERR, "bind: %m");
@@ -465,6 +466,9 @@ join_mcast(struct interface *ifs, int sock)
   /* See netinet6/in6.h */
   struct ipaddr_str addrstr;
   struct ipv6_mreq mcastreq;
+#ifdef IPV6_USE_MIN_MTU
+  int on;
+#endif
 
   mcastreq.ipv6mr_multiaddr = ifs->int6_multaddr.sin6_addr;
   mcastreq.ipv6mr_interface = ifs->if_index;
@@ -489,6 +493,19 @@ join_mcast(struct interface *ifs, int sock)
     perror("Set multicast if");
     return -1;
   }
+
+#ifdef IPV6_USE_MIN_MTU
+  /*
+   * This allow multicast packets to use the full interface MTU and not
+   * be limited to 1280 bytes.
+   */
+  on = 0;
+  if (setsockopt(sock, IPPROTO_IPV6, IPV6_USE_MIN_MTU, (char *)&on, sizeof(on)) < 0) {
+    perror("IPV6_USE_MIN_MTU failed");
+    close(sock);
+    return -1;
+  }
+#endif
 
   OLSR_PRINTF(3, "OK\n");
   return 0;
@@ -590,10 +607,10 @@ olsr_sendto(int s, const void *buf, size_t len, int flags __attribute__ ((unused
     ip_id = (u_int16_t) (arc4random() & 0xffff);
   }
 
-  udp_tag = libnet_build_udp(698,       /* src port */
-                             698,       /* dest port */
+  udp_tag = libnet_build_udp(olsr_cnf->olsrport,        /* src port */
+                             olsr_cnf->olsrport,        /* dest port */
                              LIBNET_UDP_H + len,        /* length */
-                             0, /* checksum */
+                             0,         /* checksum */
                              buf,       /* payload */
                              len,       /* payload size */
                              context,   /* context */

@@ -91,23 +91,26 @@
 #define WEIGHT_HIGH             4096    /* High                 */
 #define WEIGHT_HIGHEST          8192    /* Really high          */
 
+#define IF_MODE_MESH   	0
+#define IF_MODE_ETHER   1
+
 struct if_gen_property {
-  olsr_u32_t owner_id;
+  uint32_t owner_id;
   void *data;
   struct if_gen_property *next;
 };
 
 struct vtimes {
-  olsr_u8_t hello;
-  olsr_u8_t tc;
-  olsr_u8_t mid;
-  olsr_u8_t hna;
+  uint8_t hello;
+  uint8_t tc;
+  uint8_t mid;
+  uint8_t hna;
 };
 
 /* Output buffer structure. This should actually be in net_olsr.h but we have circular references then.
  */
 struct olsr_netbuf {
-  olsr_u8_t *buff;                     /* Pointer to the allocated buffer */
+  uint8_t *buff;                       /* Pointer to the allocated buffer */
   int bufsize;                         /* Size of the buffer */
   int maxsize;                         /* Max bytes of payload that can be added to the buffer */
   int pending;                         /* How much data is currently pending in the buffer */
@@ -123,6 +126,7 @@ struct interface {
   struct sockaddr_in int_addr;         /* address */
   struct sockaddr_in int_netmask;      /* netmask */
   struct sockaddr_in int_broadaddr;    /* broadcast address */
+  int mode;                            /* interface mode */
   /* IP version 6 */
   struct sockaddr_in6 int6_addr;       /* Address */
   struct sockaddr_in6 int6_multaddr;   /* Multicast */
@@ -138,7 +142,7 @@ struct interface {
   int if_index;                        /* Kernels index of this interface */
   int is_wireless;                     /* wireless interface or not */
   char *int_name;                      /* from kernel if structure */
-  olsr_u16_t olsr_seqnum;              /* Olsr message seqno */
+  uint16_t olsr_seqnum;                /* Olsr message seqno */
 
   /* Periodic message generation timers */
   struct timer_entry *hello_gen_timer;
@@ -166,7 +170,7 @@ struct interface {
 
   int ttl_index;                       /* index in TTL array for fish-eye */
 
-  olsr_bool immediate_send_tc;         /* Hello's are sent immediately normally, this flag prefers to send TC's */
+  bool immediate_send_tc;              /* Hello's are sent immediately normally, this flag prefers to send TC's */
 
   struct interface *int_next;
 };
