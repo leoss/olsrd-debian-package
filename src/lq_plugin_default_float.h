@@ -38,20 +38,41 @@
  *
  */
 
-#ifndef LQ_ETX_FPM_PLUGIN_
-#define LQ_ETX_FPM_PLUGIN_
+#ifndef LQ_PLUGIN_DEFAULT_H_
+#define LQ_PLUGIN_DEFAULT_H_
 
+#include "olsr_types.h"
+#include "lq_plugin.h"
 
-/****************************************************************************
- *                Functions that the plugin MUST provide                    *
- ****************************************************************************/
+#define LQ_ALGORITHM_ETX_FLOAT_NAME "etx_float"
 
+#define LQ_PLUGIN_LC_MULTIPLIER 1024
 
-/* Initialization function */
-int
-olsrd_plugin_init(void);
+struct default_lq_float {
+  float lq, nlq;
+  olsr_u16_t quickstart;
+};
 
-int 
-olsrd_plugin_interface_version(void);
+void default_lq_initialize_float(void);
 
-#endif
+olsr_linkcost default_lq_calc_cost_float(const void *lq);
+
+olsr_bool default_lq_is_relevant_costchange_float(olsr_linkcost c1, olsr_linkcost c2);
+
+olsr_linkcost default_lq_packet_loss_worker_float(struct link_entry *link, void *lq, olsr_bool lost);
+void default_lq_memorize_foreign_hello_float(void *local, void *foreign);
+
+int default_lq_serialize_hello_lq_pair_float(unsigned char *buff, void *lq);
+void default_lq_deserialize_hello_lq_pair_float(const olsr_u8_t **curr, void *lq);
+int default_lq_serialize_tc_lq_pair_float(unsigned char *buff, void *lq);
+void default_lq_deserialize_tc_lq_pair_float(const olsr_u8_t **curr, void *lq);
+
+void default_lq_copy_link2tc_float(void *target, void *source);
+void default_lq_clear_float(void *target);
+
+const char *default_lq_print_float(void *ptr, struct lqtextbuffer *buffer);
+const char *default_lq_print_cost_float(olsr_linkcost cost, struct lqtextbuffer *buffer);
+
+extern struct lq_handler lq_etx_float_handler;
+
+#endif /*LQ_PLUGIN_DEFAULT_H_*/

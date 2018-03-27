@@ -1,3 +1,4 @@
+
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
  * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
@@ -45,7 +46,7 @@
 #include "link_set.h"
 #include "olsr.h"
 #include "scheduler.h"
-#include "lq_route.h"
+#include "olsr_spf.h"
 #include "common/avl.h"
 #include "lq_packet.h"
 #include "net_olsr.h"
@@ -56,7 +57,7 @@
 
 /* Root of the link state database */
 struct avl_tree tc_tree;
-struct tc_entry *tc_myself; /* Shortcut to ourselves */
+struct tc_entry *tc_myself;	       /* Shortcut to ourselves */
 
 /* Some cookies for stats keeping */
 struct olsr_cookie_info *tc_edge_gc_timer_cookie = NULL;
@@ -78,11 +79,13 @@ struct olsr_cookie_info *tc_mem_cookie = NULL;
 
 /* Value window for ansn, identifies old messages to be ignored */
 #define TC_ANSN_WINDOW 256
+
 /* Value window for seqno, identifies old messages to be ignored */
 #define TC_SEQNO_WINDOW 1024
 
 /* Enlarges the value window for upcoming ansn/seqno to be accepted */
 #define TC_ANSN_WINDOW_MULT 4
+
 /* Enlarges the value window for upcoming ansn/seqno to be accepted */
 #define TC_SEQNO_WINDOW_MULT 8
 
@@ -90,11 +93,11 @@ static olsr_bool
 olsr_seq_inrange_low(int beg, int end, olsr_u16_t seq)
 {
   if (beg < 0) {
-    if (seq >= (olsr_u16_t)beg || seq < end) {
+    if (seq >= (olsr_u16_t) beg || seq < end) {
       return OLSR_TRUE;
     }
   } else if (end >= 0x10000) {
-    if (seq >= beg || seq < (olsr_u16_t)end) {
+    if (seq >= beg || seq < (olsr_u16_t) end) {
       return OLSR_TRUE;
     }
   } else if (seq >= beg && seq < end) {
@@ -107,11 +110,11 @@ static olsr_bool
 olsr_seq_inrange_high(int beg, int end, olsr_u16_t seq)
 {
   if (beg < 0) {
-    if (seq > (olsr_u16_t)beg || seq <= end) {
+    if (seq > (olsr_u16_t) beg || seq <= end) {
       return OLSR_TRUE;
     }
   } else if (end >= 0x10000) {
-    if (seq > beg || seq <= (olsr_u16_t)end) {
+    if (seq > beg || seq <= (olsr_u16_t) end) {
       return OLSR_TRUE;
     }
   } else if (seq > beg && seq <= end) {
@@ -133,6 +136,13 @@ olsr_add_tc_entry(union olsr_ip_addr *adr)
   struct ipaddr_str buf;
 #endif
   struct tc_entry *tc;
+
+  /*
+   * Safety net against loss of the last main IP address.
+   */
+  if (ipequal(&olsr_cnf->main_addr, &all_zero)) {
+    return NULL;
+  }
 
 #ifdef DEBUG
   OLSR_PRINTF(1, "TC: add entry %s\n", olsr_ip_to_string(&buf, adr));
@@ -162,8 +172,7 @@ olsr_add_tc_entry(union olsr_ip_addr *adr)
   /*
    * Add a rt_path for ourselves.
    */
-  olsr_insert_routing_table(adr, olsr_cnf->maxplen, adr,
-                            OLSR_RT_ORIGIN_INT);
+  olsr_insert_routing_table(adr, olsr_cnf->maxplen, adr, OLSR_RT_ORIGIN_INT);
 
   return tc;
 }
@@ -182,12 +191,16 @@ olsr_init_tc(void)
   /*
    * Get some cookies for getting stats to ease troubleshooting.
    */
-  tc_edge_gc_timer_cookie = olsr_alloc_cookie("TC edge GC", OLSR_COOKIE_TYPE_TIMER);
-  tc_validity_timer_cookie = olsr_alloc_cookie("TC validity", OLSR_COOKIE_TYPE_TIMER);
+  tc_edge_gc_timer_cookie =
+    olsr_alloc_cookie("TC edge GC", OLSR_COOKIE_TYPE_TIMER);
+  tc_validity_timer_cookie =
+    olsr_alloc_cookie("TC validity", OLSR_COOKIE_TYPE_TIMER);
 
-  tc_edge_mem_cookie = olsr_alloc_cookie("tc_edge_entry", OLSR_COOKIE_TYPE_MEMORY);
-  olsr_cookie_set_memory_size(tc_edge_mem_cookie, sizeof(struct tc_edge_entry) +
-    active_lq_handler->tc_lq_size);
+  tc_edge_mem_cookie =
+    olsr_alloc_cookie("tc_edge_entry", OLSR_COOKIE_TYPE_MEMORY);
+  olsr_cookie_set_memory_size(tc_edge_mem_cookie,
+			      sizeof(struct tc_edge_entry) +
+			      active_lq_handler->tc_lq_size);
 
   tc_mem_cookie = olsr_alloc_cookie("tc_entry", OLSR_COOKIE_TYPE_MEMORY);
   olsr_cookie_set_memory_size(tc_mem_cookie, sizeof(struct tc_entry));
@@ -336,13 +349,13 @@ olsr_tc_edge_to_string(struct tc_edge_entry *tc_edge)
   struct ipaddr_str addrbuf, dstbuf;
   struct tc_entry *tc = tc_edge->tc;
   struct lqtextbuffer lqbuffer1, lqbuffer2;
-  
+
   snprintf(buf, sizeof(buf),
-           "%s > %s, cost (%6s) %s",
-           olsr_ip_to_string(&addrbuf, &tc->addr),
-           olsr_ip_to_string(&dstbuf, &tc_edge->T_dest_addr),
-           get_tc_edge_entry_text(tc_edge, &lqbuffer1),
-           get_linkcost_text(tc_edge->cost, OLSR_FALSE, &lqbuffer2));
+	   "%s > %s, cost (%6s) %s",
+	   olsr_ip_to_string(&addrbuf, &tc->addr),
+	   olsr_ip_to_string(&dstbuf, &tc_edge->T_dest_addr),
+	   get_tc_edge_entry_text(tc_edge, &lqbuffer1),
+	   get_linkcost_text(tc_edge->cost, OLSR_FALSE, &lqbuffer2));
 
   return buf;
 }
@@ -400,11 +413,11 @@ olsr_calc_tc_edge_entry_etx(struct tc_edge_entry *tc_edge)
   if (olsr_cnf->lq_level < 1) {
     return 0;
   }
-  
+
   old = tc_edge->cost;
   tc_edge->cost = olsr_calc_tc_cost(tc_edge);
-  
-  return olsr_is_relevant_costchange(old, tc_edge->cost); 
+
+  return olsr_is_relevant_costchange(old, tc_edge->cost);
 }
 
 /**
@@ -415,7 +428,7 @@ olsr_calc_tc_edge_entry_etx(struct tc_edge_entry *tc_edge)
  */
 struct tc_edge_entry *
 olsr_add_tc_edge_entry(struct tc_entry *tc, union olsr_ip_addr *addr,
-                       olsr_u16_t ansn)
+		       olsr_u16_t ansn)
 {
 #if !defined(NODEBUG) && defined(DEBUG)
   struct ipaddr_str buf;
@@ -432,7 +445,7 @@ olsr_add_tc_edge_entry(struct tc_entry *tc, union olsr_ip_addr *addr,
   tc_edge->T_dest_addr = *addr;
   tc_edge->ansn = ansn;
   tc_edge->edge_node.key = &tc_edge->T_dest_addr;
-  
+
   /*
    * Insert into the edge tree.
    */
@@ -452,14 +465,14 @@ olsr_add_tc_edge_entry(struct tc_entry *tc, union olsr_ip_addr *addr,
   if (tc_neighbor) {
 #ifdef DEBUG
     OLSR_PRINTF(1, "TC:   found neighbor tc_entry %s\n",
-                olsr_ip_to_string(&buf, &tc_neighbor->addr));
+		olsr_ip_to_string(&buf, &tc_neighbor->addr));
 #endif
 
     tc_edge_inv = olsr_lookup_tc_edge(tc_neighbor, &tc->addr);
     if (tc_edge_inv) {
 #ifdef DEBUG
       OLSR_PRINTF(1, "TC:   found inverse edge for %s\n",
-                  olsr_ip_to_string(&buf, &tc_edge_inv->T_dest_addr));
+		  olsr_ip_to_string(&buf, &tc_edge_inv->T_dest_addr));
 #endif
 
       /*
@@ -482,7 +495,6 @@ olsr_add_tc_edge_entry(struct tc_entry *tc, union olsr_ip_addr *addr,
 
   return tc_edge;
 }
-
 
 /**
  * Delete a TC edge entry.
@@ -515,13 +527,11 @@ olsr_delete_tc_edge_entry(struct tc_edge_entry *tc_edge)
   olsr_cookie_free(tc_edge_mem_cookie, tc_edge);
 }
 
-
 /**
  * Delete all destinations that have a lower ANSN.
  *
  * @param tc the entry to delete edges from
- * @param ansn the advertised neighbor set sequence number
- * @return 1 if any destinations were deleted 0 if not
+ * @return TRUE if any destinations were deleted, FALSE if not
  */
 olsr_bool
 olsr_delete_outdated_tc_edges(struct tc_entry *tc)
@@ -544,6 +554,53 @@ olsr_delete_outdated_tc_edges(struct tc_entry *tc)
 }
 
 /**
+ * Delete all destinations that are inside the borders but
+ * not updated in the last tc.
+ *
+ * @param tc the entry to delete edges from
+ * @param ansn the advertised neighbor set sequence number
+ * @return 1 if any destinations were deleted 0 if not
+ */
+static int
+olsr_delete_revoked_tc_edges(struct tc_entry *tc, olsr_u16_t ansn,
+			     union olsr_ip_addr *lower_border,
+			     union olsr_ip_addr *upper_border)
+{
+  struct tc_edge_entry *tc_edge;
+  int retval = 0;
+
+#if 0
+  OLSR_PRINTF(5, "TC: deleting MPRS\n");
+#endif
+
+  olsr_bool passedLowerBorder = OLSR_FALSE;
+
+  OLSR_FOR_ALL_TC_EDGE_ENTRIES(tc, tc_edge) {
+    if (!passedLowerBorder) {
+      if (avl_comp_default(lower_border, &tc_edge->T_dest_addr) <= 0) {
+	passedLowerBorder = OLSR_TRUE;
+      } else {
+	continue;
+      }
+    }
+
+    if (passedLowerBorder) {
+      if (avl_comp_default(upper_border, &tc_edge->T_dest_addr) <= 0) {
+	break;
+      }
+    }
+
+    if (SEQNO_GREATER_THAN(ansn, tc_edge->ansn)) {
+      olsr_delete_tc_edge_entry(tc_edge);
+      retval = 1;
+    }
+  } OLSR_FOR_ALL_TC_EDGE_ENTRIES_END(tc, tc_edge);
+
+  return retval;
+}
+
+
+/**
  * Update an edge registered on an entry.
  * Creates new edge-entries if not registered.
  * Bases update on a received TC message
@@ -554,10 +611,9 @@ olsr_delete_outdated_tc_edges(struct tc_entry *tc)
  */
 static int
 olsr_tc_update_edge(struct tc_entry *tc, olsr_u16_t ansn,
-                    const unsigned char **curr)
+		    const unsigned char **curr, union olsr_ip_addr *neighbor)
 {
   struct tc_edge_entry *tc_edge;
-  union olsr_ip_addr neighbor;
   int edge_change;
 
   edge_change = 0;
@@ -565,23 +621,23 @@ olsr_tc_update_edge(struct tc_entry *tc, olsr_u16_t ansn,
   /*
    * Fetch the per-edge data
    */
-  pkt_get_ipaddress(curr, &neighbor);
+  pkt_get_ipaddress(curr, neighbor);
 
   /* First check if we know this edge */
-  tc_edge = olsr_lookup_tc_edge(tc, &neighbor);
+  tc_edge = olsr_lookup_tc_edge(tc, neighbor);
 
-  if(!tc_edge) {
-      
+  if (!tc_edge) {
+
     /*
      * Yet unknown - create it.
      * Check if the address is allowed.
      */
-    if (!olsr_validate_address(&neighbor)) {
+    if (!olsr_validate_address(neighbor)) {
       return 0;
     }
 
-    tc_edge = olsr_add_tc_edge_entry(tc, &neighbor, ansn);
-    
+    tc_edge = olsr_add_tc_edge_entry(tc, neighbor, ansn);
+
     olsr_deserialize_tc_lq_pair(curr, tc_edge);
     edge_change = 1;
 
@@ -603,15 +659,14 @@ olsr_tc_update_edge(struct tc_entry *tc, olsr_u16_t ansn,
      * Update the etx.
      */
     if (olsr_calc_tc_edge_entry_etx(tc_edge)) {
-        if (tc->msg_hops <= olsr_cnf->lq_dlimit) {
-        	edge_change = 1;
-        }
+      if (tc->msg_hops <= olsr_cnf->lq_dlimit) {
+	edge_change = 1;
+      }
     }
-
 #if DEBUG
-    if (edge_change) {          
+    if (edge_change) {
       OLSR_PRINTF(1, "TC:   chg edge entry %s\n",
-                  olsr_tc_edge_to_string(tc_edge));
+		  olsr_tc_edge_to_string(tc_edge));
     }
 #endif
 
@@ -631,7 +686,7 @@ struct tc_edge_entry *
 olsr_lookup_tc_edge(struct tc_entry *tc, union olsr_ip_addr *edge_addr)
 {
   struct avl_node *edge_node;
-  
+
 #if 0
   OLSR_PRINTF(1, "TC: lookup dst\n");
 #endif
@@ -652,26 +707,79 @@ olsr_print_tc_table(void)
   struct tc_entry *tc;
   const int ipwidth = olsr_cnf->ip_version == AF_INET ? 15 : 30;
 
-  OLSR_PRINTF(1, "\n--- %s ------------------------------------------------- TOPOLOGY\n\n"
-              "%-*s %-*s %-5s  %-5s  %s %s\n",
-              olsr_wallclock_string(),
-              ipwidth, "Source IP addr", ipwidth, "Dest IP addr", "LQ", "ILQ", "ETX", "UP");
+  OLSR_PRINTF(1,
+	      "\n--- %s ------------------------------------------------- TOPOLOGY\n\n"
+	      "%-*s %-*s %-14s  %s\n", olsr_wallclock_string(), ipwidth,
+	      "Source IP addr", ipwidth, "Dest IP addr", "      LQ      ",
+	      "ETX");
 
   OLSR_FOR_ALL_TC_ENTRIES(tc) {
     struct tc_edge_entry *tc_edge;
     OLSR_FOR_ALL_TC_EDGE_ENTRIES(tc, tc_edge) {
       struct ipaddr_str addrbuf, dstaddrbuf;
       struct lqtextbuffer lqbuffer1, lqbuffer2;
-      
-      OLSR_PRINTF(1, "%-*s %-*s  (%-10s) %s\n",
-                  ipwidth, olsr_ip_to_string(&addrbuf, &tc->addr),
-                  ipwidth, olsr_ip_to_string(&dstaddrbuf, &tc_edge->T_dest_addr),
-                  get_tc_edge_entry_text(tc_edge, &lqbuffer1),
-                  get_linkcost_text(tc_edge->cost, OLSR_FALSE, &lqbuffer2));
-      
+
+      OLSR_PRINTF(1, "%-*s %-*s %-14s %s\n",
+		  ipwidth, olsr_ip_to_string(&addrbuf, &tc->addr),
+		  ipwidth, olsr_ip_to_string(&dstaddrbuf,
+					     &tc_edge->T_dest_addr),
+		  get_tc_edge_entry_text(tc_edge, &lqbuffer1),
+		  get_linkcost_text(tc_edge->cost, OLSR_FALSE, &lqbuffer2));
+
     } OLSR_FOR_ALL_TC_EDGE_ENTRIES_END(tc, tc_edge);
   } OLSR_FOR_ALL_TC_ENTRIES_END(tc);
 #endif
+}
+
+/*
+ * calculate the border IPs of a tc edge set according to the border flags
+ *
+ * @param lower border flag
+ * @param pointer to lower border ip
+ * @param upper border flag
+ * @param pointer to upper border ip
+ * @result 1 if lower/upper border ip have been set 
+ */
+static int
+olsr_calculate_tc_border(olsr_u8_t lower_border,
+			 union olsr_ip_addr *lower_border_ip,
+			 olsr_u8_t upper_border,
+			 union olsr_ip_addr *upper_border_ip)
+{
+  if (lower_border == 0 && upper_border == 0) {
+    return 0;
+  }
+  if (lower_border == 0xff) {
+    memset(&lower_border_ip, 0, sizeof(lower_border_ip));
+  } else {
+    int i;
+
+    lower_border--;
+    for (i = 0; i < lower_border / 8; i++) {
+		lower_border_ip->v6.s6_addr[olsr_cnf->ipsize - i - 1] = 0;
+    }
+    lower_border_ip->v6.s6_addr[olsr_cnf->ipsize - lower_border / 8 -
+				       1] &= (0xff << (lower_border & 7));
+    lower_border_ip->v6.s6_addr[olsr_cnf->ipsize - lower_border / 8 -
+				       1] |= (1 << (lower_border & 7));
+  }
+
+  if (upper_border == 0xff) {
+    memset(&upper_border_ip, 0xff, sizeof(upper_border_ip));
+  } else {
+    int i;
+
+    upper_border--;
+
+    for (i = 0; i < upper_border / 8; i++) {
+		upper_border_ip->v6.s6_addr[olsr_cnf->ipsize - i - 1] = 0;
+    }
+    upper_border_ip->v6.s6_addr[olsr_cnf->ipsize - upper_border / 8 -
+				       1] &= (0xff << (upper_border & 7));
+    upper_border_ip->v6.s6_addr[olsr_cnf->ipsize - upper_border / 8 -
+				       1] |= (1 << (upper_border & 7));
+  }
+  return 1;
 }
 
 /*
@@ -686,19 +794,21 @@ olsr_print_tc_table(void)
  */
 void
 olsr_input_tc(union olsr_message *msg,
-              struct interface *input_if __attribute__((unused)),
-              union olsr_ip_addr *from_addr)
+	      struct interface *input_if __attribute__ ((unused)),
+	      union olsr_ip_addr *from_addr)
 {
-#ifndef NODEBUG 
+#ifndef NODEBUG
   struct ipaddr_str buf;
 #endif
   olsr_u16_t size, msg_seq, ansn;
-  olsr_u8_t type, ttl, msg_hops;
-  double vtime;
-  unsigned int vtime_s;
+  olsr_u8_t type, ttl, msg_hops, lower_border, upper_border;
+  olsr_reltime vtime;
   union olsr_ip_addr originator;
   const unsigned char *limit, *curr;
   struct tc_entry *tc;
+
+  union olsr_ip_addr lower_border_ip, upper_border_ip;
+  int borderSet = 0;
 
   curr = (void *)msg;
   if (!msg) {
@@ -711,8 +821,7 @@ olsr_input_tc(union olsr_message *msg,
     return;
   }
 
-  pkt_get_double(&curr, &vtime);
-  vtime_s = (unsigned int)vtime;
+  pkt_get_reltime(&curr, &vtime);
   pkt_get_u16(&curr, &size);
 
   pkt_get_ipaddress(&curr, &originator);
@@ -722,52 +831,52 @@ olsr_input_tc(union olsr_message *msg,
   pkt_get_u8(&curr, &msg_hops);
   pkt_get_u16(&curr, &msg_seq);
   pkt_get_u16(&curr, &ansn);
-  pkt_ignore_u16(&curr);
+
+  /* Get borders */
+  pkt_get_u8(&curr, &lower_border);
+  pkt_get_u8(&curr, &upper_border);
 
   tc = olsr_lookup_tc_entry(&originator);
-  
+
   if (tc && 0 != tc->edge_tree.count) {
-    if (olsr_seq_inrange_high(
-          (int)tc->msg_seq - TC_SEQNO_WINDOW,
-          tc->msg_seq,
-          msg_seq) &&
-        olsr_seq_inrange_high(
-          (int)tc->ansn - TC_ANSN_WINDOW,
-          tc->ansn, ansn)) {
+    if (olsr_seq_inrange_high((int)tc->msg_seq - TC_SEQNO_WINDOW,
+			      tc->msg_seq,
+			      msg_seq) &&
+	olsr_seq_inrange_high((int)tc->ansn - TC_ANSN_WINDOW, tc->ansn, ansn)) {
 
       /*
        * Ignore already seen seq/ansn values (small window for mesh memory)
        */
       if ((tc->msg_seq == msg_seq) || (tc->ignored++ < 32)) {
-        return;
+	return;
       }
 
       OLSR_PRINTF(1, "Ignored to much LQTC's for %s, restarting\n",
-                  olsr_ip_to_string(&buf, &originator));
+		  olsr_ip_to_string(&buf, &originator));
 
-    } else if (!olsr_seq_inrange_high(
-                 tc->msg_seq,
-                 (int)tc->msg_seq + TC_SEQNO_WINDOW * TC_SEQNO_WINDOW_MULT,
-                 msg_seq) ||
-               !olsr_seq_inrange_low(
-                 tc->ansn,
-                 (int)tc->ansn + TC_ANSN_WINDOW * TC_ANSN_WINDOW_MULT,
-                 ansn)) {
+    } else
+      if (!olsr_seq_inrange_high
+	  (tc->msg_seq,
+	   (int)tc->msg_seq + TC_SEQNO_WINDOW * TC_SEQNO_WINDOW_MULT, msg_seq)
+	  || !olsr_seq_inrange_low(tc->ansn,
+				   (int)tc->ansn +
+				   TC_ANSN_WINDOW * TC_ANSN_WINDOW_MULT,
+				   ansn)) {
 
       /*
        * Only accept future seq/ansn values (large window for node reconnects).
        * Restart in all other cases. Ignore a single stray message.
        */
       if (!tc->err_seq_valid) {
-        tc->err_seq = msg_seq;
-        tc->err_seq_valid = OLSR_TRUE;
+	tc->err_seq = msg_seq;
+	tc->err_seq_valid = OLSR_TRUE;
       }
       if (tc->err_seq == msg_seq) {
-        return;
+	return;
       }
 
       OLSR_PRINTF(2, "Detected node restart for %s\n",
-                  olsr_ip_to_string(&buf, &originator));
+		  olsr_ip_to_string(&buf, &originator));
     }
   }
 
@@ -786,7 +895,7 @@ olsr_input_tc(union olsr_message *msg,
   tc->ansn = ansn;
   tc->ignored = 0;
   tc->err_seq_valid = OLSR_FALSE;
-  
+
   /*
    * If the sender interface (NB: not originator) of this message
    * is not in the symmetric 1-hop neighborhood of this node, the
@@ -794,37 +903,61 @@ olsr_input_tc(union olsr_message *msg,
    */
   if (check_neighbor_link(from_addr) != SYM_LINK) {
     OLSR_PRINTF(2, "Received TC from NON SYM neighbor %s\n",
-                olsr_ip_to_string(&buf, from_addr));
+		olsr_ip_to_string(&buf, from_addr));
     return;
   }
 
   OLSR_PRINTF(1, "Processing TC from %s, seq 0x%04x\n",
-              olsr_ip_to_string(&buf, &originator), ansn);
+	      olsr_ip_to_string(&buf, &originator), ansn);
 
   /*
    * Now walk the edge advertisements contained in the packet.
    */
+
   limit = (unsigned char *)msg + size;
+  borderSet = 0;
   while (curr < limit) {
-    if (olsr_tc_update_edge(tc, ansn, &curr)) {
+    if (olsr_tc_update_edge(tc, ansn, &curr, &upper_border_ip)) {
       changes_topology = OLSR_TRUE;
     }
+
+    if (!borderSet) {
+      borderSet = 1;
+      memcpy(&lower_border_ip, &upper_border_ip, sizeof(lower_border_ip));
+    }
+  }
+
+  /*
+   * Calculate real border IPs.
+   */
+  if (borderSet) {
+    borderSet = olsr_calculate_tc_border(lower_border, &lower_border_ip,
+					 upper_border, &upper_border_ip);
   }
 
   /*
    * Set or change the expiration timer accordingly.
    */
-  olsr_set_timer(&tc->validity_timer, vtime_s * MSEC_PER_SEC,
-                 OLSR_TC_VTIME_JITTER, OLSR_TIMER_ONESHOT,
-                 &olsr_expire_tc_entry, tc, tc_validity_timer_cookie->ci_id);
+  olsr_set_timer(&tc->validity_timer, vtime,
+		 OLSR_TC_VTIME_JITTER, OLSR_TIMER_ONESHOT,
+		 &olsr_expire_tc_entry, tc, tc_validity_timer_cookie->ci_id);
 
-  /*
-   * Kick the the edge garbage collection timer. In the meantime hopefully
-   * all edges belonging to a multipart neighbor set will arrive.
-   */
-  olsr_set_timer(&tc->edge_gc_timer, OLSR_TC_EDGE_GC_TIME,
-                 OLSR_TC_EDGE_GC_JITTER, OLSR_TIMER_ONESHOT,
-                 &olsr_expire_tc_edge_gc, tc, tc_edge_gc_timer_cookie->ci_id);
+  if (borderSet) {
+
+    /*
+     * Delete all old tc edges within borders.
+     */
+    olsr_delete_revoked_tc_edges(tc, ansn, &lower_border_ip, &upper_border_ip);
+  } else {
+
+    /*
+     * Kick the the edge garbage collection timer. In the meantime hopefully
+     * all edges belonging to a multipart neighbor set will arrive.
+     */
+    olsr_set_timer(&tc->edge_gc_timer, OLSR_TC_EDGE_GC_TIME,
+		   OLSR_TC_EDGE_GC_JITTER, OLSR_TIMER_ONESHOT,
+		   &olsr_expire_tc_edge_gc, tc, tc_edge_gc_timer_cookie->ci_id);
+  }
 
   /*
    * Last, flood the message to our other neighbors.

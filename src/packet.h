@@ -43,6 +43,7 @@
 
 #include "olsr_protocol.h"
 #include "interfaces.h"
+#include "mantissa.h"
 
 struct hello_neighbor
 {
@@ -52,13 +53,13 @@ struct hello_neighbor
   union olsr_ip_addr    address;
   struct hello_neighbor *next;
   olsr_linkcost         cost;
-  char                  linkquality[0];
+  olsr_u32_t            linkquality[0];
 };
 
 struct hello_message
 {
-  double                 vtime;
-  double                 htime;
+  olsr_reltime           vtime;
+  olsr_reltime           htime;
   union olsr_ip_addr     source_addr;
   olsr_u16_t             packet_seq_number;
   olsr_u8_t              hop_count;
@@ -72,12 +73,12 @@ struct tc_mpr_addr
 {
   union olsr_ip_addr address;
   struct tc_mpr_addr *next;
-  char                  linkquality[0];
+  olsr_u32_t         linkquality[0];
 };
 
 struct tc_message
 {
-  double              vtime;
+  olsr_reltime        vtime;
   union olsr_ip_addr  source_addr;
   union olsr_ip_addr  originator;
   olsr_u16_t          packet_seq_number;
@@ -104,7 +105,7 @@ struct mid_alias
 
 struct mid_message
 {
-  double             vtime;
+  olsr_reltime       vtime;
   union olsr_ip_addr mid_origaddr;  /* originator's address */
   olsr_u8_t          mid_hopcnt;    /* number of hops to destination */
   olsr_u8_t          mid_ttl;       /* ttl */
@@ -116,7 +117,7 @@ struct mid_message
 
 struct unknown_message
 {
-  olsr_u16_t          seqno;
+  olsr_u16_t         seqno;
   union olsr_ip_addr originator;
   olsr_u8_t          type;
 };

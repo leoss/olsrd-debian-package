@@ -70,7 +70,7 @@ create_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
   // initialize the static fields
 
   lq_hello->comm.type = LQ_HELLO_MESSAGE;
-  lq_hello->comm.vtime = me_to_double(outif->valtimes.hello);
+  lq_hello->comm.vtime = me_to_reltime(outif->valtimes.hello);
   lq_hello->comm.size = 0;
 
   lq_hello->comm.orig = olsr_cnf->main_addr;
@@ -123,7 +123,6 @@ create_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
     neigh->addr = walker->neighbor_iface_addr;
       
     // queue the neighbour entry
-
     neigh->next = lq_hello->neigh;
     lq_hello->neigh = neigh;
 
@@ -162,7 +161,7 @@ create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
   // initialize the static fields
 
   lq_tc->comm.type = LQ_TC_MESSAGE;
-  lq_tc->comm.vtime = me_to_double(outif->valtimes.tc);
+  lq_tc->comm.vtime = me_to_reltime(outif->valtimes.tc);
   lq_tc->comm.size = 0;
 
   lq_tc->comm.orig = olsr_cnf->main_addr;
@@ -241,8 +240,29 @@ create_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
     }
 
     /* Queue the neighbour entry. */
-    neigh->next = lq_tc->neigh;
-    lq_tc->neigh = neigh;
+
+    // TODO: ugly hack until neighbor table is ported to avl tree
+    
+    if (lq_tc->neigh == NULL || avl_comp_default(&lq_tc->neigh->address, &neigh->address) > 0) {
+      neigh->next = lq_tc->neigh;
+      lq_tc->neigh = neigh;
+    }
+    else {
+      struct tc_mpr_addr *last = lq_tc->neigh, *n = last->next;
+      
+      while (n) {
+        if (avl_comp_default(&n->address, &neigh->address) > 0) {
+          break;
+        }
+        last = n;
+        n = n->next;
+      }
+      neigh->next = n;
+      last->next = neigh;
+    }
+
+    // neigh->next = lq_tc->neigh;
+    // lq_tc->neigh = neigh;
 
   } OLSR_FOR_ALL_NBR_ENTRIES_END(walker);
 }
@@ -277,7 +297,7 @@ static void serialize_common(struct olsr_common *comm)
       struct olsr_header_v4 *olsr_head_v4 = (struct olsr_header_v4 *)msg_buffer;
 
       olsr_head_v4->type = comm->type;
-      olsr_head_v4->vtime = double_to_me(comm->vtime);
+      olsr_head_v4->vtime = reltime_to_me(comm->vtime);
       olsr_head_v4->size = htons(comm->size);
 
       olsr_head_v4->orig = comm->orig.v4.s_addr;
@@ -292,7 +312,7 @@ static void serialize_common(struct olsr_common *comm)
       struct olsr_header_v6 *olsr_head_v6 = (struct olsr_header_v6 *)msg_buffer;
 
       olsr_head_v6->type = comm->type;
-      olsr_head_v6->vtime = double_to_me(comm->vtime);
+      olsr_head_v6->vtime = reltime_to_me(comm->vtime);
       olsr_head_v6->size = htons(comm->size);
 
       memcpy(&olsr_head_v6->orig, &comm->orig.v6.s6_addr, sizeof(olsr_head_v6->orig));
@@ -322,7 +342,7 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
   struct lq_hello_header *head = (struct lq_hello_header *)(msg_buffer + off);
 
   head->reserved = 0;
-  head->htime = double_to_me(lq_hello->htime);
+  head->htime = reltime_to_me(lq_hello->htime);
   head->will = lq_hello->will; 
 
   // 'off' is the offset of the byte following the LQ_HELLO header
@@ -471,6 +491,35 @@ serialize_lq_hello(struct lq_hello_message *lq_hello, struct interface *outif)
   net_outbuffer_push(outif, msg_buffer, size + off);
 }
 
+static olsr_u8_t
+calculate_border_flag(void *lower_border, void *higher_border) {
+	olsr_u8_t *lower = lower_border;
+	olsr_u8_t *higher = higher_border;
+	olsr_u8_t bitmask;
+	olsr_u8_t part, bitpos;
+	
+	for (part = 0; part < olsr_cnf->ipsize; part ++) {
+		if (lower[part] != higher[part]) {
+			break;
+		}
+	}
+	
+	if (part == olsr_cnf->ipsize) { // same IPs ?
+		return 0;
+	}
+	
+	// look for first bit of difference
+	bitmask = 0xfe;
+	for (bitpos = 0; bitpos < 8; bitpos++, bitmask <<= 1) {
+		if ((lower[part] & bitmask) == (higher[part] & bitmask)) {
+			break;
+		}
+	}
+	
+  bitpos += 8 * (olsr_cnf->ipsize - part - 1);
+	return bitpos + 1;
+}
+
 static void
 serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
 {
@@ -479,6 +528,9 @@ serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
   struct tc_mpr_addr *neigh;
   unsigned char *buff;
 
+  union olsr_ip_addr *last_ip = NULL;
+  olsr_u8_t left_border_flag = 0xff;
+  
   // leave space for the OLSR header
 
   off = common_size();
@@ -488,8 +540,9 @@ serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
   head = (struct lq_tc_header *)(msg_buffer + off);
 
   head->ansn = htons(lq_tc->ansn);
-  head->reserved = 0;
-
+  head->lower_border = 0;
+  head->upper_border = 0;
+  
   // 'off' is the offset of the byte following the LQ_TC header
 
   off += sizeof (struct lq_tc_header);
@@ -534,6 +587,10 @@ serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
     // TODO sizeof_tc_lq function required
       if ((int)(size + olsr_cnf->ipsize + 4) > rem)
         {
+      	  head->lower_border = left_border_flag;
+      	  head->upper_border = calculate_border_flag(last_ip, &neigh->address);
+      	  left_border_flag = head->upper_border;
+      	  
           // finalize the OLSR header
 
           lq_tc->comm.size = size + off;
@@ -554,6 +611,10 @@ serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
 
       // add the current neighbor's IP address
       genipcopy(buff + size, &neigh->address);
+      
+      // remember last ip
+      last_ip = (union olsr_ip_addr *)(buff+size);
+      
       size += olsr_cnf->ipsize;
 
       // add the corresponding link quality
@@ -562,6 +623,8 @@ serialize_lq_tc(struct lq_tc_message *lq_tc, struct interface *outif)
 
   // finalize the OLSR header
 
+  head->lower_border = left_border_flag;
+  head->upper_border = 0xff;
   lq_tc->comm.size = size + off;
 
   serialize_common((struct olsr_common *)lq_tc);
