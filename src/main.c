@@ -66,7 +66,7 @@
 
 #ifdef WIN32
 #define close(x) closesocket(x)
-int __stdcall SignalHandler(unsigned long signal) __attribute__ ((noreturn));
+int __stdcall SignalHandler(unsigned long signo) __attribute__ ((noreturn));
 void ListInterfaces(void);
 void DisableIcmpRedirects(void);
 bool olsr_win32_end_request = false;
@@ -185,22 +185,6 @@ int main(int argc, char *argv[]) {
   /* Open syslog */
   olsr_openlog("olsrd");
 
-  /* Grab initial timestamp */
-  now_times = olsr_times();
-  if ((clock_t) - 1 == now_times) {
-    const char * const err_msg = strerror(errno);
-    olsr_syslog(OLSR_LOG_ERR, "Error in times(): %s, sleeping for a second",
-        err_msg);
-    OLSR_PRINTF(1, "Error in times(): %s, sleeping for a second", err_msg);
-    sleep(1);
-    now_times = olsr_times();
-    if ((clock_t) - 1 == now_times) {
-      olsr_syslog(OLSR_LOG_ERR, "Shutting down because times() does not work");
-      fprintf(stderr, "Shutting down because times() does not work\n");
-      exit(EXIT_FAILURE);
-    }
-  }
-
   printf("\n *** %s ***\n Build date: %s on %s\n http://www.olsr.org\n\n",
       olsrd_version, build_date, build_host);
 
@@ -266,13 +250,6 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "No default ifconfig found!\n");
     exit(EXIT_FAILURE);
   }
-
-  /* Initialize tick resolution */
-#ifndef WIN32
-  olsr_cnf->system_tick_divider = 1000 / sysconf(_SC_CLK_TCK);
-#else
-  olsr_cnf->system_tick_divider = 1;
-#endif
 
   /* Initialize timers */
   olsr_init_timers();
@@ -340,7 +317,7 @@ int main(int argc, char *argv[]) {
   /*
    * create routing socket
    */
-#if defined __FreeBSD__ || defined __MacOSX__ || defined __NetBSD__ || defined __OpenBSD__
+#if defined __FreeBSD__ || __FreeBSD_kernel__ || defined __MacOSX__ || defined __NetBSD__ || defined __OpenBSD__
   olsr_cnf->rts = socket(PF_ROUTE, SOCK_RAW, 0);
   if (olsr_cnf->rts < 0) {
     olsr_syslog(OLSR_LOG_ERR, "routing socket: %m");
@@ -447,6 +424,13 @@ int main(int argc, char *argv[]) {
   if ((olsr_cnf->rttable < 253) & (olsr_cnf->rttable > 0)) {
     olsr_netlink_rule(olsr_cnf->ip_version, olsr_cnf->rttable, RTM_NEWRULE);
   }
+
+  /* Create rtnetlink socket to listen on interface change events RTMGRP_LINK and RTMGRP_IPV4_ROUTE */
+
+#if LINUX_RTNETLINK_LISTEN
+  rtnetlink_register_socket(RTMGRP_LINK);
+#endif /*LINUX_RTNETLINK_LISTEN*/
+
 #endif
 
   /* Start syslog entry */
@@ -487,7 +471,7 @@ int main(int argc, char *argv[]) {
  *@param signal the signal that triggered this callback
  */
 #ifndef WIN32
-void olsr_reconfigure(int signal __attribute__ ((unused))) {
+void olsr_reconfigure(int signo __attribute__ ((unused))) {
   /* if we are started with -nofork, we do not weant to go into the
    * background here. So we can simply stop on -HUP
    */
@@ -524,14 +508,14 @@ void olsr_reconfigure(int signal __attribute__ ((unused))) {
  */
 #ifdef WIN32
 int __stdcall
-SignalHandler(unsigned long signal)
+SignalHandler(unsigned long signo)
 #else
-static void olsr_shutdown(int signal __attribute__ ((unused)))
+static void olsr_shutdown(int signo __attribute__ ((unused)))
 #endif
 {
   struct interface *ifn;
 
-  OLSR_PRINTF(1, "Received signal %d - shutting down\n", (int)signal);
+  OLSR_PRINTF(1, "Received signal %d - shutting down\n", (int)signo);
 
 #ifdef WIN32
   OLSR_PRINTF(1, "Waiting for the scheduler to stop.\n");
@@ -575,7 +559,7 @@ static void olsr_shutdown(int signal __attribute__ ((unused)))
   close(olsr_cnf->rtnl_s);
 #endif
 
-#if defined __FreeBSD__ || defined __MacOSX__ || defined __NetBSD__ || defined __OpenBSD__
+#if defined __FreeBSD__ || defined __FreeBSD_kernel__ || defined __MacOSX__ || defined __NetBSD__ || defined __OpenBSD__
   /* routing socket */
   close(olsr_cnf->rts);
 #endif
@@ -919,45 +903,6 @@ static int olsr_process_arguments(int argc, char *argv[],
     return -1;
   }
   return 0;
-}
-
-/*
- * A wrapper around times(2). Note, that this function has
- * some portability problems, e.g. different operating systems
- * and linux kernel versions may return values counted from
- * an arbitrary point in time (mostly uptime, some count from
- * the epoch. The linux man page therefore recommends not to
- * use this function. On the other hand, this function has
- * proved it's functions but some olsrd implementations does
- * error handling in a clumsy way - thus inducing bugs...
- *
- * Analysis of times() in different OSes:
- * Linux:
- *   times() returns the number of clock ticks that have
- *   elapsed since an arbitrary point in the past.  The return
- *   value may overflow the possible range of type clock_t.   On
- *     error, (clock_t) -1 is returned, and errno is set appropriately.
- *
- * BSDs:
- *  The times() function returns the value of time in CLK_TCK's
- *  of a second since 0 hours, 0 minutes, 0 seconds, January 1,
- *  1970, Coordinated Universal Time.
- *
- * Values for clock_t in different OSes:
- *  OSX ............ unsigned long
- *  linux .......... long int (signed !)
- *  win32 cygwin.... unsigned long
- *  openBSD ........ int
- *
- * We therefore need to be very very careful how to (portably)
- * handle overflows!!
- * This current commit does not solve the problem yet.
- * it merely documents the problems with times()
- *
- */
-clock_t olsr_times(void) {
-  struct tms tms_buf;
-  return times(&tms_buf);
 }
 
 /*

@@ -44,6 +44,11 @@
 
 #include "olsr_types.h"
 
+/* set to 1 to enable a second rtnetlink socket 
+ * used for listening and reating on interface change events
+ * (requires LINUX_POLICY_ROUTING to be enabled aswell) */
+#define LINUX_RTNETLINK_LISTEN 1
+
 #define TESTLIB_PATH 0
 #define SYSLOG_NUMBERING 0
 #define SOURCE_IP_ROUTES 0
@@ -224,7 +229,6 @@ struct olsrd_config {
 
   float min_tc_vtime;
   /* Stuff set by olsrd */
-  uint16_t system_tick_divider;        /* Tick resolution */
   uint8_t maxplen;                     /* maximum prefix len */
   size_t ipsize;                       /* Size of address */
   bool del_gws;                        /* Delete InternetGWs at startup */
@@ -241,7 +245,7 @@ struct olsrd_config {
   int rtnl_s;                          /* Socket used for rtnetlink messages */
 #endif
 
-#if defined __FreeBSD__ || defined __MacOSX__ || defined __NetBSD__ || defined __OpenBSD__
+#if defined __FreeBSD__ || defined __FreeBSD_kernel__ || defined __MacOSX__ || defined __NetBSD__ || defined __OpenBSD__
   int rts;                             /* Socket used for route changes on BSDs */
 #endif
   float lq_nat_thresh;

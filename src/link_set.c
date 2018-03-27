@@ -42,6 +42,7 @@
 /*
  * Link sensing database for the OLSR routing daemon
  */
+#include <assert.h>
 
 #include "defs.h"
 #include "link_set.h"
@@ -50,6 +51,7 @@
 #include "mpr.h"
 #include "neighbor_table.h"
 #include "olsr.h"
+#include "log.h"
 #include "scheduler.h"
 #include "olsr_spf.h"
 #include "net_olsr.h"
@@ -286,9 +288,11 @@ set_loss_link_multiplier(struct link_entry *entry)
   struct olsr_lq_mult *mult;
   uint32_t val = 0;
   union olsr_ip_addr null_addr;
+  struct ipaddr_str buf;
 
   /* find the interface for the link */
-  inter = if_ifwithaddr(&entry->local_iface_addr);
+  assert(entry->if_name);
+  inter = if_ifwithname(entry->if_name);
 
   /* find the interface configuration for the interface */
   for (cfg_inter = olsr_cnf->interfaces; cfg_inter; cfg_inter = cfg_inter->next) {
@@ -319,6 +323,9 @@ set_loss_link_multiplier(struct link_entry *entry)
 
   /* store the multiplier */
   entry->loss_link_multiplier = val;
+
+  OLSR_PRINTF(1, "Set linkloss multiplier for %s on %s to %d\n",
+      olsr_ip_to_string(&buf, &entry->neighbor_iface_addr), cfg_inter->name, val);
 }
 
 /*
@@ -556,6 +563,7 @@ add_link_entry(const union olsr_ip_addr *local, const union olsr_ip_addr *remote
 
     olsr_set_timer(&new_link->link_loss_timer, htime + htime / 2, OLSR_LINK_LOSS_JITTER, OLSR_TIMER_PERIODIC,
                    &olsr_expire_link_loss_timer, new_link, 0);
+
 
     set_loss_link_multiplier(new_link);
   }
