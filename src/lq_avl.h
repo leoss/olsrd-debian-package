@@ -1,6 +1,7 @@
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
  * Copyright (c) 2004, Thomas Lopatic (thomas@lopatic.de)
+ * IPv4 performance optimization (c) 2006, sven-ola(gmx.de)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -36,7 +37,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: lq_avl.h,v 1.2 2005/02/20 18:52:18 kattemat Exp $
+ * $Id: lq_avl.h,v 1.9 2007/07/05 22:43:46 bernd67 Exp $
  */
 
 #ifndef _LQ_AVL_H
@@ -44,12 +45,15 @@
 
 struct avl_node
 {
-  int balance;
   struct avl_node *parent;
   struct avl_node *left;
   struct avl_node *right;
+  struct avl_node *next;
+  struct avl_node *prev;
   void *key;
   void *data;
+  char balance;
+  char leader;
 };
 
 struct avl_tree
@@ -60,6 +64,25 @@ struct avl_tree
 
 void avl_init(struct avl_tree *, int (*)(void *, void *));
 struct avl_node *avl_find(struct avl_tree *, void *);
-int avl_insert(struct avl_tree *, struct avl_node *);
+int avl_insert(struct avl_tree *, struct avl_node *, int);
+void avl_delete(struct avl_tree *, struct avl_node *);
+struct avl_node *avl_walk_first(struct avl_tree *);
+struct avl_node *avl_walk_last(struct avl_tree *);
+struct avl_node *avl_walk_next(struct avl_node *);
+struct avl_node *avl_walk_prev(struct avl_node *);
+
+extern int (*avl_comp_default)(void *, void *);
+extern int avl_comp_ipv4(void *, void *);
+extern int avl_comp_ipv6(void *, void *);
+
+#define inline_avl_comp_ipv4(ip1, ip2) \
+  (*(unsigned int *)ip1 == *(unsigned int *)ip2 ? 0 : \
+  *(unsigned int *)ip1 < *(unsigned int *)ip2 ? -1 : +1)
 
 #endif
+
+/*
+ * Local Variables:
+ * c-basic-offset: 2
+ * End:
+ */

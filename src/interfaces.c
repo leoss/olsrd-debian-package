@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: interfaces.c,v 1.27 2005/06/03 08:00:55 kattemat Exp $
+ * $Id: interfaces.c,v 1.32 2007/05/13 22:23:55 bernd67 Exp $
  */
 
 #include "defs.h"
@@ -72,7 +72,7 @@ static struct ifchgf *ifchgf_list;
  *@return the number of interfaces configured
  */
 int
-ifinit()
+ifinit(void)
 {
   struct olsr_if *tmp_if;
 
@@ -89,7 +89,7 @@ ifinit()
       /* IP version 4 */
       memset(&addrsock, 0, sizeof (addrsock));
       addrsock.sin_family = AF_INET;
-      addrsock.sin_port = olsr_udp_port;
+      addrsock.sin_port = htons(OLSRPORT);
       (addrsock.sin_addr).s_addr = INADDR_ANY;
     }
   else
@@ -97,11 +97,11 @@ ifinit()
       /* IP version 6 */
       memset(&addrsock6, 0, sizeof (addrsock6));
       addrsock6.sin6_family = AF_INET6;
-      addrsock6.sin6_port = olsr_udp_port;
+      addrsock6.sin6_port = htons(OLSRPORT);
       //(addrsock6.sin6_addr).s_addr = IN6ADDR_ANY_INIT;
     }
 
-  OLSR_PRINTF(1, "\n ---- Interface configuration ---- \n\n")
+  OLSR_PRINTF(1, "\n ---- Interface configuration ---- \n\n");
     /* Run trough all interfaces immedeatly */
     for(tmp_if = olsr_cnf->interfaces; tmp_if != NULL; tmp_if = tmp_if->next)
       {
@@ -115,14 +115,15 @@ ifinit()
       }
   
   /* register network interface update function with scheduler */
-  olsr_register_scheduler_event(&check_interface_updates, NULL, IFCHANGES_POLL_INT, 0, NULL);
+  olsr_register_scheduler_event(&check_interface_updates, NULL, 
+                                olsr_cnf->nic_chgs_pollrate, 0, NULL);
 
   return (ifnet == NULL) ? 0 : 1;
 }
 
 
 olsr_u32_t
-get_if_property_id()
+get_if_property_id(void)
 {
   return if_property_id++;
 }
@@ -341,7 +342,6 @@ queue_if(char *name, int hemu)
   interf_n->cnf = NULL;
   interf_n->interf = NULL;
   interf_n->configured = 0;
-  interf_n->index = olsr_cnf->ifcnt++;
 
   interf_n->host_emul = hemu ? OLSR_TRUE : OLSR_FALSE;
 

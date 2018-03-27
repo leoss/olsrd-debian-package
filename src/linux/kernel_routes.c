@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: kernel_routes.c,v 1.18 2005/02/27 18:39:43 kattemat Exp $
+ * $Id: kernel_routes.c,v 1.23 2007/05/17 20:30:09 bernd67 Exp $
  */
 
 
@@ -65,15 +65,14 @@ olsr_ioctl_add_route(struct rt_entry *destination)
 {
   struct rtentry kernel_route;
   int tmp;
-  char dst_str[16], mask_str[16], router_str[16];
-
-  inet_ntop(AF_INET, &destination->rt_dst.v4, dst_str, 16);
-  inet_ntop(AF_INET, &destination->rt_mask.v4, mask_str, 16);
-  inet_ntop(AF_INET, &destination->rt_router.v4, router_str, 16);
+  char dst_str[INET_ADDRSTRLEN], mask_str[INET_ADDRSTRLEN], router_str[INET_ADDRSTRLEN];
 
   OLSR_PRINTF(1, "(ioctl)Adding route with metric %d to %s/%s via %s/%s.\n",
-              destination->rt_metric, dst_str, mask_str, router_str,
-              destination->rt_if->int_name)
+              destination->rt_metric,
+              inet_ntop(AF_INET, &destination->rt_dst.v4, dst_str, sizeof(dst_str)),
+              inet_ntop(AF_INET, &destination->rt_mask.v4, mask_str, sizeof(mask_str)),
+              inet_ntop(AF_INET, &destination->rt_router.v4, router_str, sizeof(router_str)),
+              destination->rt_if->int_name);
   
   memset(&kernel_route, 0, sizeof(struct rtentry));
 
@@ -93,29 +92,18 @@ olsr_ioctl_add_route(struct rt_entry *destination)
   
   kernel_route.rt_metric = destination->rt_metric + 1;
 
-  /* 
-   * Thales Internet GW fix
-   */
-
-  if((del_gws) &&
+  if((olsr_cnf->del_gws) &&
      (destination->rt_dst.v4 == INADDR_ANY) &&
      (destination->rt_dst.v4 == INADDR_ANY))
     {
       delete_all_inet_gws();
-      del_gws = 0;
+      olsr_cnf->del_gws = OLSR_FALSE;
     }
 
   /*
    * Set interface
    */
-  if((kernel_route.rt_dev = malloc(strlen(destination->rt_if->int_name) + 1)) == 0)
-    {
-      fprintf(stderr, "Out of memory!\n%s\n", strerror(errno));
-      olsr_exit(__func__, EXIT_FAILURE);
-    }
-
-  strcpy(kernel_route.rt_dev, destination->rt_if->int_name);
-
+  kernel_route.rt_dev = destination->rt_if->int_name;
   
   //printf("Inserting route entry on device %s\n\n", kernel_route.rt_dev);
   
@@ -128,7 +116,7 @@ olsr_ioctl_add_route(struct rt_entry *destination)
 
   //printf("\tiface: %s\n", kernel_route.rt_dev);    
   
-  tmp = ioctl(ioctl_s,SIOCADDRT,&kernel_route);
+  tmp = ioctl(olsr_cnf->ioctl_s,SIOCADDRT,&kernel_route);
   /*  kernel_route.rt_dev=*/
 
   /*
@@ -143,13 +131,6 @@ olsr_ioctl_add_route(struct rt_entry *destination)
 			       1,
 			       destination->rt_if->int_name); /* Send interface name */
       }
-  
-  
-  if (ifnet && kernel_route.rt_dev)
-    {
-      free(kernel_route.rt_dev);
-    }
-  
   
   return tmp;
 }
@@ -174,10 +155,10 @@ olsr_ioctl_add_route6(struct rt_entry *destination)
 
   OLSR_PRINTF(2, "(ioctl)Adding route: %s(hopc %d)\n", 
 	      olsr_ip_to_string(&destination->rt_dst), 
-	      destination->rt_metric + 1)
+	      destination->rt_metric + 1);
   
 
-  memset(&zeroaddr, 0, ipsize); /* Use for comparision */
+  memset(&zeroaddr, 0, olsr_cnf->ipsize); /* Use for comparision */
 
 
   memset(&kernel_route, 0, sizeof(struct in6_rtmsg));
@@ -189,7 +170,7 @@ olsr_ioctl_add_route6(struct rt_entry *destination)
   
   kernel_route.rtmsg_dst_len = destination->rt_mask.v6;
 
-  if(memcmp(&destination->rt_dst, &destination->rt_router, ipsize) != 0)
+  if(memcmp(&destination->rt_dst, &destination->rt_router, olsr_cnf->ipsize) != 0)
     {
       COPY_IP(&kernel_route.rtmsg_gateway, &destination->rt_router);
     }
@@ -205,14 +186,14 @@ olsr_ioctl_add_route6(struct rt_entry *destination)
 
 
   
-  //OLSR_PRINTF(3, "Adding route to %s using gw ", olsr_ip_to_string((union olsr_ip_addr *)&kernel_route.rtmsg_dst))
-  //OLSR_PRINTF(3, "%s\n", olsr_ip_to_string((union olsr_ip_addr *)&kernel_route.rtmsg_gateway))
+  //OLSR_PRINTF(3, "Adding route to %s using gw ", olsr_ip_to_string((union olsr_ip_addr *)&kernel_route.rtmsg_dst));
+  //OLSR_PRINTF(3, "%s\n", olsr_ip_to_string((union olsr_ip_addr *)&kernel_route.rtmsg_gateway));
 
-  if((tmp = ioctl(ioctl_s, SIOCADDRT, &kernel_route)) >= 0)
+  if((tmp = ioctl(olsr_cnf->ioctl_s, SIOCADDRT, &kernel_route)) >= 0)
     {
       if(olsr_cnf->open_ipc)
 	{
-	  if(memcmp(&destination->rt_router, &null_addr6, ipsize) != 0)
+	  if(memcmp(&destination->rt_router, &null_addr6, olsr_cnf->ipsize) != 0)
 	    ipc_route_send_rtentry(&destination->rt_dst, 
 				   &destination->rt_router, 
 				   destination->rt_metric, 
@@ -238,15 +219,13 @@ olsr_ioctl_del_route(struct rt_entry *destination)
 {
   struct rtentry kernel_route;
   int tmp;
-  char dst_str[16], mask_str[16], router_str[16];
+  char dst_str[INET_ADDRSTRLEN], mask_str[INET_ADDRSTRLEN], router_str[INET_ADDRSTRLEN];
 
-  inet_ntop(AF_INET, &destination->rt_dst.v4, dst_str, 16);
-  inet_ntop(AF_INET, &destination->rt_mask.v4, mask_str, 16);
-  inet_ntop(AF_INET, &destination->rt_router.v4, router_str, 16);
-
-  OLSR_PRINTF(1, "(ioctl)Deleting route with metric %d to %s/%s via %s/%s.\n",
-              destination->rt_metric, dst_str, mask_str, router_str,
-              destination->rt_if->int_name)
+  OLSR_PRINTF(1, "(ioctl)Deleting route with metric %d to %s/%s via %s.\n",
+              destination->rt_metric,
+              inet_ntop(AF_INET, &destination->rt_dst.v4, dst_str, sizeof(dst_str)),
+              inet_ntop(AF_INET, &destination->rt_mask.v4, mask_str, sizeof(mask_str)),
+              inet_ntop(AF_INET, &destination->rt_router.v4, router_str, sizeof(router_str)));
   
   memset(&kernel_route,0,sizeof(struct rtentry));
 
@@ -274,7 +253,7 @@ olsr_ioctl_del_route(struct rt_entry *destination)
   //printf("\tiface: %s\n", kernel_route.rt_dev);    
   */
 
-  tmp = ioctl(ioctl_s, SIOCDELRT, &kernel_route);
+  tmp = ioctl(olsr_cnf->ioctl_s, SIOCDELRT, &kernel_route);
 
 
     /*
@@ -314,24 +293,24 @@ olsr_ioctl_del_route6(struct rt_entry *destination)
 
   OLSR_PRINTF(2, "(ioctl)Deleting route: %s(hopc %d)\n", 
 	      olsr_ip_to_string(&destination->rt_dst), 
-	      destination->rt_metric)
+	      destination->rt_metric);
 
 
-  OLSR_PRINTF(1, "Deleting route: %s\n", olsr_ip_to_string(&tmp_addr))
+  OLSR_PRINTF(1, "Deleting route: %s\n", olsr_ip_to_string(&tmp_addr));
 
   memset(&kernel_route,0,sizeof(struct in6_rtmsg));
 
   kernel_route.rtmsg_dst_len = destination->rt_mask.v6;
 
-  memcpy(&kernel_route.rtmsg_dst, &destination->rt_dst, ipsize);
+  memcpy(&kernel_route.rtmsg_dst, &destination->rt_dst, olsr_cnf->ipsize);
 
-  memcpy(&kernel_route.rtmsg_gateway, &destination->rt_router, ipsize);
+  memcpy(&kernel_route.rtmsg_gateway, &destination->rt_router, olsr_cnf->ipsize);
 
   kernel_route.rtmsg_flags = destination->rt_flags;
   kernel_route.rtmsg_metric = destination->rt_metric;
 
 
-  tmp = ioctl(ioctl_s, SIOCDELRT,&kernel_route);
+  tmp = ioctl(olsr_cnf->ioctl_s, SIOCDELRT,&kernel_route);
 
 
     /*
@@ -351,16 +330,14 @@ olsr_ioctl_del_route6(struct rt_entry *destination)
 
 
 int
-delete_all_inet_gws()
-{
-  struct rtentry kernel_route;
-  
+delete_all_inet_gws(void)
+{  
   int s;
   char buf[BUFSIZ], *cp, *cplim;
   struct ifconf ifc;
   struct ifreq *ifr;
   
-  OLSR_PRINTF(1, "Internet gateway detected...\nTrying to delete default gateways\n")
+  OLSR_PRINTF(1, "Internet gateway detected...\nTrying to delete default gateways\n");
   
   /* Get a socket */
   if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0) 
@@ -380,20 +357,20 @@ delete_all_inet_gws()
     }
 
   ifr = ifc.ifc_req;
-#define size(p) (sizeof (p))
   cplim = buf + ifc.ifc_len; /*skip over if's with big ifr_addr's */
-  for (cp = buf; cp < cplim;cp += sizeof (ifr->ifr_name) + size(ifr->ifr_addr)) 
+  for (cp = buf; cp < cplim; cp += sizeof (ifr->ifr_name) + sizeof(ifr->ifr_addr)) 
     {
+      struct rtentry kernel_route;
       ifr = (struct ifreq *)cp;
       
       
       if(strcmp(ifr->ifr_ifrn.ifrn_name, "lo") == 0)
 	{
-	  OLSR_PRINTF(1, "Skipping loopback...\n")
+          OLSR_PRINTF(1, "Skipping loopback...\n");
 	  continue;
 	}
 
-      OLSR_PRINTF(1, "Trying 0.0.0.0/0 %s...", ifr->ifr_ifrn.ifrn_name)
+      OLSR_PRINTF(1, "Trying 0.0.0.0/0 %s...", ifr->ifr_ifrn.ifrn_name);
       
       
       memset(&kernel_route,0,sizeof(struct rtentry));
@@ -406,36 +383,24 @@ delete_all_inet_gws()
       ((struct sockaddr_in *)&kernel_route.rt_gateway)->sin_addr.s_addr = INADDR_ANY;
       ((struct sockaddr_in *)&kernel_route.rt_gateway)->sin_family=AF_INET;
       
-      //memcpy(&kernel_route.rt_gateway, gw, ipsize);
+      //memcpy(&kernel_route.rt_gateway, gw, olsr_cnf->ipsize);
       
 	   
 	   
       kernel_route.rt_flags = RTF_UP | RTF_GATEWAY;
 	   
 	   
-      if((kernel_route.rt_dev = malloc(6)) == 0)
-	{
-	  fprintf(stderr, "Out of memory!\n%s\n", strerror(errno));
-	  olsr_exit(__func__, EXIT_FAILURE);
-	}
-	   
-      strncpy(kernel_route.rt_dev, ifr->ifr_ifrn.ifrn_name, 6);
+      kernel_route.rt_dev = ifr->ifr_ifrn.ifrn_name;
 
   
       //printf("Inserting route entry on device %s\n\n", kernel_route.rt_dev);
       
       if((ioctl(s, SIOCDELRT, &kernel_route)) < 0)
-	OLSR_PRINTF(1, "NO\n")
+         OLSR_PRINTF(1, "NO\n");
       else
-	OLSR_PRINTF(1, "YES\n")
-
-
-      free(kernel_route.rt_dev);
-      
-    }
-  
+         OLSR_PRINTF(1, "YES\n");
+    }  
   close(s);
-  
   return 0;
        
 }

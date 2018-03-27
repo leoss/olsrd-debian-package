@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: olsr.h,v 1.24 2005/05/29 12:47:45 br1 Exp $
+ * $Id: olsr.h,v 1.26 2007/04/20 13:46:04 bernd67 Exp $
  */
 
 
@@ -49,6 +49,7 @@
 extern olsr_bool changes_topology;
 extern olsr_bool changes_neighborhood;
 extern olsr_bool changes_hna;
+extern olsr_bool changes_force;
 
 void
 register_pcf(int (*)(int, int, int));
@@ -59,7 +60,7 @@ olsr_process_changes(void);
 void
 init_msg_seqno(void);
 
-inline olsr_u16_t
+olsr_u16_t
 get_msg_seqno(void);
 
 int
@@ -100,6 +101,6 @@ void *
 olsr_malloc(size_t, const char *);
 
 int
-olsr_printf(int, char *, ...);
+olsr_printf(int, char *, ...) __attribute__((format(printf,2,3)));
 
 #endif

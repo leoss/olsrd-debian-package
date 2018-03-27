@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: kernel_routes.c,v 1.15 2005/02/27 10:48:05 kattemat Exp $
+ * $Id: kernel_routes.c,v 1.20 2007/04/25 22:22:15 bernd67 Exp $
  */
 
 #include <stdio.h>
@@ -63,23 +63,33 @@ int olsr_ioctl_add_route(struct rt_entry *Dest)
   inet_ntop(AF_INET, &Dest->rt_router.v4, Str3, 16);
 
   OLSR_PRINTF(1, "Adding IPv4 route with metric %d to %s/%s via %s and I/F 0x%x.\n",
-              Dest->rt_metric, Str1, Str2, Str3, Dest->rt_if->if_index)
+              Dest->rt_metric + Dest->rt_if->int_metric, Str1, Str2, Str3, Dest->rt_if->if_index);
 
   memset(&Row, 0, sizeof (MIB_IPFORWARDROW));
 
   Row.dwForwardDest = Dest->rt_dst.v4;
   Row.dwForwardMask = Dest->rt_mask.v4;
+  Row.dwForwardPolicy = 0;
   Row.dwForwardNextHop = Dest->rt_router.v4;
   Row.dwForwardIfIndex = Dest->rt_if->if_index;
+  // MIB_IPROUTE_TYPE_DIRECT and MIB_IPROUTE_TYPE_INDIRECT
   Row.dwForwardType = (Dest->rt_dst.v4 == Dest->rt_router.v4) ? 3 : 4;
-  Row.dwForwardProto = 3; // PROTO_IP_NETMGMT
-  Row.dwForwardMetric1 = Dest->rt_metric;
+  Row.dwForwardProto = 3; // MIB_IPPROTO_NETMGMT
+  Row.dwForwardAge = INFINITE;
+  Row.dwForwardNextHopAS = 0;
+  Row.dwForwardMetric1 = Dest->rt_metric + Dest->rt_if->int_metric;
+  Row.dwForwardMetric2 = -1;
+  Row.dwForwardMetric3 = -1;
+  Row.dwForwardMetric4 = -1;
+  Row.dwForwardMetric5 = -1;
 
   Res = SetIpForwardEntry(&Row);
 
   if (Res != NO_ERROR)
   {
-    fprintf(stderr, "SetIpForwardEntry() = %08lx, %s", Res, StrError(Res));
+    if (Res != ERROR_NOT_FOUND)
+      fprintf(stderr, "SetIpForwardEntry() = %08lx, %s", Res, StrError(Res));
+
     Res = CreateIpForwardEntry(&Row);
   }
 
@@ -103,7 +113,7 @@ int olsr_ioctl_add_route(struct rt_entry *Dest)
 
 // XXX - to be implemented
 
-int olsr_ioctl_add_route6(struct rt_entry *Dest)
+int olsr_ioctl_add_route6(struct rt_entry *Dest __attribute__((unused)))
 {
   return 0;
 }
@@ -119,17 +129,25 @@ int olsr_ioctl_del_route(struct rt_entry *Dest)
   inet_ntop(AF_INET, &Dest->rt_router.v4, Str3, 16);
 
   OLSR_PRINTF(1, "Deleting IPv4 route with metric %d to %s/%s via %s and I/F 0x%x.\n",
-              Dest->rt_metric, Str1, Str2, Str3, Dest->rt_if->if_index)
+              Dest->rt_metric + Dest->rt_if->int_metric, Str1, Str2, Str3, Dest->rt_if->if_index);
 
   memset(&Row, 0, sizeof (MIB_IPFORWARDROW));
 
   Row.dwForwardDest = Dest->rt_dst.v4;
   Row.dwForwardMask = Dest->rt_mask.v4;
+  Row.dwForwardPolicy = 0;
   Row.dwForwardNextHop = Dest->rt_router.v4;
   Row.dwForwardIfIndex = Dest->rt_if->if_index;
+  // MIB_IPROUTE_TYPE_DIRECT and MIB_IPROUTE_TYPE_INDIRECT
   Row.dwForwardType = (Dest->rt_dst.v4 == Dest->rt_router.v4) ? 3 : 4;
-  Row.dwForwardProto = 3; // PROTO_IP_NETMGMT
-  Row.dwForwardMetric1 = Dest->rt_metric;
+  Row.dwForwardProto = 3; // MIB_IPPROTO_NETMGMT
+  Row.dwForwardAge = INFINITE;
+  Row.dwForwardNextHopAS = 0;
+  Row.dwForwardMetric1 = Dest->rt_metric + Dest->rt_if->int_metric;
+  Row.dwForwardMetric2 = -1;
+  Row.dwForwardMetric3 = -1;
+  Row.dwForwardMetric4 = -1;
+  Row.dwForwardMetric5 = -1;
 
   Res = DeleteIpForwardEntry(&Row);
 
@@ -152,7 +170,7 @@ int olsr_ioctl_del_route(struct rt_entry *Dest)
 
 // XXX - to be implemented
 
-int olsr_ioctl_del_route6(struct rt_entry *Dest)
+int olsr_ioctl_del_route6(struct rt_entry *Dest __attribute__((unused)))
 {
   return 0;
 }

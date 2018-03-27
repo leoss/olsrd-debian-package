@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: link_set.h,v 1.28 2005/10/23 20:58:14 tlopatic Exp $
+ * $Id: link_set.h,v 1.31 2007/02/10 19:27:32 bernd67 Exp $
  */
 
 
@@ -55,6 +55,7 @@ struct link_entry
 {
   union olsr_ip_addr local_iface_addr;
   union olsr_ip_addr neighbor_iface_addr;
+  char *if_name;
   clock_t SYM_time;
   clock_t ASYM_time;
   clock_t time;
@@ -116,11 +117,14 @@ get_hold_time_neighbor(void);
 void
 olsr_init_link_set(void);
 
+void
+del_if_link_entries(union olsr_ip_addr *);
+
 struct link_entry *
 get_best_link_to_neighbor(union olsr_ip_addr *);
 
 struct link_entry *
-lookup_link_entry(union olsr_ip_addr *, union olsr_ip_addr *);
+lookup_link_entry(union olsr_ip_addr *, union olsr_ip_addr *remote_main, struct interface *);
 
 struct link_entry *
 update_link_entry(union olsr_ip_addr *, union olsr_ip_addr *, struct hello_message *, struct interface *);
@@ -139,7 +143,7 @@ void
 olsr_update_packet_loss_hello_int(struct link_entry *, double);
 
 void 
-olsr_update_packet_loss(union olsr_ip_addr *, union olsr_ip_addr *, olsr_u16_t);
+olsr_update_packet_loss(union olsr_ip_addr *, struct interface *, olsr_u16_t);
 
 void 
 olsr_print_link_set(void);

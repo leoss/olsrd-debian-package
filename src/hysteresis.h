@@ -36,21 +36,17 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: hysteresis.h,v 1.7 2005/03/06 19:33:35 kattemat Exp $
+ * $Id: hysteresis.h,v 1.9 2007/04/20 13:46:04 bernd67 Exp $
  */
-
-
 #ifndef _OLSR_HYSTERESIS
 #define _OLSR_HYSTERESIS
 
 #include "link_set.h"
 
-
-
-inline float
+float
 olsr_hyst_calc_stability(float);
 
-inline int
+int
 olsr_process_hysteresis(struct link_entry *);
 
 float
@@ -60,6 +56,6 @@ void
 olsr_update_hysteresis_hello(struct link_entry *, double);
 
 void
-update_hysteresis_incoming(union olsr_ip_addr *, union olsr_ip_addr *, olsr_u16_t);
+update_hysteresis_incoming(union olsr_ip_addr *, struct interface *, olsr_u16_t);
 
 #endif

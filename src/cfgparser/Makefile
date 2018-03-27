@@ -36,7 +36,7 @@
 # to the project. For more information see the website or contact
 # the copyright holders.
 #
-# $Id: Makefile,v 1.21 2005/12/29 19:48:43 tlopatic Exp $
+# $Id: Makefile,v 1.26 2007/05/13 22:02:57 bernd67 Exp $
 
 TOPDIR=../..
 include $(TOPDIR)/Makefile.inc
@@ -69,9 +69,13 @@ else
 # build lib per default
 
 ifeq (${OS}, osx)
-LDFLAGS += -dynamiclib -single_module
+LDFLAGS +=	-dynamiclib -single_module
 else
 LDFLAGS +=	-shared -Wl,-soname,$(LIBNAME)
+endif
+
+ifeq (${OS}, win32)
+LDFLAGS +=	-Wl,--out-implib=libolsrd_cfgparser.a -Wl,--export-all-symbols
 endif
 
 CFLAGS +=	-DMAKELIB
@@ -85,11 +89,20 @@ default_target: $(NAME)
 $(NAME):	$(OBJS)
 		$(CC) $(LDFLAGS) -o $(NAME) $(OBJS) $(LIBS)
 
-oscan.c:	oscan.lex
-		$(FLEX) -ooscan.c oscan.lex
+oscan.c:	oscan.lex Makefile
+		$(FLEX) -Cem -ooscan.c-tmp oscan.lex
+		sed	-e '/^static/s/yy_get_next_buffer[\(][\)]/yy_get_next_buffer(void)/' \
+			-e '/^static/s/yy_get_previous_state[\(][\)]/yy_get_previous_state(void)/' \
+			-e '/^static/s/yygrowstack[\(][\)]/yygrowstack(void)/' \
+			-e '/^static/s/input[\(][\)]/input(void)/' \
+			-e '/^static  *void  *yy_fatal_error/s/^\(.*)\);$$/\1 __attribute__((noreturn));/' \
+			< oscan.c-tmp >oscan.c
+		$(RM) oscan.c-tmp
 
-oparse.c:	oparse.y olsrd_conf.h
-		$(BISON) -d -ooparse.c oparse.y
+oparse.c:	oparse.y olsrd_conf.h Makefile
+		$(BISON) -d -o oparse.c oparse.y
+
+#oscan.o oparse.o:: CFLAGS := $(filter-out -Wunreachable-code, $(CFLAGS))
 
 .PHONY: install clean uberclean
 
@@ -98,9 +111,10 @@ install:
 		/sbin/ldconfig -n $(LIBDIR)
 
 clean:
-		rm -f *.[od~]
+		rm -f *.[od~] oscan.c oparse.[ch]
 		rm -f $(LIBNAME)
 		rm -f $(BINNAME)
+		$(RM) oparse.c-tmp
 
 uberclean:	clean
 		rm -f oparse.c oparse.h oscan.c

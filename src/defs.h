@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: defs.h,v 1.50 2005/11/19 08:49:44 kattemat Exp $
+ * $Id: defs.h,v 1.60 2007/05/02 08:06:28 bernd67 Exp $
  */
 
 
@@ -59,49 +59,46 @@
 #include "net_olsr.h" /* IPaddr -> string conversions is used by everyone */
 #include "olsr_cfg.h"
 
-#define VERSION "0.4.10"
-#define SOFTWARE_VERSION "olsr.org - " VERSION
-#define OLSRD_VERSION_DATE "       *** " SOFTWARE_VERSION " (" __DATE__ ") ***\n"
+#define SOFTWARE_VERSION	"olsr.org - " VERSION
+#define OLSRD_VERSION_DATE	"       *** " SOFTWARE_VERSION " (" __DATE__ ") ***\n"
 
 #ifndef OLSRD_GLOBAL_CONF_FILE
-#define OLSRD_CONF_FILE_NAME "olsrd.conf"
-#define OLSRD_GLOBAL_CONF_FILE "/etc/" OLSRD_CONF_FILE_NAME
+#define OLSRD_CONF_FILE_NAME	"olsrd.conf"
+#define OLSRD_GLOBAL_CONF_FILE	"/etc/" OLSRD_CONF_FILE_NAME
 #endif
 
-#define	HOPCNT_MAX		32	/* maximum hops number */
 #define	MAXMESSAGESIZE		1500	/* max broadcast size */
 #define UDP_IPV4_HDRSIZE        28
-#define UDP_IPV6_HDRSIZE        48
-#define MAX_IFS                 16
+#define UDP_IPV6_HDRSIZE        62
 
+#define MIN_PACKET_SIZE(ver)	((int)(sizeof(olsr_u8_t) * (((ver) == AF_INET) ? 4 : 7)))
 /* Debug helper macro */
 #ifdef DEBUG
-#define olsr_debug(lvl,format,args...) \
-   OLSR_PRINTF(lvl, "%s (%s:%d): ", __func__, __FILE__, __LINE__); \
-   OLSR_PRINTF(lvl, format, ##args);
+#define olsr_debug(lvl, format, args...) do {                           \
+    OLSR_PRINTF(lvl, "%s (%s:%d): ", __func__, __FILE__, __LINE__);     \
+    OLSR_PRINTF(lvl, (format), ##args);                                 \
+  } while (0)
 #endif
 
 extern FILE *debug_handle;
 
 #ifdef NODEBUG
-#define OLSR_PRINTF(lvl, format, args...) \
-   { }
+#define OLSR_PRINTF(lvl, format, args...) do { } while(0)
 #else
-#define OLSR_PRINTF(lvl, format, args...) \
-   { \
-     if((olsr_cnf->debug_level >= lvl) && debug_handle) \
-        fprintf(debug_handle, format, ##args); \
-   }
+#define OLSR_PRINTF(lvl, format, args...) do {                  \
+    if((olsr_cnf->debug_level >= (lvl)) && debug_handle)          \
+      fprintf(debug_handle, (format), ##args);                    \
+  } while (0)
 #endif
 
 /* Provides a timestamp s1 milliseconds in the future
    according to system ticks returned by times(2) */
-#define GET_TIMESTAMP(s1) \
-        (now_times + ((s1) / system_tick_divider))
+#define GET_TIMESTAMP(s1)	(now_times + ((s1) / olsr_cnf->system_tick_divider))
 
-#define TIMED_OUT(s1) \
-        ((int)((s1) - now_times) < 0)
+#define TIMED_OUT(s1)	((int)((s1) - now_times) < 0)
 
+
+#define ARRAYSIZE(x)	(sizeof(x)/sizeof(*(x)))
 
 /*
  * Queueing macros
@@ -109,16 +106,20 @@ extern FILE *debug_handle;
 
 /* First "argument" is NOT a pointer! */
 
-#define QUEUE_ELEM(pre, new) \
-        pre.next->prev = new; \
-        new->next = pre.next; \
-        new->prev = &pre; \
-        pre.next = new
+#define QUEUE_ELEM(pre, new) do { \
+    pre.next->prev = new;         \
+    new->next = pre.next;         \
+    new->prev = &pre;             \
+    pre.next = new;               \
+  } while (0)
 
-#define DEQUEUE_ELEM(elem) \
-	elem->prev->next = elem->next; \
-	elem->next->prev = elem->prev
+#define DEQUEUE_ELEM(elem) do { \
+    elem->prev->next = elem->next;     \
+    elem->next->prev = elem->prev;     \
+  } while (0)
 
+
+#define CLOSE(fd)  do { close(fd); (fd) = -1; } while (0)
 
 /*
  * Global olsrd configuragtion
@@ -126,55 +127,10 @@ extern FILE *debug_handle;
 
 extern struct olsrd_config *olsr_cnf;
 
-/* Global tick resolution */
-extern olsr_u16_t system_tick_divider;
-
-extern int exit_value; /* Global return value for process termination */
-
-
 /* Timer data */
 extern clock_t now_times;              /* current idea of times(2) reported uptime */
-extern struct timeval now;		/* current idea of time */
-extern struct tm *nowtm;		/* current idea of time (in tm) */
-
-extern olsr_bool disp_pack_in;         /* display incoming packet content? */
-extern olsr_bool disp_pack_out;        /* display outgoing packet content? */
-
-extern olsr_bool del_gws;
-
-/*
- * Timer values
- */
-
-extern float will_int;
-extern float max_jitter;
-
-extern size_t ipsize;
-
-/* Main address of this node */
-extern union olsr_ip_addr main_addr;
-
-/* OLSR UPD port */
-extern int olsr_udp_port;
-
-/* The socket used for all ioctls */
-extern int ioctl_s;
-
-/* routing socket */
-#if defined __FreeBSD__ || defined __MacOSX__ || defined __NetBSD__ || defined __OpenBSD__
-extern int rts;
-#endif
-
-extern float max_tc_vtime;
-
-extern clock_t fwdtimer[MAX_IFS];	/* forwarding timer */
-
-extern int minsize;
-
-extern olsr_bool changes;                /* is set if changes occur in MPRS set */ 
-
-/* TC empty message sending */
-extern clock_t send_empty_tc;
+extern struct timeval now;	       /* current idea of time */
+extern struct tm *nowtm;	       /* current idea of time (in tm) */
 
 /*
  *IPC functions
@@ -185,17 +141,16 @@ extern clock_t send_empty_tc;
 int
 ipc_init(void);
 
+#if 0
 int
 ipc_input(int);
+#endif
 
 int
 shutdown_ipc(void);
 
 int
 ipc_output(struct olsr *);
-
-int
-ipc_send_net_info(void);
 
 int
 ipc_route_send_rtentry(union olsr_ip_addr*, union olsr_ip_addr *, int, int, char *);

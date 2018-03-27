@@ -35,12 +35,16 @@
 # to the project. For more information see the website or contact
 # the copyright holders.
 #
-# $Id: Makefile,v 1.67 2005/12/29 21:26:31 tlopatic Exp $
+# $Id: Makefile,v 1.86 2007/07/05 23:12:43 bernd67 Exp $
 
-VERS =		0.4.10
+VERS =		0.5.2
 
 TOPDIR = .
 include Makefile.inc
+
+CFLAGS +=	-DVERSION=\"$(VERS)\"
+
+MAKECMD = $(MAKE) OS="$(OS)" WARNINGS="$(WARNINGS)"
 
 LIBS +=		$(OS_LIB_DYNLOAD)
 
@@ -60,37 +64,37 @@ olsrd:		$(OBJS) $(CFGOBJS)
 		$(CC) $(LDFLAGS) -o $@ $(OBJS) $(CFGOBJS) $(LIBS)
 
 cfgparser:	$(CFGDEPS)
-		$(MAKE) -C $(CFGDIR)
+		$(MAKECMD) -C $(CFGDIR)
 
 switch:		
-		$(MAKE) -C $(SWITCHDIR)
+		$(MAKECMD) -C $(SWITCHDIR)
 
 $(CFGOBJS):
-		$(MAKE) -C $(CFGDIR)
+		$(MAKECMD) -C $(CFGDIR)
 
-.PHONY: help libs clean_libs libs_clean clean uberclean install_libs libs_install install_bin install_olsrd install build_all install_all
+.PHONY: help libs clean_libs libs_clean clean uberclean install_libs libs_install install_bin install_olsrd install build_all install_all clean_all
 
 clean:
-		-rm -f $(OBJS) $(SRCS:%.c=%.d) olsrd olsrd.exe $(TAGFILE)
-		$(MAKE) -C $(CFGDIR) clean
-		$(MAKE) -C $(SWITCHDIR) clean
+		-rm -f $(OBJS) $(SRCS:%.c=%.d) olsrd olsrd.exe
+		$(MAKECMD) -C $(CFGDIR) clean
+		$(MAKECMD) -C $(SWITCHDIR) clean
 
 uberclean:	clean clean_libs
-		-rm -f src/*.[od~] 
-		-rm -f src/linux/*.[od~] src/unix/*.[od~] src/win32/*.[od~] src/bsd/*.[od~]
-		$(MAKE) -C $(CFGDIR) uberclean
-		$(MAKE) -C $(SWITCHDIR) clean
+		-rm -f $(TAGFILE)
+		find . \( -name '*.[od]' -o -name '*~' \) -print | xargs -r rm -f
+		$(MAKECMD) -C $(CFGDIR) uberclean
+		$(MAKECMD) -C $(SWITCHDIR) clean
 
 install: install_olsrd
 
 install_bin:
-		$(STRIP) $(EXENAME)
 		mkdir -p $(SBINDIR)
 		install -m 755 $(EXENAME) $(SBINDIR)
+		$(STRIP) $(SBINDIR)/$(EXENAME)
 
 install_olsrd:	install_bin
 		@echo ========= C O N F I G U R A T I O N - F I L E ============
-		@echo olsrd uses the configfile $(INSTALL_PREFIX)/etc/olsr.conf
+		@echo olsrd uses the configfile $(CFGFILE)
 		@echo a default configfile. A sample RFC-compliance aimed
 		@echo configfile can be installed. Note that a LQ-based configfile
 		@echo can be found at files/olsrd.conf.default.lq
@@ -109,55 +113,73 @@ install_olsrd:	install_bin
 tags:
 		$(TAGCMD) -o $(TAGFILE) $(TAG_SRCS)
 
+rpm:
+		@$(RM) olsrd-current.tar.bz2
+		@echo "Creating olsrd-current.tar.bz2 ..."
+		@./list-excludes.sh | tar  --exclude-from=- --exclude="olsrd-current.tar.bz2" -C .. -cjf olsrd-current.tar.bz2 olsrd-current
+		@echo "Building RPMs..."
+		@rpmbuild -ta olsrd-current.tar.bz2
 #
 # PLUGINS
 #
 
 libs: 
-		$(MAKE) -C lib LIBDIR=$(LIBDIR)
+		$(MAKECMD) -C lib LIBDIR=$(LIBDIR)
 
 libs_clean clean_libs:
-		$(MAKE) -C lib LIBDIR=$(LIBDIR) clean
+		$(MAKECMD) -C lib LIBDIR=$(LIBDIR) clean
 
 libs_install install_libs:
-		$(MAKE) -C lib LIBDIR=$(LIBDIR) install
+		$(MAKECMD) -C lib LIBDIR=$(LIBDIR) install
 
 httpinfo:
-		$(MAKE) -C lib/httpinfo clean
-		$(MAKE) -C lib/httpinfo 
-		$(MAKE) -C lib/httpinfo install 
+		$(MAKECMD) -C lib/httpinfo clean
+		$(MAKECMD) -C lib/httpinfo 
+		$(MAKECMD) -C lib/httpinfo DESTDIR=$(DESTDIR) install 
 
 tas:
-		$(MAKE) -C lib/tas clean
-		$(MAKE) -C lib/tas install
+		$(MAKECMD) -C lib/tas clean
+		$(MAKECMD) -C lib/tas DESTDIR=$(DESTDIR) install
 
 dot_draw:
-		$(MAKE) -C lib/dot_draw clean
-		$(MAKE) -C lib/dot_draw install
+		$(MAKECMD) -C lib/dot_draw clean
+		$(MAKECMD) -C lib/dot_draw DESTDIR=$(DESTDIR) install
 
 nameservice:
-		$(MAKE) -C lib/nameservice clean
-		$(MAKE) -C lib/nameservice install
+		$(MAKECMD) -C lib/nameservice clean
+		$(MAKECMD) -C lib/nameservice DESTDIR=$(DESTDIR) install
 
 dyn_gw:
-		$(MAKE) -C lib/dyn_gw clean
-		$(MAKE) -C lib/dyn_gw
-		$(MAKE) -C lib/dyn_gw install
+		$(MAKECMD) -C lib/dyn_gw clean
+		$(MAKECMD) -C lib/dyn_gw
+		$(MAKECMD) -C lib/dyn_gw DESTDIR=$(DESTDIR) install
 
-powerinfo:
-		$(MAKE) -C lib/powerinfo clean
-		$(MAKE) -C lib/powerinfo 
-		$(MAKE) -C lib/powerinfo install
+dyn_gw_plain:
+		$(MAKECMD) -C lib/dyn_gw_plain clean
+		$(MAKECMD) -C lib/dyn_gw_plain
+		$(MAKECMD) -C lib/dyn_gw_plain DESTDIR=$(DESTDIR) install
 
 secure:
-		$(MAKE) -C lib/secure clean
-		$(MAKE) -C lib/secure
-		$(MAKE) -C lib/secure install
+		$(MAKECMD) -C lib/secure clean
+		$(MAKECMD) -C lib/secure
+		$(MAKECMD) -C lib/secure DESTDIR=$(DESTDIR) install
 
 pgraph:
-		$(MAKE) -C lib/pgraph clean
-		$(MAKE) -C lib/pgraph 
-		$(MAKE) -C lib/pgraph install 
+		$(MAKECMD) -C lib/pgraph clean
+		$(MAKECMD) -C lib/pgraph 
+		$(MAKECMD) -C lib/pgraph DESTDIR=$(DESTDIR) install 
+
+bmf:
+		$(MAKECMD) -C lib/bmf clean
+		$(MAKECMD) -C lib/bmf 
+		$(MAKECMD) -C lib/bmf DESTDIR=$(DESTDIR) install 
+
+quagga:
+		$(MAKECMD) -C lib/quagga clean
+		$(MAKECMD) -C lib/quagga 
+		$(MAKECMD) -C lib/quagga DESTDIR=$(DESTDIR) install 
+
 
 build_all:	cfgparser olsrd libs
 install_all:	install install_libs
+clean_all:	uberclean clean_libs

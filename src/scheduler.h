@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: scheduler.h,v 1.11 2005/03/06 19:33:35 kattemat Exp $
+ * $Id: scheduler.h,v 1.13 2007/04/20 13:46:04 bernd67 Exp $
  */
 
 
@@ -68,6 +68,9 @@ struct event_entry
   struct event_entry *next;
 };
 
+void
+signal_link_changes(olsr_bool);
+
 int
 olsr_register_timeout_function(void (*)(void));
 
@@ -81,6 +84,6 @@ int
 olsr_remove_scheduler_event(void (*)(void *), void *, float, float, olsr_u8_t *);
 
 void
-scheduler(void);
+scheduler(void) __attribute__((noreturn));
 
 #endif

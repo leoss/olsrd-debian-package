@@ -36,7 +36,7 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: ifnet.c,v 1.29 2005/10/23 19:01:04 tlopatic Exp $
+ * $Id: ifnet.c,v 1.38 2007/05/13 22:23:55 bernd67 Exp $
  */
 
 #include "interfaces.h"
@@ -54,10 +54,57 @@
 #include <iphlpapi.h>
 #include <iprtrmib.h>
 
+struct MibIpInterfaceRow
+{
+  USHORT Family;
+  ULONG64 InterfaceLuid;
+  ULONG InterfaceIndex;
+  ULONG MaxReassemblySize;
+  ULONG64 InterfaceIdentifier;
+  ULONG MinRouterAdvertisementInterval;
+  ULONG MaxRouterAdvertisementInterval;
+  BOOLEAN AdvertisingEnabled;
+  BOOLEAN ForwardingEnabled;
+  BOOLEAN WeakHostSend;
+  BOOLEAN WeakHostReceive;
+  BOOLEAN UseAutomaticMetric;
+  BOOLEAN UseNeighborUnreachabilityDetection;   
+  BOOLEAN ManagedAddressConfigurationSupported;
+  BOOLEAN OtherStatefulConfigurationSupported;
+  BOOLEAN AdvertiseDefaultRoute;
+  INT RouterDiscoveryBehavior;
+  ULONG DadTransmits;
+  ULONG BaseReachableTime;
+  ULONG RetransmitTime;
+  ULONG PathMtuDiscoveryTimeout;
+  INT LinkLocalAddressBehavior;
+  ULONG LinkLocalAddressTimeout;
+  ULONG ZoneIndices[16];
+  ULONG SitePrefixLength;
+  ULONG Metric;
+  ULONG NlMtu;    
+  BOOLEAN Connected;
+  BOOLEAN SupportsWakeUpPatterns;   
+  BOOLEAN SupportsNeighborDiscovery;
+  BOOLEAN SupportsRouterDiscovery;
+  ULONG ReachableTime;
+  BYTE TransmitOffload;
+  BYTE ReceiveOffload; 
+  BOOLEAN DisableDefaultRoutes;
+};
+
+typedef DWORD (__stdcall *GETIPINTERFACEENTRY)
+  (struct MibIpInterfaceRow *Row);
+
+typedef DWORD (__stdcall *GETADAPTERSADDRESSES)
+  (ULONG Family, DWORD Flags, PVOID Reserved,
+   PIP_ADAPTER_ADDRESSES pAdapterAddresses, PULONG pOutBufLen);
+
 struct InterfaceInfo
 {
   unsigned int Index;
   int Mtu;
+  int Metric;
   unsigned int Addr;
   unsigned int Mask;
   unsigned int Broad;
@@ -66,17 +113,16 @@ struct InterfaceInfo
 
 void WinSockPError(char *);
 char *StrError(unsigned int ErrNo);
-int inet_pton(int af, char *src, void *dst);
 
 void ListInterfaces(void);
 int GetIntInfo(struct InterfaceInfo *Info, char *Name);
 void RemoveInterface(struct olsr_if *IntConf);
 
-#define MAX_INTERFACES 25
+#define MAX_INTERFACES 100
 
 int __stdcall SignalHandler(unsigned long Signal);
 
-static unsigned long __stdcall SignalHandlerWrapper(void *Dummy)
+static unsigned long __stdcall SignalHandlerWrapper(void *Dummy __attribute__((unused)))
 {
   SignalHandler(0);
   return 0;
@@ -132,6 +178,62 @@ static int IntNameToMiniIndex(int *MiniIndex, char *String)
   return 0;
 }
 
+static int FriendlyNameToMiniIndex(int *MiniIndex, char *String)
+{
+  unsigned long BuffLen;
+  unsigned long Res;
+  IP_ADAPTER_ADDRESSES AdAddr[MAX_INTERFACES], *WalkerAddr;
+  char FriendlyName[MAX_INTERFACE_NAME_LEN];
+  HMODULE h;
+  GETADAPTERSADDRESSES pfGetAdaptersAddresses;
+  
+  h = LoadLibrary("iphlpapi.dll");
+
+  if (h == NULL)
+  {
+    fprintf(stderr, "LoadLibrary() = %08lx", GetLastError());
+    return -1;
+  }
+
+  pfGetAdaptersAddresses = (GETADAPTERSADDRESSES) GetProcAddress(h, "GetAdaptersAddresses");
+
+  if (pfGetAdaptersAddresses == NULL)
+  {
+    fprintf(stderr, "Unable to use adapter friendly name (GetProcAddress() = %08lx)\n", GetLastError());
+    return -1;
+  }
+  
+  BuffLen = sizeof (AdAddr);
+
+  Res = pfGetAdaptersAddresses(AF_INET, 0, NULL, AdAddr, &BuffLen);
+
+  if (Res != NO_ERROR)
+  {  
+    fprintf(stderr, "GetAdaptersAddresses() = %08lx", GetLastError());
+    return -1;
+  }
+
+  for (WalkerAddr = AdAddr; WalkerAddr != NULL; WalkerAddr = WalkerAddr->Next)
+  {
+    OLSR_PRINTF(5, "Index = %08x - ", (int)WalkerAddr->IfIndex);
+
+    wcstombs(FriendlyName, WalkerAddr->FriendlyName, MAX_INTERFACE_NAME_LEN); 
+
+    OLSR_PRINTF(5, "Friendly name = %s\n", FriendlyName);
+
+    if (strncmp(FriendlyName, String, MAX_INTERFACE_NAME_LEN) == 0)
+      break;
+  }
+
+  if (WalkerAddr == NULL)
+  {
+    fprintf(stderr, "No such interface: %s!\n", String);
+    return -1;
+  }
+
+  *MiniIndex = WalkerAddr->IfIndex & 255;
+}
+
 int GetIntInfo(struct InterfaceInfo *Info, char *Name)
 {
   int MiniIndex;
@@ -141,6 +243,9 @@ int GetIntInfo(struct InterfaceInfo *Info, char *Name)
   unsigned long Res;
   int TabIdx;
   IP_ADAPTER_INFO AdInfo[MAX_INTERFACES], *Walker;
+  HMODULE Lib;
+  struct MibIpInterfaceRow Row;
+  GETIPINTERFACEENTRY InterfaceEntry;
 
   if (olsr_cnf->ip_version == AF_INET6)
   {
@@ -148,10 +253,23 @@ int GetIntInfo(struct InterfaceInfo *Info, char *Name)
     return -1;
   }
 
-  if (IntNameToMiniIndex(&MiniIndex, Name) < 0)
+  if ((Name[0] != 'i' && Name[0] != 'I') ||
+      (Name[1] != 'f' && Name[1] != 'F'))
   {
-    fprintf(stderr, "No such interface: %s!\n", Name);
-    return -1;
+    if (FriendlyNameToMiniIndex(&MiniIndex, Name) < 0)
+    {
+      fprintf(stderr, "No such interface: %s!\n", Name);
+      return -1;
+    }
+  }
+
+  else
+  {
+    if (IntNameToMiniIndex(&MiniIndex, Name) < 0)
+    {
+      fprintf(stderr, "No such interface: %s!\n", Name);
+      return -1;
+    }
   }
 
   IfTable = (MIB_IFTABLE *)Buff;
@@ -185,6 +303,46 @@ int GetIntInfo(struct InterfaceInfo *Info, char *Name)
 
   Info->Mtu -= (olsr_cnf->ip_version == AF_INET6) ?
     UDP_IPV6_HDRSIZE : UDP_IPV4_HDRSIZE;
+
+  Lib = LoadLibrary("iphlpapi.dll");
+
+  if (Lib == NULL)
+  {
+    fprintf(stderr, "Cannot load iphlpapi.dll: %08lx\n", GetLastError());
+    return -1;
+  }
+
+  InterfaceEntry = (GETIPINTERFACEENTRY)GetProcAddress(Lib, "GetIpInterfaceEntry");
+
+  if (InterfaceEntry == NULL)
+  {
+    OLSR_PRINTF(5, "Not running on Vista - setting interface metric to 0.\n");
+
+    Info->Metric = 0;
+  }
+
+  else
+  {
+    memset(&Row, 0, sizeof (struct MibIpInterfaceRow));
+
+    Row.Family = AF_INET;
+    Row.InterfaceIndex = Info->Index;
+
+    Res = InterfaceEntry(&Row);
+
+    if (Res != NO_ERROR)
+    {
+      fprintf(stderr, "GetIpInterfaceEntry() = %08lx", Res);
+      FreeLibrary(Lib);
+      return -1;
+    }
+
+    Info->Metric = Row.Metric;
+
+    OLSR_PRINTF(5, "Running on Vista - interface metric is %d.\n", Info->Metric);
+  }
+
+  FreeLibrary(Lib);
 
   BuffLen = sizeof (AdInfo);
 
@@ -283,13 +441,13 @@ static int IsWireless(char *IntName)
 
     CloseHandle(DevHand);
 
-    if (ErrNo == ERROR_GEN_FAILURE)
+    if (ErrNo == ERROR_GEN_FAILURE || ErrNo == ERROR_INVALID_PARAMETER)
     {
-      OLSR_PRINTF(5, "OID not supported. Device probably not wireless.\n")
+      OLSR_PRINTF(5, "OID not supported. Device probably not wireless.\n");
       return 0;
     }
 
-    OLSR_PRINTF(5, "DeviceIoControl() = %08x, %s\n", ErrNo, StrError(ErrNo))
+    OLSR_PRINTF(5, "DeviceIoControl() = %08x, %s\n", ErrNo, StrError(ErrNo));
     return -1;
   }
 
@@ -331,7 +489,7 @@ void ListInterfaces(void)
 
   for (Walker = AdInfo; Walker != NULL; Walker = Walker->Next)
   {
-    OLSR_PRINTF(5, "Index = %08x\n", (int)Walker->Index)
+    OLSR_PRINTF(5, "Index = %08x\n", (int)Walker->Index);
 
     MiniIndexToIntName(IntName, Walker->Index);
 
@@ -360,7 +518,7 @@ void RemoveInterface(struct olsr_if *IntConf)
 {
   struct interface *Int, *Prev;
 
-  OLSR_PRINTF(1, "Removing interface %s.\n", IntConf->name)
+  OLSR_PRINTF(1, "Removing interface %s.\n", IntConf->name);
   
   Int = IntConf->interf;
 
@@ -376,18 +534,18 @@ void RemoveInterface(struct olsr_if *IntConf)
     Prev->int_next = Int->int_next;
   }
 
-  if(COMP_IP(&main_addr, &Int->ip_addr))
+  if(COMP_IP(&olsr_cnf->main_addr, &Int->ip_addr))
   {
     if(ifnet == NULL)
     {
-      memset(&main_addr, 0, ipsize);
-      OLSR_PRINTF(1, "Removed last interface. Cleared main address.\n")
+      memset(&olsr_cnf->main_addr, 0, olsr_cnf->ipsize);
+      OLSR_PRINTF(1, "Removed last interface. Cleared main address.\n");
     }
 
     else
     {
-      COPY_IP(&main_addr, &ifnet->ip_addr);
-      OLSR_PRINTF(1, "New main address: %s.\n", olsr_ip_to_string(&main_addr))
+      COPY_IP(&olsr_cnf->main_addr, &ifnet->ip_addr);
+      OLSR_PRINTF(1, "New main address: %s.\n", olsr_ip_to_string(&olsr_cnf->main_addr));
     }
   }
 
@@ -434,8 +592,8 @@ void RemoveInterface(struct olsr_if *IntConf)
 
   if (ifnet == NULL && !olsr_cnf->allow_no_interfaces)
   {
-    OLSR_PRINTF(1, "No more active interfaces - exiting.\n")
-    exit_value = EXIT_FAILURE;
+    OLSR_PRINTF(1, "No more active interfaces - exiting.\n");
+    olsr_cnf->exit_value = EXIT_FAILURE;
     CallSignalHandler();
   }
 }
@@ -462,26 +620,21 @@ int add_hemu_if(struct olsr_if *iface)
 
   strcpy(ifp->int_name, "hcif01");
 
-  OLSR_PRINTF(1, "Adding %s(host emulation):\n", ifp->int_name)
+  OLSR_PRINTF(1, "Adding %s(host emulation):\n", ifp->int_name);
 
   OLSR_PRINTF(1, "       Address:%s\n", olsr_ip_to_string(&iface->hemu_ip));
-
-  OLSR_PRINTF(1, "       Index:%d\n", iface->index);
 
   OLSR_PRINTF(1, "       NB! This is a emulated interface\n       that does not exist in the kernel!\n");
 
   ifp->int_next = ifnet;
   ifnet = ifp;
 
-  memset(&null_addr, 0, ipsize);
-  if(COMP_IP(&null_addr, &main_addr))
+  memset(&null_addr, 0, olsr_cnf->ipsize);
+  if(COMP_IP(&null_addr, &olsr_cnf->main_addr))
     {
-      COPY_IP(&main_addr, &iface->hemu_ip);
-      OLSR_PRINTF(1, "New main address: %s\n", olsr_ip_to_string(&main_addr))
+      COPY_IP(&olsr_cnf->main_addr, &iface->hemu_ip);
+      OLSR_PRINTF(1, "New main address: %s\n", olsr_ip_to_string(&olsr_cnf->main_addr));
     }
-
-  /* setting the interfaces number*/
-  ifp->if_nr = iface->index;
 
   ifp->int_mtu = OLSR_DEFAULT_MTU;
 
@@ -505,7 +658,7 @@ int add_hemu_if(struct olsr_if *iface)
      /* IP version 4 */
       ifp->ip_addr.v4 = iface->hemu_ip.v4;
 
-      memcpy(&((struct sockaddr_in *)&ifp->int_addr)->sin_addr, &iface->hemu_ip, ipsize);
+      memcpy(&((struct sockaddr_in *)&ifp->int_addr)->sin_addr, &iface->hemu_ip, olsr_cnf->ipsize);
       
       /*
        *We create one socket for each interface and bind
@@ -525,7 +678,7 @@ int add_hemu_if(struct olsr_if *iface)
   else
     {
       /* IP version 6 */
-      memcpy(&ifp->ip_addr, &iface->hemu_ip, ipsize);
+      memcpy(&ifp->ip_addr, &iface->hemu_ip, olsr_cnf->ipsize);
 
 #if 0      
       /*
@@ -548,13 +701,13 @@ int add_hemu_if(struct olsr_if *iface)
     }
 
   /* Send IP as first 4/16 bytes on socket */
-  memcpy(addr, iface->hemu_ip.v6.s6_addr, ipsize);
+  memcpy(addr, iface->hemu_ip.v6.s6_addr, olsr_cnf->ipsize);
   addr[0] = htonl(addr[0]);
   addr[1] = htonl(addr[1]);
   addr[2] = htonl(addr[2]);
   addr[3] = htonl(addr[3]);
 
-  if(send(ifp->olsr_socket, (char *)addr, ipsize, 0) != (int)ipsize)
+  if(send(ifp->olsr_socket, (char *)addr, olsr_cnf->ipsize, 0) != (int)olsr_cnf->ipsize)
     {
       fprintf(stderr, "Error sending IP!");
     }  
@@ -604,12 +757,13 @@ int add_hemu_if(struct olsr_if *iface)
 
   /* Recalculate max jitter */
 
-  if((max_jitter == 0) || ((iface->cnf->hello_params.emission_interval / 4) < max_jitter))
-    max_jitter = iface->cnf->hello_params.emission_interval / 4;
+  if((olsr_cnf->max_jitter == 0) || 
+     ((iface->cnf->hello_params.emission_interval / 4) < olsr_cnf->max_jitter))
+    olsr_cnf->max_jitter = iface->cnf->hello_params.emission_interval / 4;
 
   /* Recalculate max topology hold time */
-  if(max_tc_vtime < iface->cnf->tc_params.emission_interval)
-    max_tc_vtime = iface->cnf->tc_params.emission_interval;
+  if(olsr_cnf->max_tc_vtime < iface->cnf->tc_params.emission_interval)
+    olsr_cnf->max_tc_vtime = iface->cnf->tc_params.emission_interval;
 
   ifp->hello_etime = iface->cnf->hello_params.emission_interval;
   ifp->valtimes.hello = double_to_me(iface->cnf->hello_params.validity_time);
@@ -636,7 +790,7 @@ int chk_if_changed(struct olsr_if *IntConf)
   }
 
 #ifdef DEBUG
-  OLSR_PRINTF(3, "Checking if %s is set down or changed\n", IntConf->name)
+  OLSR_PRINTF(3, "Checking if %s is set down or changed\n", IntConf->name);
 #endif
 
   Int = IntConf->interf;
@@ -656,7 +810,7 @@ int chk_if_changed(struct olsr_if *IntConf)
 
   if (Int->is_wireless != IsWlan)
   {
-    OLSR_PRINTF(1, "\tLAN/WLAN change: %d -> %d.\n", Int->is_wireless, IsWlan)
+    OLSR_PRINTF(1, "\tLAN/WLAN change: %d -> %d.\n", Int->is_wireless, IsWlan);
 
     Int->is_wireless = IsWlan;
 
@@ -664,7 +818,7 @@ int chk_if_changed(struct olsr_if *IntConf)
       Int->int_metric = IntConf->cnf->weight.value;
 
     else
-      Int->int_metric = IsWlan;
+      Int->int_metric = Info.Metric;
 
     Res = 1;
   }
@@ -686,14 +840,14 @@ int chk_if_changed(struct olsr_if *IntConf)
   NewVal.v4 = Info.Addr;
 
 #ifdef DEBUG
-  OLSR_PRINTF(3, "\tAddress: %s\n", olsr_ip_to_string(&NewVal))
+  OLSR_PRINTF(3, "\tAddress: %s\n", olsr_ip_to_string(&NewVal));
 #endif
 
   if (NewVal.v4 != OldVal.v4)
   {
-    OLSR_PRINTF(1, "\tAddress change.\n")
-    OLSR_PRINTF(1, "\tOld: %s\n", olsr_ip_to_string(&OldVal))
-    OLSR_PRINTF(1, "\tNew: %s\n", olsr_ip_to_string(&NewVal))
+    OLSR_PRINTF(1, "\tAddress change.\n");
+    OLSR_PRINTF(1, "\tOld: %s\n", olsr_ip_to_string(&OldVal));
+    OLSR_PRINTF(1, "\tNew: %s\n", olsr_ip_to_string(&NewVal));
 
     Int->ip_addr.v4 = NewVal.v4;
 
@@ -703,31 +857,31 @@ int chk_if_changed(struct olsr_if *IntConf)
     AddrIn->sin_port = 0;
     AddrIn->sin_addr.s_addr = NewVal.v4;
 
-    if (main_addr.v4 == OldVal.v4)
+    if (olsr_cnf->main_addr.v4 == OldVal.v4)
     {
-      OLSR_PRINTF(1, "\tMain address change.\n")
+      OLSR_PRINTF(1, "\tMain address change.\n");
 
-      main_addr.v4 = NewVal.v4;
+      olsr_cnf->main_addr.v4 = NewVal.v4;
     }
 
     Res = 1;
   }
 
   else
-    OLSR_PRINTF(3, "\tNo address change.\n")
+    OLSR_PRINTF(3, "\tNo address change.\n");
 
   OldVal.v4 = ((struct sockaddr_in *)&Int->int_netmask)->sin_addr.s_addr;
   NewVal.v4 = Info.Mask;
 
 #ifdef DEBUG
-  OLSR_PRINTF(3, "\tNetmask: %s\n", olsr_ip_to_string(&NewVal))
+  OLSR_PRINTF(3, "\tNetmask: %s\n", olsr_ip_to_string(&NewVal));
 #endif
 
   if (NewVal.v4 != OldVal.v4)
   {
-    OLSR_PRINTF(1, "\tNetmask change.\n")
-    OLSR_PRINTF(1, "\tOld: %s\n", olsr_ip_to_string(&OldVal))
-    OLSR_PRINTF(1, "\tNew: %s\n", olsr_ip_to_string(&NewVal))
+    OLSR_PRINTF(1, "\tNetmask change.\n");
+    OLSR_PRINTF(1, "\tOld: %s\n", olsr_ip_to_string(&OldVal));
+    OLSR_PRINTF(1, "\tNew: %s\n", olsr_ip_to_string(&NewVal));
 
     AddrIn = (struct sockaddr_in *)&Int->int_netmask;
 
@@ -739,20 +893,20 @@ int chk_if_changed(struct olsr_if *IntConf)
   }
 
   else
-    OLSR_PRINTF(3, "\tNo netmask change.\n")
+    OLSR_PRINTF(3, "\tNo netmask change.\n");
 
   OldVal.v4 = ((struct sockaddr_in *)&Int->int_broadaddr)->sin_addr.s_addr;
   NewVal.v4 = Info.Broad;
 
 #ifdef DEBUG
-  OLSR_PRINTF(3, "\tBroadcast address: %s\n", olsr_ip_to_string(&NewVal))
+  OLSR_PRINTF(3, "\tBroadcast address: %s\n", olsr_ip_to_string(&NewVal));
 #endif
 
   if (NewVal.v4 != OldVal.v4)
   {
-    OLSR_PRINTF(1, "\tBroadcast address change.\n")
-    OLSR_PRINTF(1, "\tOld: %s\n", olsr_ip_to_string(&OldVal))
-    OLSR_PRINTF(1, "\tNew: %s\n", olsr_ip_to_string(&NewVal))
+    OLSR_PRINTF(1, "\tBroadcast address change.\n");
+    OLSR_PRINTF(1, "\tOld: %s\n", olsr_ip_to_string(&OldVal));
+    OLSR_PRINTF(1, "\tNew: %s\n", olsr_ip_to_string(&NewVal));
 
     AddrIn = (struct sockaddr_in *)&Int->int_broadaddr;
 
@@ -764,7 +918,7 @@ int chk_if_changed(struct olsr_if *IntConf)
   }
 
   else
-    OLSR_PRINTF(3, "\tNo broadcast address change.\n")
+    OLSR_PRINTF(3, "\tNo broadcast address change.\n");
 
   if (Res != 0)
     run_ifchg_cbs(Int, IFCHG_IF_UPDATE);
@@ -772,7 +926,7 @@ int chk_if_changed(struct olsr_if *IntConf)
   return Res;
 }
 
-int chk_if_up(struct olsr_if *IntConf, int DebugLevel)
+int chk_if_up(struct olsr_if *IntConf, int DebugLevel __attribute__((unused)))
 {
   struct InterfaceInfo Info;
   struct interface *New;
@@ -823,8 +977,6 @@ int chk_if_up(struct olsr_if *IntConf, int DebugLevel)
   New->int_name = olsr_malloc(strlen (IntConf->name) + 1, "Interface 2");
   strcpy(New->int_name, IntConf->name);
 
-  New->if_nr = IntConf->index;
-
   IsWlan = IsWireless(IntConf->name);
 
   if (IsWlan < 0)
@@ -836,25 +988,27 @@ int chk_if_up(struct olsr_if *IntConf, int DebugLevel)
     New->int_metric = IntConf->cnf->weight.value;
 
   else
-    New->int_metric = IsWlan;
+    New->int_metric = Info.Metric;
 
   New->olsr_seqnum = random() & 0xffff;
+
+  New->ttl_index = 0;
     
   OLSR_PRINTF(1, "\tInterface %s set up for use with index %d\n\n",
-              IntConf->name, New->if_nr)
+              IntConf->name, New->if_index);
       
-  OLSR_PRINTF(1, "\tMTU: %d\n", New->int_mtu)
-  OLSR_PRINTF(1, "\tAddress: %s\n", sockaddr_to_string(&New->int_addr))
-  OLSR_PRINTF(1, "\tNetmask: %s\n", sockaddr_to_string(&New->int_netmask))
+  OLSR_PRINTF(1, "\tMTU: %d\n", New->int_mtu);
+  OLSR_PRINTF(1, "\tAddress: %s\n", sockaddr_to_string(&New->int_addr));
+  OLSR_PRINTF(1, "\tNetmask: %s\n", sockaddr_to_string(&New->int_netmask));
   OLSR_PRINTF(1, "\tBroadcast address: %s\n",
-              sockaddr_to_string(&New->int_broadaddr))
+              sockaddr_to_string(&New->int_broadaddr));
 
   New->ip_addr.v4 =
     ((struct sockaddr_in *)&New->int_addr)->sin_addr.s_addr;
       
   New->if_index = Info.Index;
 
-  OLSR_PRINTF(3, "\tKernel index: %08x\n", New->if_index)
+  OLSR_PRINTF(3, "\tKernel index: %08x\n", New->if_index);
 
   AddrSockAddr = addrsock.sin_addr.s_addr;
   addrsock.sin_addr.s_addr = New->ip_addr.v4;
@@ -878,12 +1032,12 @@ int chk_if_up(struct olsr_if *IntConf, int DebugLevel)
   IntConf->interf = New;
   IntConf->configured = 1;
 
-  memset(&NullAddr, 0, ipsize);
+  memset(&NullAddr, 0, olsr_cnf->ipsize);
   
-  if(COMP_IP(&NullAddr, &main_addr))
+  if(COMP_IP(&NullAddr, &olsr_cnf->main_addr))
   {
-    COPY_IP(&main_addr, &New->ip_addr);
-    OLSR_PRINTF(1, "New main address: %s\n", olsr_ip_to_string(&main_addr))
+    COPY_IP(&olsr_cnf->main_addr, &New->ip_addr);
+    OLSR_PRINTF(1, "New main address: %s\n", olsr_ip_to_string(&olsr_cnf->main_addr));
   }
 
   net_add_buffer(New);
@@ -918,12 +1072,12 @@ int chk_if_up(struct olsr_if *IntConf, int DebugLevel)
                                 IntConf->cnf->hna_params.emission_interval,
                                 0, NULL);
 
-  if(max_jitter == 0 ||
-     IntConf->cnf->hello_params.emission_interval / 4 < max_jitter)
-    max_jitter = IntConf->cnf->hello_params.emission_interval / 4;
+  if(olsr_cnf->max_jitter == 0 ||
+     IntConf->cnf->hello_params.emission_interval / 4 < olsr_cnf->max_jitter)
+    olsr_cnf->max_jitter = IntConf->cnf->hello_params.emission_interval / 4;
 
-  if(max_tc_vtime < IntConf->cnf->tc_params.emission_interval)
-    max_tc_vtime = IntConf->cnf->tc_params.emission_interval;
+  if(olsr_cnf->max_tc_vtime < IntConf->cnf->tc_params.emission_interval)
+    olsr_cnf->max_tc_vtime = IntConf->cnf->tc_params.emission_interval;
 
   New->hello_etime = IntConf->cnf->hello_params.emission_interval;
 
@@ -937,12 +1091,12 @@ int chk_if_up(struct olsr_if *IntConf, int DebugLevel)
   return 1;
 }
 
-void check_interface_updates(void *dummy)
+void check_interface_updates(void *dummy __attribute__((unused)))
 {
   struct olsr_if *IntConf;
 
 #ifdef DEBUG
-  OLSR_PRINTF(3, "Checking for updates in the interface set\n")
+  OLSR_PRINTF(3, "Checking for updates in the interface set\n");
 #endif
 
   for(IntConf = olsr_cnf->interfaces; IntConf != NULL; IntConf = IntConf->next)
