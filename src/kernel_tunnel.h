@@ -9,11 +9,11 @@
 #define KERNEL_TUNNEL_H_
 
 #include <net/if.h>
-#ifdef WIN32
+#ifdef _WIN32
 /* compat for win32 */
 #include <iprtrmib.h>
 #define IF_NAMESIZE MAX_INTERFACE_NAME_LEN
-#endif
+#endif /* _WIN32 */
 
 #include "defs.h"
 #include "olsr_types.h"
@@ -21,6 +21,12 @@
 
 #define TUNNEL_ENDPOINT_IF "tunl0"
 #define TUNNEL_ENDPOINT_IF6 "ip6tnl0"
+
+#ifdef __ANDROID__
+  #define OS_TUNNEL_PATH "/dev/tun"
+#else
+  #define OS_TUNNEL_PATH "/dev/net/tun"
+#endif
 
 struct olsr_iptunnel_entry {
   struct avl_node node;
@@ -32,8 +38,8 @@ struct olsr_iptunnel_entry {
   int usage;
 };
 
-int olsr_os_init_iptunnel(void);
-void olsr_os_cleanup_iptunnel(void);
+int olsr_os_init_iptunnel(const char * name);
+void olsr_os_cleanup_iptunnel(const char * name);
 
 struct olsr_iptunnel_entry *olsr_os_add_ipip_tunnel(union olsr_ip_addr *target, bool transportV4);
 void olsr_os_del_ipip_tunnel(struct olsr_iptunnel_entry *);

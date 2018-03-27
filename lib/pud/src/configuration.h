@@ -13,12 +13,6 @@
 #include <OlsrdPudWireFormat/wireFormat.h>
 
 /*
- * Utilities
- */
-
-bool readDouble(const char * valueName, const char * value, double * valueNumber);
-
-/*
  * Global Parameters
  */
 
@@ -50,11 +44,13 @@ int setNodeId(const char *value, void *data, set_plugin_parameter_addon addon);
 bool isRxNonOlsrInterface(const char *ifName);
 int addRxNonOlsrInterface(const char *value, void *data,
 		set_plugin_parameter_addon addon);
+unsigned int getRxNonOlsrInterfaceCount(void);
+unsigned char * getRxNonOlsrInterfaceName(unsigned int index);
 
 /** The name of the allowed source IP address plugin parameter */
 #define PUD_RX_ALLOWED_SOURCE_IP_NAME			"rxAllowedSourceIpAddress"
 
-bool isRxAllowedSourceIpAddress(struct sockaddr * sender);
+bool isRxAllowedSourceIpAddress(union olsr_sockaddr * sender);
 int addRxAllowedSourceIpAddress(const char *value, void *data,
 		set_plugin_parameter_addon addon);
 
@@ -87,6 +83,21 @@ setRxMcPort(const char *value, void *data, set_plugin_parameter_addon addon);
 char * getPositionFile(void);
 int setPositionFile(const char *value, void *data, set_plugin_parameter_addon addon);
 
+/** The name of the positionFilePeriod plugin parameter */
+#define PUD_POSFILEPERIOD_NAME    "positionFilePeriod"
+
+/** The default value of the positionFilePeriod plugin parameter */
+#define PUD_POSFILEPERIOD_DEFAULT ((unsigned long long)0)
+
+/** The minimal value of the positionFilePeriod plugin parameter */
+#define PUD_POSFILEPERIOD_MIN     ((unsigned long long)1000)
+
+/** The maximal value of the positionFilePeriod plugin parameter */
+#define PUD_POSFILEPERIOD_MAX     ((unsigned long long)320000000)
+
+unsigned long long getPositionFilePeriod(void);
+int setPositionFilePeriod(const char *value, void *data, set_plugin_parameter_addon addon);
+
 /*
  * TX Parameters
  */
@@ -97,6 +108,8 @@ int setPositionFile(const char *value, void *data, set_plugin_parameter_addon ad
 bool isTxNonOlsrInterface(const char *ifName);
 int addTxNonOlsrInterface(const char *value, void *data,
 		set_plugin_parameter_addon addon);
+unsigned int getTxNonOlsrInterfaceCount(void);
+unsigned char * getTxNonOlsrInterfaceName(unsigned int index);
 
 /** The name of the transmit multicast address plugin parameter */
 #define PUD_TX_MC_ADDR_NAME						"txMcAddr"

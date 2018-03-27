@@ -46,7 +46,7 @@
 #include "common/autobuf.h"
 #ifdef HTTPINFO_PUD
 #include "pud/src/receiver.h"
-#endif
+#endif /* HTTPINFO_PUD */
 
 /* set to 1 to collect all startup sleep into one sleep
  * (just as long as the longest sleep)
@@ -85,6 +85,10 @@
 #define DEF_GW_STABLE_COUNT  6
 #define DEF_GW_ALLOW_NAT     true
 #define DEF_GW_THRESH        0
+#define DEF_GW_WEIGHT_EXITLINK_UP   1
+#define DEF_GW_WEIGHT_EXITLINK_DOWN 1
+#define DEF_GW_WEIGHT_ETX           1
+#define DEF_GW_DIVIDER_ETX          0
 #define DEF_GW_TYPE          GW_UPLINK_IPV46
 #define DEF_GW_UPLINK_NAT    true
 #define DEF_UPLINK_SPEED     128
@@ -132,7 +136,7 @@
 
 #ifndef IPV6_ADDR_SITELOCAL
 #define IPV6_ADDR_SITELOCAL    0x0040U
-#endif
+#endif /* IPV6_ADDR_SITELOCAL */
 
 #include "interfaces.h"
 
@@ -235,6 +239,7 @@ struct olsrd_config {
   uint16_t olsrport;
   int debug_level;
   bool no_fork;
+  char * pidfile;
   bool host_emul;
   int ip_version;
   bool allow_no_interfaces;
@@ -275,6 +280,10 @@ struct olsrd_config {
   uint32_t smart_gw_period;
   uint8_t smart_gw_stablecount;
   uint8_t smart_gw_thresh;
+  uint8_t smart_gw_weight_exitlink_up;
+  uint8_t smart_gw_weight_exitlink_down;
+  uint8_t smart_gw_weight_etx;
+  uint8_t smart_gw_divider_etx;
   enum smart_gw_uplinktype smart_gw_type;
   uint32_t smart_gw_uplink, smart_gw_downlink;
   struct olsr_ip_prefix smart_gw_prefix;
@@ -298,24 +307,24 @@ struct olsrd_config {
   bool has_ipv4_gateway, has_ipv6_gateway;
 
   int ioctl_s;                         /* Socket used for ioctl calls */
-#ifdef linux
+#ifdef __linux__
   int rtnl_s;                          /* Socket used for rtnetlink messages */
   int rt_monitor_socket;
-#endif
+#endif /* __linux__ */
 
 #if defined __FreeBSD__ || defined __FreeBSD_kernel__ || defined __APPLE__ || defined __NetBSD__ || defined __OpenBSD__
   int rts;                             /* Socket used for route changes on BSDs */
-#endif
+#endif /* defined __FreeBSD__ || defined __FreeBSD_kernel__ || defined __APPLE__ || defined __NetBSD__ || defined __OpenBSD__ */
   float lq_nat_thresh;
 
 #ifdef HTTPINFO_PUD
   TransmitGpsInformation * pud_position;
-#endif
+#endif /* HTTPINFO_PUD */
 };
 
 #if defined __cplusplus
 extern "C" {
-#endif
+#endif /* defined __cplusplus */
 
   extern const char *GW_UPLINK_TXT[];
   extern const char *FIB_METRIC_TXT[];
@@ -351,18 +360,18 @@ extern "C" {
 
   struct olsrd_config *olsrd_get_default_cnf(void);
 
-#if defined WIN32
+#if defined _WIN32
   void win32_stdio_hack(unsigned int);
 
   void *win32_olsrd_malloc(size_t size);
 
   void win32_olsrd_free(void *ptr);
-#endif
+#endif /* defined _WIN32 */
 
 #if defined __cplusplus
 }
-#endif
-#endif
+#endif /* defined __cplusplus */
+#endif /* _OLSRD_CFGPARSER_H */
 
 /*
  * Local Variables:

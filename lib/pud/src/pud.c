@@ -7,6 +7,7 @@
 #include "gpsConversion.h"
 #include "receiver.h"
 #include "state.h"
+#include "posFile.h"
 #include "compiler.h"
 
 /* OLSRD includes */
@@ -14,6 +15,7 @@
 #include "ipcalc.h"
 #include "net_olsr.h"
 #include "parser.h"
+#include "log.h"
 
 /* System includes */
 
@@ -30,6 +32,9 @@
 /** The de-duplication list */
 static DeDupList deDupList;
 
+/** When false, use olsr_printf in pudError, otherwise use olsr_syslog */
+static bool pudErrorUseSysLog = false;
+
 /**
  Report a plugin error.
 
@@ -43,17 +48,16 @@ static DeDupList deDupList;
  */
 void pudError(bool useErrno, const char *format, ...) {
 	char strDesc[256];
-	char *stringErr = NULL;
-
-	if (useErrno) {
-		stringErr = strerror(errno);
-	}
+	const char *colon;
+	const char *stringErr;
 
 	if ((format == NULL) || (*format == '\0')) {
-		if (useErrno) {
-			olsr_printf(0, "%s: %s\n", PUD_PLUGIN_ABBR, stringErr);
+		strDesc[0] = '\0';
+		colon = "";
+		if (!useErrno) {
+			stringErr = "Unknown error";
 		} else {
-			olsr_printf(0, "%s: Unknown error\n", PUD_PLUGIN_ABBR);
+			stringErr = strerror(errno);
 		}
 	} else {
 		va_list arglist;
@@ -62,14 +66,19 @@ void pudError(bool useErrno, const char *format, ...) {
 		vsnprintf(strDesc, sizeof(strDesc), format, arglist);
 		va_end(arglist);
 
-		strDesc[sizeof(strDesc) - 1] = '\0'; /* Ensures null termination */
-
 		if (useErrno) {
-			olsr_printf(0, "%s: %s: %s\n", PUD_PLUGIN_ABBR, strDesc, stringErr);
+			colon = ": ";
+			stringErr = strerror(errno);
 		} else {
-			olsr_printf(0, "%s: %s\n", PUD_PLUGIN_ABBR, strDesc);
+			colon = "";
+			stringErr = "";
 		}
 	}
+
+	if (!pudErrorUseSysLog)
+		olsr_printf(0, "%s: %s%s%s\n", PUD_PLUGIN_ABBR, strDesc, colon, stringErr);
+	else
+		olsr_syslog(OLSR_LOG_ERR, "%s: %s%s%s\n", PUD_PLUGIN_ABBR, strDesc, colon, stringErr);
 }
 
 /**
@@ -82,16 +91,24 @@ void pudError(bool useErrno, const char *format, ...) {
  */
 static void sendToAllTxInterfaces(unsigned char *buffer,
 		unsigned int bufferLength) {
-	union olsr_sockaddr * txAddress;
+	union olsr_sockaddr * txAddress = getTxMcAddr();
+	void * addr;
+	socklen_t addrSize;
 	TRxTxNetworkInterface *txNetworkInterfaces = getTxNetworkInterfaces();
+
+	if (txAddress->in.sa_family == AF_INET) {
+		addr = &txAddress->in4;
+		addrSize = sizeof(struct sockaddr_in);
+	} else {
+		addr = &txAddress->in6;
+		addrSize = sizeof(struct sockaddr_in6);
+	}
+
 	while (txNetworkInterfaces != NULL) {
 		TRxTxNetworkInterface *networkInterface = txNetworkInterfaces;
 		errno = 0;
-		txAddress = getTxMcAddr();
-		if (sendto(networkInterface->socketFd, buffer, bufferLength, 0,
-				(struct sockaddr *) &txAddress->in, sizeof(txAddress->in)) < 0) {
-			pudError(true, "Transmit error on interface %s",
-					(char *) &networkInterface->name);
+		if (sendto(networkInterface->socketFd, buffer, bufferLength, 0, addr, addrSize) < 0) {
+			pudError(true, "Transmit error on interface %s", &networkInterface->name[0]);
 		}
 		txNetworkInterfaces = networkInterface->next;
 	}
@@ -162,14 +179,10 @@ static void packetReceivedFromDownlink(int skfd, void *data __attribute__ ((unus
 		unsigned char rxBuffer[BUFFER_SIZE_RX_DOWNLINK];
 		ssize_t rxCount = 0;
 		ssize_t rxIndex = 0;
-		struct sockaddr sender;
-		socklen_t senderSize = sizeof(sender);
 
 		/* Receive the captured Ethernet frame */
-		memset(&sender, 0, senderSize);
 		errno = 0;
-		rxCount = recvfrom(skfd, &rxBuffer[0], (sizeof(rxBuffer) - 1), 0,
-				&sender, &senderSize);
+		rxCount = recvfrom(skfd, &rxBuffer[0], (sizeof(rxBuffer) - 1), 0, NULL, NULL);
 		if (rxCount < 0) {
 			pudError(true, "Receive error in %s, ignoring message.", __func__);
 			return;
@@ -203,7 +216,7 @@ static void packetReceivedFromDownlink(int skfd, void *data __attribute__ ((unus
 			}
 
 			ipv6 = getUplinkMessageIPv6(&msg->header);
-			if (unlikely(ipv6 && (olsr_cnf->ip_version != AF_INET6))) {
+			if (unlikely(!ipv6 && (olsr_cnf->ip_version == AF_INET6)) || unlikely(ipv6 && (olsr_cnf->ip_version == AF_INET))) {
 				pudError(false, "Received wrong IPv6 status (%s) in %s,"
 						" ignoring message.", (ipv6 ? "true" : "false"),
 						__func__);
@@ -220,6 +233,10 @@ static void packetReceivedFromDownlink(int skfd, void *data __attribute__ ((unus
 				int r;
 				struct interface *ifn;
 				for (ifn = ifnet; ifn; ifn = ifn->int_next) {
+					/* force the pending buffer out if there's not enough space for our message */
+					if ((int)olsrMessageLength > net_outbuffer_bytes_left(ifn)) {
+					  net_output(ifn);
+					}
 					r = net_outbuffer_push(ifn, olsrMessage, olsrMessageLength);
 					if (r != (int) olsrMessageLength) {
 						pudError(
@@ -256,7 +273,7 @@ static void packetReceivedForOlsr(int skfd, void *data __attribute__ ((unused)),
 	if (skfd >= 0) {
 		unsigned char rxBuffer[BUFFER_SIZE_RX_NMEA];
 		ssize_t rxCount;
-		struct sockaddr sender;
+		union olsr_sockaddr sender;
 		socklen_t senderSize = sizeof(sender);
 
 		assert(data != NULL);
@@ -265,7 +282,7 @@ static void packetReceivedForOlsr(int skfd, void *data __attribute__ ((unused)),
 		memset(&sender, 0, senderSize);
 		errno = 0;
 		rxCount = recvfrom(skfd, &rxBuffer[0], (sizeof(rxBuffer) - 1), 0,
-				&sender, &senderSize);
+				(struct sockaddr *)&sender, &senderSize);
 		if (rxCount < 0) {
 			pudError(true, "Receive error in %s, ignoring message.", __func__);
 			return;
@@ -287,6 +304,20 @@ static void packetReceivedForOlsr(int skfd, void *data __attribute__ ((unused)),
 }
 
 /**
+ * Timer callback that reads the pud position file
+ */
+static void pud_read_position_file(void *context __attribute__ ((unused))) {
+	updatePositionFromFile();
+	return;
+}
+
+/** The timer cookie, used to trace back the originator in debug */
+static struct olsr_cookie_info *pud_position_file_timer_cookie = NULL;
+
+/** The timer */
+static struct timer_entry * pud_position_file_timer = NULL;
+
+/**
  Initialise the plugin: check the configuration, initialise the NMEA parser,
  create network interface sockets, hookup the plugin to OLSR and setup data
  that can be setup in advance.
@@ -296,6 +327,8 @@ static void packetReceivedForOlsr(int skfd, void *data __attribute__ ((unused)),
  - true otherwise
  */
 bool initPud(void) {
+	unsigned long long positionFilePeriod;
+
 	if (!checkConfig()) {
 		pudError(false, "Invalid configuration");
 		goto error;
@@ -305,6 +338,10 @@ bool initPud(void) {
 
 	if (!initDeDupList(&deDupList, getDeDupDepth())) {
 		pudError(false, "Could not initialise de-duplication list");
+		goto error;
+	}
+
+	if (!startPositionFile()) {
 		goto error;
 	}
 
@@ -334,6 +371,28 @@ bool initPud(void) {
 	 */
 	olsr_parser_add_function(&packetReceivedFromOlsr, PUD_OLSR_MSG_TYPE);
 
+	/* switch to syslog logging, load was succesful */
+	pudErrorUseSysLog = !olsr_cnf->no_fork;
+
+	positionFilePeriod = getPositionFilePeriod();
+	if (getPositionFile() && positionFilePeriod) {
+		if (pud_position_file_timer_cookie == NULL) {
+			pud_position_file_timer_cookie = olsr_alloc_cookie("pud position file", OLSR_COOKIE_TYPE_TIMER);
+			if (pud_position_file_timer_cookie == NULL) {
+				pudError(false, "Could not allocate pud position file cookie");
+				return false;
+			}
+		}
+		if (pud_position_file_timer == NULL) {
+			pud_position_file_timer = olsr_start_timer(positionFilePeriod, 0, OLSR_TIMER_PERIODIC, &pud_read_position_file,
+					NULL, pud_position_file_timer_cookie);
+			if (pud_position_file_timer == NULL) {
+				pudError(false, "Could not start pud position file timer");
+				return false;
+			}
+		}
+	}
+
 	return true;
 
 	error: closePud();
@@ -345,6 +404,15 @@ bool initPud(void) {
  the NMEA parser.
  */
 void closePud(void) {
+	if (pud_position_file_timer != NULL) {
+		olsr_stop_timer(pud_position_file_timer);
+		pud_position_file_timer = NULL;
+	}
+	if (pud_position_file_timer_cookie != NULL) {
+		olsr_free_cookie(pud_position_file_timer_cookie);
+		pud_position_file_timer_cookie = NULL;
+	}
+	stopPositionFile();
 	closeNetworkInterfaces();
 	stopReceiver();
 	destroyDeDupList(&deDupList);
