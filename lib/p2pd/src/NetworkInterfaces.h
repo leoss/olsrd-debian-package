@@ -1,6 +1,11 @@
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004-2009, the olsr.org team - see HISTORY file
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -74,7 +79,7 @@ struct NonOlsrInterface {
 
   /* OLSRs idea of this network interface. NULL if this interface is not
    * OLSR-enabled. */
-  struct interface *olsrIntf;
+  struct interface_olsr *olsrIntf;
 
   /* IP address of this network interface */
   union olsr_ip_addr intAddr;
@@ -139,8 +144,8 @@ void FindNeighbors(struct TBestNeighbors *neighbors,
                    union olsr_ip_addr *source,
                    union olsr_ip_addr *forwardedBy, union olsr_ip_addr *forwardedTo, int *nPossibleNeighbors);
 
-int CreateNonOlsrNetworkInterfaces(struct interface *skipThisIntf);
-void AddInterface(struct interface *newIntf);
+int CreateNonOlsrNetworkInterfaces(struct interface_olsr *skipThisIntf);
+void AddInterface(struct interface_olsr *newIntf);
 void CloseNonOlsrNetworkInterfaces(void);
 int AddNonOlsrIf(const char *ifName, void *data, set_plugin_parameter_addon addon);
 int IsNonOlsrIf(const char *ifName);

@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Thomas Lopatic (thomas@lopatic.de)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -281,7 +285,7 @@ void olsr_output_lq_hello(void *para);
 
 void olsr_output_lq_tc(void *para);
 
-void olsr_input_lq_hello(union olsr_message *ser, struct interface *inif, union olsr_ip_addr *from);
+void olsr_input_lq_hello(union olsr_message *ser, struct interface_olsr *inif, union olsr_ip_addr *from);
 
 extern bool lq_tc_pending;
 

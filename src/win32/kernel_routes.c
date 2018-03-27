@@ -1,7 +1,11 @@
-
 /*
  * The olsr.org Optimized Link-State Routing daemon (olsrd)
- * Copyright (c) 2004, Thomas Lopatic (thomas@lopatic.de)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,7 +72,7 @@ olsr_ioctl_add_route(const struct rt_entry *rt)
   MIB_IPFORWARDROW Row;
   union olsr_ip_addr mask;
   unsigned long Res;
-  struct interface *iface = if_ifwithindex(rt->rt_best->rtp_nexthop.iif_index);
+  struct interface_olsr *iface = if_ifwithindex(rt->rt_best->rtp_nexthop.iif_index);
 
   OLSR_PRINTF(2, "KERN: Adding %s\n", olsr_rt_to_string(rt));
 
@@ -147,7 +151,7 @@ olsr_ioctl_del_route(const struct rt_entry *rt)
   MIB_IPFORWARDROW Row;
   union olsr_ip_addr mask;
   unsigned long Res;
-  struct interface *iface = if_ifwithindex(rt->rt_nexthop.iif_index);
+  struct interface_olsr *iface = if_ifwithindex(rt->rt_nexthop.iif_index);
 
   OLSR_PRINTF(2, "KERN: Deleting %s\n", olsr_rt_to_string(rt));
 

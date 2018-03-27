@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2008 Henning Rogge <rogge@fgan.de>
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -72,7 +76,7 @@ static void default_lq_clear_ff(void *target);
 static void default_lq_clear_ff_hello(void *target);
 
 static const char *default_lq_print_ff(void *ptr, char separator, struct lqtextbuffer *buffer);
-static const char *default_lq_print_cost_ff(olsr_linkcost cost, struct lqtextbuffer *buffer);
+static double default_lq_get_cost_scaled(olsr_linkcost cost);
 
 /* etx lq plugin (freifunk fpm version) settings */
 struct lq_handler lq_etx_ff_handler = {
@@ -95,7 +99,7 @@ struct lq_handler lq_etx_ff_handler = {
 
   &default_lq_print_ff,
   &default_lq_print_ff,
-  &default_lq_print_cost_ff,
+  &default_lq_get_cost_scaled,
 
   sizeof(struct default_lq_ff_hello),
   sizeof(struct default_lq_ff),
@@ -166,7 +170,7 @@ default_lq_ff_handle_lqchange(void) {
 }
 
 static void
-default_lq_parser_ff(struct olsr *olsr, struct interface *in_if, union olsr_ip_addr *from_addr)
+default_lq_parser_ff(struct olsr *olsr, struct interface_olsr *in_if, union olsr_ip_addr *from_addr)
 {
   const union olsr_ip_addr *main_addr;
   struct link_entry *lnk;
@@ -239,9 +243,17 @@ default_lq_ff_timer(void __attribute__ ((unused)) * context)
       // start with link-loss-factor
       ratio = fpmidiv(itofpm(link->loss_link_multiplier), LINK_LOSS_MULTIPLIER);
 
-      /* keep missed hello periods in mind (round up hello interval to seconds) */
+      /* don't forget missing hellos */
       if (tlq->missed_hellos > 1) {
-        received = received - received * tlq->missed_hellos * link->inter->hello_etime/1000 / LQ_FF_WINDOW;
+        uint32_t interval;
+
+        interval = tlq->missed_hellos * link->loss_helloint / 1000;
+        if (interval > LQ_FF_WINDOW) {
+          received = 0;
+        }
+        else {
+          received = (received * (LQ_FF_WINDOW - interval)) / LQ_FF_WINDOW;
+        }
       }
 
       // calculate received/total factor
@@ -280,7 +292,7 @@ default_lq_calc_cost_ff(const void *ptr)
 
   cost = fpmidiv(itofpm(255 * 255), (int)lq->valueLq * (int)lq->valueNlq);
 
-  if (cost > LINK_COST_BROKEN)
+  if (cost >= LINK_COST_BROKEN)
     return LINK_COST_BROKEN;
   if (cost == 0)
     return 1;
@@ -404,11 +416,10 @@ default_lq_print_ff(void *ptr, char separator, struct lqtextbuffer *buffer)
   return buffer->buf;
 }
 
-static const char *
-default_lq_print_cost_ff(olsr_linkcost cost, struct lqtextbuffer *buffer)
+static double
+default_lq_get_cost_scaled(olsr_linkcost cost)
 {
-  snprintf(buffer->buf, sizeof(buffer->buf), "%s", fpmtoa(cost));
-  return buffer->buf;
+  return fpmtod(cost);
 }
 
 /*

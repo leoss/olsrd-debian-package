@@ -1,6 +1,11 @@
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004-2009, the olsr.org team - see HISTORY file
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,15 +62,14 @@
 #define P2PD_VALID_TIME           180		/* seconds */
 
 /* P2PD plugin data */
-#define PLUGIN_NAME               "OLSRD P2PD plugin"
-#define PLUGIN_NAME_SHORT         "OLSRD P2PD"
-#define PLUGIN_VERSION            "0.1.0 (" __DATE__ " " __TIME__ ")"
-#define MOD_DESC PLUGIN_NAME      " " PLUGIN_VERSION
+#define PLUGIN_NAME               "OLSRD p2pd plugin"
+#define PLUGIN_NAME_SHORT         "P2PD"
 #define PLUGIN_INTERFACE_VERSION  5
+
 #define IPHDR_FRAGMENT_MASK       0xC000
 
 /* Forward declaration of OLSR interface type */
-struct interface;
+struct interface_olsr;
 
 struct DupFilterEntry {
   int                            ip_version;
@@ -92,13 +96,14 @@ extern struct DuplicateFilterEntry * FilterList;
 void DoP2pd(int sd, void *x, unsigned int y);
 void P2pdPError(const char *format, ...) __attribute__ ((format(printf, 1, 2)));
 union olsr_ip_addr *MainAddressOf(union olsr_ip_addr *ip);
-int InitP2pd(struct interface *skipThisIntf);
+int InitP2pd(struct interface_olsr *skipThisIntf);
 void CloseP2pd(void);
 int SetP2pdTtl(const char *value, void *data __attribute__ ((unused)), set_plugin_parameter_addon addon __attribute__ ((unused)));
 int AddUdpDestPort(const char *value, void *data __attribute__ ((unused)), set_plugin_parameter_addon addon __attribute__ ((unused)));
 bool InUdpDestPortList(int ip_version, union olsr_ip_addr *addr, uint16_t port);
 int SetP2pdTtl(const char *value, void *data __attribute__ ((unused)), set_plugin_parameter_addon addon __attribute__ ((unused)));
 int SetP2pdUseHashFilter(const char *value, void *data __attribute__ ((unused)), set_plugin_parameter_addon addon __attribute__ ((unused)));
+int SetP2pdUseTtlDecrement(const char *value, void *data __attribute__ ((unused)), set_plugin_parameter_addon addon __attribute__ ((unused)));
 bool p2pd_message_seen(struct node **head, struct node **tail, union olsr_message *m);
 void p2pd_store_message(struct node **head, struct node **tail, union olsr_message *m);
 bool p2pd_is_duplicate_message(union olsr_message *msg);
@@ -106,7 +111,7 @@ bool p2pd_is_duplicate_message(union olsr_message *msg);
 void olsr_p2pd_gen(unsigned char *packet, int len);
 
 /* Parser function to register with the scheduler */
-bool olsr_parser(union olsr_message *, struct interface *, union olsr_ip_addr *);
+bool olsr_parser(union olsr_message *, struct interface_olsr *, union olsr_ip_addr *);
 
 #endif /* _P2PD_H */
 

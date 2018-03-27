@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,21 +57,21 @@ typedef int (*packet_transform_function) (uint8_t *, int *);
 
 void init_net(void);
 
-int net_add_buffer(struct interface *);
+int net_add_buffer(struct interface_olsr *);
 
-int net_remove_buffer(struct interface *);
+int net_remove_buffer(struct interface_olsr *);
 
-int net_outbuffer_bytes_left(const struct interface *);
+int net_outbuffer_bytes_left(const struct interface_olsr *);
 
-uint16_t net_output_pending(const struct interface *);
+uint16_t net_output_pending(const struct interface_olsr *);
 
-int net_reserve_bufspace(struct interface *, int);
+int net_reserve_bufspace(struct interface_olsr *, int);
 
-int net_outbuffer_push(struct interface *, const void *, const uint16_t);
+int net_outbuffer_push(struct interface_olsr *, const void *, const uint16_t);
 
-int net_outbuffer_push_reserved(struct interface *, const void *, const uint16_t);
+int net_outbuffer_push_reserved(struct interface_olsr *, const void *, const uint16_t);
 
-int net_output(struct interface *);
+int net_output(struct interface_olsr *);
 
 int net_sendroute(struct rt_entry *, struct sockaddr *);
 

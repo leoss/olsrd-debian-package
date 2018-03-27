@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,6 +58,7 @@
 #include "scheduler.h"
 #include "log.h"
 #include "routing_table.h"
+#include "olsr_cfg.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -127,6 +132,8 @@ static void looped_checks(void *) __attribute__ ((noreturn));
 static bool check_gw(union olsr_ip_addr *, uint8_t, struct ping_list *);
 
 static int ping_is_possible(struct ping_list *);
+
+static char ping_cmd[PING_CMD_MAX_LEN] = { DEFAULT_PING_CMD };
 
 /* Event function to register with the scheduler */
 static void olsr_event_doing_hna(void *);
@@ -205,12 +212,27 @@ set_plugin_hna(const char *value, void *data __attribute__ ((unused)), set_plugi
   return 0;
 }
 
+static int
+set_plugin_cmd(const char *value, void *data __attribute__ ((unused)), set_plugin_parameter_addon addon __attribute__ ((unused)))
+{
+  size_t len = strlen(value);
+
+  if (len < PING_CMD_MAX_LEN) {
+    strncpy(ping_cmd, value, PING_CMD_MAX_LEN - 1);
+    ping_cmd[PING_CMD_MAX_LEN - 1] = '\0';
+    return 0;
+  }
+
+  return 1;
+}
+
 static const struct olsrd_plugin_parameters plugin_parameters[] = {
   {.name = "interval",      .set_plugin_parameter = &set_plugin_int,  .data = &ping_check_interval  },
   {.name = "pinginterval",  .set_plugin_parameter = &set_plugin_int,  .data = &ping_check_interval  },
   {.name = "checkinterval", .set_plugin_parameter = &set_plugin_int,  .data = &hna_check_interval   },
   {.name = "ping",          .set_plugin_parameter = &set_plugin_ping, .data = NULL                  },
   {.name = "hna",           .set_plugin_parameter = &set_plugin_hna,  .data = NULL                  },
+  {.name = "pingcmd",       .set_plugin_parameter = &set_plugin_cmd,  .data = &ping_cmd             },
 };
 
 void
@@ -287,6 +309,29 @@ olsrd_plugin_init(void)
   olsr_start_timer(hna_check_interval, 0, OLSR_TIMER_PERIODIC, &olsr_event_doing_hna, NULL, 0);
   return 1;
 }
+
+void olsrd_plugin_fini(void) {
+  if (!hna_groups) {
+    return;
+  }
+
+  while (hna_groups->ping_hosts) {
+    struct ping_list* next = hna_groups->ping_hosts->next;
+    free(hna_groups->ping_hosts->ping_address);
+    free(hna_groups->ping_hosts);
+    hna_groups->ping_hosts = next;
+  }
+
+  while (hna_groups->hna_list) {
+    struct hna_list * next = hna_groups->hna_list->next;
+    free(hna_groups->hna_list);
+    hna_groups->hna_list = next;
+  }
+
+  free(hna_groups);
+  hna_groups = NULL;
+}
+
 
 /**
  * Scheduled event to update the hna table,
@@ -468,7 +513,7 @@ update_routing(void)
       continue;
     }
     
-    if ((iflags & RTF_UP) && (metric != RT_METRIC_DEFAULT)) {
+    if ((iflags & RTF_UP) && (metric != olsr_cnf->fib_metric_default)) {
       hna->checked = true;
     }
   }
@@ -536,9 +581,9 @@ ping_is_possible(struct ping_list *the_ping_list)
 {
   struct ping_list *list;
   for (list = the_ping_list; list; list = list->next) {
-    char ping_command[50];
-    snprintf(ping_command, sizeof(ping_command), "ping -c 1 -q %s", list->ping_address);
-    olsr_printf(1, "\nDo ping on %s ...\n", list->ping_address);
+    char ping_command[sizeof(ping_cmd) + INET6_ADDRSTRLEN];
+    snprintf(ping_command, sizeof(ping_command), ping_cmd, list->ping_address);
+    olsr_printf(1, "\nDo ping on (%s) %s ...\n", ping_cmd, list->ping_address);
     if (system(ping_command) == 0) {
       olsr_printf(1, "...OK\n\n");
       return 1;
@@ -563,9 +608,7 @@ add_to_ping_list(const char *ping_address, struct ping_list *the_ping_list)
 {
   struct ping_list *new = calloc(1, sizeof(struct ping_list));
   if (!new) {
-    fprintf(stderr, "DYN GW: Out of memory!\n");
-    olsr_syslog(OLSR_LOG_ERR, "DYN GW: Out of memory!\n");
-    exit(0);
+    olsr_exit("DYN GW: Out of memory", EXIT_FAILURE);
   }
   new->ping_address = strdup(ping_address);
   new->next = the_ping_list;
@@ -587,9 +630,7 @@ add_to_hna_list(struct hna_list *list_root, union olsr_ip_addr *hna_addr, uint8_
 {
   struct hna_list *new = calloc(1, sizeof(struct hna_list));
   if (new == NULL) {
-    fprintf(stderr, "DYN GW: Out of memory!\n");
-    olsr_syslog(OLSR_LOG_ERR, "DYN GW: Out of memory!\n");
-    exit(0);
+    olsr_exit("DYN GW: Out of memory", EXIT_FAILURE);
   }
 
   new->hna_addr.v4 = hna_addr->v4;
@@ -612,9 +653,7 @@ add_to_hna_group(struct hna_group *list_root)
 {
   struct hna_group *new = calloc(1, sizeof(struct hna_group));
   if (new == NULL) {
-    fprintf(stderr, "DYN GW: Out of memory!\n");
-    olsr_syslog(OLSR_LOG_ERR, "DYN GW: Out of memory!\n");
-    exit(0);
+    olsr_exit("DYN GW: Out of memory", EXIT_FAILURE);
   }
 	
   new->next =  list_root;

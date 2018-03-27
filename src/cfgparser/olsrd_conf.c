@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +49,9 @@
 #include "defs.h"
 #include "net_olsr.h"
 #include "olsr.h"
+#include "egressTypes.h"
+#include "gateway.h"
+#include "lock_file.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -55,15 +62,24 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/stat.h>
 #ifdef __linux__
 #include <linux/types.h>
 #include <linux/rtnetlink.h>
 #include <linux/version.h>
 #include <sys/stat.h>
+#include <net/if.h>
+#include <ctype.h>
 #endif /* __linux__ */
 
 extern FILE *yyin;
 extern int yyparse(void);
+
+#define valueInRange(value, low, high) ((low <= value) && (value <= high))
+
+#define rangesOverlap(low1, high1, low2, high2) ( \
+            valueInRange(low1 , low2, high2) || valueInRange(high1, low2, high2) || \
+            valueInRange(low2,  low1, high1) || valueInRange(high2, low1, high1))
 
 static char interface_defaults_name[] = "[InterfaceDefaults]";
 
@@ -85,14 +101,11 @@ const char *OLSR_IF_MODE[] = {
   "ether"
 };
 
-static char copyright_string[] __attribute__ ((unused)) =
-  "The olsr.org Optimized Link-State Routing daemon(olsrd) Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org) All rights reserved.";
-
 int current_line;
 
 /* Global stuff externed in defs.h */
-FILE *debug_handle;                    /* Where to send debug(defaults to stdout) */
-struct olsrd_config *olsr_cnf;         /* The global configuration */
+FILE *debug_handle = NULL;             /* Where to send debug(defaults to stdout) */
+struct olsrd_config *olsr_cnf = NULL;  /* The global configuration */
 
 #ifdef MAKEBIN
 
@@ -100,17 +113,17 @@ struct olsrd_config *olsr_cnf;         /* The global configuration */
 int
 main(int argc, char *argv[])
 {
-  struct olsrd_config *cnf;
-
-  if (argc == 1) {
-    fprintf(stderr, "Usage: olsrd_cfgparser [filename] -print\n\n");
+  if (argc < 2) {
+    fprintf(stderr, "Usage: olsrd_cfgparser filename [-print]\n\n");
     exit(EXIT_FAILURE);
   }
 
-  if ((cnf = olsrd_parse_cnf(argv[1])) == 0) {
+  olsr_cnf = olsrd_get_default_cnf(strdup(argv[1]));
+
+  if (olsrd_parse_cnf(argv[1]) == 0) {
     if ((argc > 2) && (!strcmp(argv[2], "-print"))) {
-      olsrd_print_cnf(cnf);
-      olsrd_write_cnf(cnf, "./out.conf");
+      olsrd_print_cnf(olsr_cnf);
+      olsrd_write_cnf(olsr_cnf, "./out.conf");
     } else
       printf("Use -print to view parsed values\n");
     printf("Configfile parsed OK\n");
@@ -121,11 +134,109 @@ main(int argc, char *argv[])
   return 0;
 }
 
+void
+olsr_startup_sleep(int seconds __attribute__((unused))) {
+}
+
 #else /* MAKEBIN */
 
 /* Build as part of olsrd */
 
 #endif /* MAKEBIN */
+
+/**
+ * loads a config file
+ * @return <0 if load failed, 0 otherwise
+ */
+static int
+olsrmain_load_config(char *file) {
+  struct stat statbuf;
+
+  if (stat(file, &statbuf) < 0) {
+    fprintf(stderr, "Could not find specified config file %s!\n%s\n\n",
+        file, strerror(errno));
+    return -1;
+  }
+
+  if (olsrd_parse_cnf(file) < 0) {
+    fprintf(stderr, "Error while reading config file %s!\n", file);
+    return -1;
+  }
+
+  free(olsr_cnf->configuration_file);
+  olsr_cnf->configuration_file = strdup(file);
+
+  return 0;
+}
+
+/*
+ * Set configfile name and
+ * check if a configfile name was given as parameter
+ */
+bool loadConfig(int *argc, char *argv[]) {
+  char conf_file_name[FILENAME_MAX] = { 0 };
+  bool loadedConfig = false;
+  int i;
+
+  /* setup the default olsrd configuration file name in conf_file_name */
+#ifdef _WIN32
+  size_t len = 0;
+
+#ifndef WINCE
+  /* get the current directory */
+  GetWindowsDirectory(conf_file_name, FILENAME_MAX - 11);
+#else /* WINCE */
+  conf_file_name[0] = '\0';
+#endif /* WINCE */
+
+  len = strlen(conf_file_name);
+  if (!len || (conf_file_name[len - 1] != '\\')) {
+    conf_file_name[len++] = '\\';
+  }
+
+  strscpy(conf_file_name + len, "olsrd.conf", sizeof(conf_file_name) - len);
+#else /* _WIN32 */
+  strscpy(conf_file_name, OLSRD_GLOBAL_CONF_FILE, sizeof(conf_file_name));
+#endif /* _WIN32 */
+
+  /* get the default configuration */
+  olsr_cnf = olsrd_get_default_cnf(strdup(conf_file_name));
+
+  /* scan for -f configFile arguments */
+  for (i = 1; i < (*argc - 1);) {
+    if (strcmp(argv[i], "-f") == 0) {
+      /* setup the provided olsrd configuration file name in conf_file_name */
+      strscpy(conf_file_name, argv[i + 1], sizeof(conf_file_name));
+
+      /* remove -f confgFile arguments from argc and argv */
+      if ((i + 2) < *argc) {
+        memmove(&argv[i], &argv[i + 2], sizeof(*argv) * (*argc - i - 1));
+      }
+      *argc -= 2;
+
+      /* load the config from the file */
+      if (olsrmain_load_config(conf_file_name) < 0) {
+        return false;
+      }
+
+      loadedConfig = true;
+    } else {
+      i++;
+    }
+  }
+
+  /* set up configuration prior to processing command-line options */
+  if (!loadedConfig && olsrmain_load_config(conf_file_name) == 0) {
+    loadedConfig = true;
+  }
+
+  if (!loadedConfig) {
+    olsrd_free_cnf(&olsr_cnf);
+    olsr_cnf = olsrd_get_default_cnf(strdup(conf_file_name));
+  }
+
+  return true;
+}
 
 int
 olsrd_parse_cnf(const char *filename)
@@ -145,6 +256,13 @@ olsrd_parse_cnf(const char *filename)
   rc = yyparse();
   fclose(yyin);
   if (rc != 0) {
+    /* Interface names that were parsed successfully are not cleaned up. */
+    struct olsr_if* b = olsr_cnf->interfaces;
+    while (b) {
+      free(b->name);
+      b->name = NULL;
+      b = b->next;
+    }
     return -1;
   }
 
@@ -219,55 +337,55 @@ static int olsrd_sanity_check_rtpolicy(struct olsrd_config *cnf) {
   if (!cnf->smart_gw_active) {
     /* default is "no policy rules" and "everything into the main table" */
     if (cnf->rt_table == DEF_RT_AUTO) {
-      cnf->rt_table = 254;
+      cnf->rt_table = DEF_RT_TABLE_NR;
     }
     if (cnf->rt_table_default == DEF_RT_AUTO) {
-      cnf->rt_table_default = cnf->rt_table;
+      cnf->rt_table_default = DEF_RT_TABLE_DEFAULT_NR;
     }
     if (cnf->rt_table_tunnel != DEF_RT_AUTO) {
       fprintf(stderr, "Warning, setting a table for tunnels without SmartGW does not make sense.\n");
     }
-    cnf->rt_table_tunnel = cnf->rt_table_default;
+    cnf->rt_table_tunnel = DEF_RT_TABLE_TUNNEL_NR;
 
     /* priority rules default is "none" */
     if (cnf->rt_table_pri == DEF_RT_AUTO) {
-      cnf->rt_table_pri = DEF_RT_NONE;
+      cnf->rt_table_pri = DEF_RT_TABLE_PRI;
     }
     if (cnf->rt_table_defaultolsr_pri == DEF_RT_AUTO) {
-      cnf->rt_table_defaultolsr_pri = DEF_RT_NONE;
+      cnf->rt_table_defaultolsr_pri = DEF_RT_TABLE_DEFAULTOLSR_PRI;
     }
     if (cnf->rt_table_tunnel_pri == DEF_RT_AUTO) {
-      cnf->rt_table_tunnel_pri = DEF_RT_NONE;
+      cnf->rt_table_tunnel_pri = DEF_RT_TABLE_TUNNEL_PRI;
     }
     if (cnf->rt_table_default_pri == DEF_RT_AUTO) {
-      cnf->rt_table_default_pri = DEF_RT_NONE;
+      cnf->rt_table_default_pri = DEF_RT_TABLE_DEFAULT_PRI;
     }
   }
   else {
     /* default is "policy rules" and "everything into separate tables (254, 223, 224)" */
     if (cnf->rt_table == DEF_RT_AUTO) {
-      cnf->rt_table = 254;
+      cnf->rt_table = DEF_SGW_RT_TABLE_NR;
     }
     if (cnf->rt_table_default == DEF_RT_AUTO) {
-      cnf->rt_table_default = 223;
+      cnf->rt_table_default = DEF_SGW_RT_TABLE_DEFAULT_NR;
     }
     if (cnf->rt_table_tunnel == DEF_RT_AUTO) {
-      cnf->rt_table_tunnel = 224;
+      cnf->rt_table_tunnel = DEF_SGW_RT_TABLE_TUNNEL_NR;
     }
 
     /* default for "rt_table_pri" is none (main table already has a policy rule */
-    prio = 32766;
+    prio = DEF_SGW_RT_TABLE_PRI_BASE;
     if (cnf->rt_table_pri > 0) {
       prio = cnf->rt_table_pri;
     }
     else if (cnf->rt_table_pri == DEF_RT_AUTO) {
       /* choose default */
-      olsr_cnf->rt_table_pri = DEF_RT_NONE;
+      olsr_cnf->rt_table_pri = DEF_SGW_RT_TABLE_PRI;
       fprintf(stderr, "No policy rule for rt_table_pri\n");
     }
 
     /* default for "rt_table_defaultolsr_pri" is +10 */
-    prio += 10;
+    prio += DEF_SGW_RT_TABLE_DEFAULTOLSR_PRI_ADDER;
     if (cnf->rt_table_defaultolsr_pri > 0) {
       prio = cnf->rt_table_defaultolsr_pri;
     }
@@ -276,7 +394,7 @@ static int olsrd_sanity_check_rtpolicy(struct olsrd_config *cnf) {
       fprintf(stderr, "Choose priority %u for rt_table_defaultolsr_pri\n", prio);
     }
 
-    prio += 10;
+    prio += DEF_SGW_RT_TABLE_TUNNEL_PRI_ADDER;
     if (cnf->rt_table_tunnel_pri > 0) {
       prio = cnf->rt_table_tunnel_pri;
     }
@@ -285,8 +403,11 @@ static int olsrd_sanity_check_rtpolicy(struct olsrd_config *cnf) {
       fprintf(stderr, "Choose priority %u for rt_table_tunnel_pri\n", prio);
     }
 
-    prio += 10;
-    if (cnf->rt_table_default_pri == DEF_RT_AUTO) {
+    prio += DEF_SGW_RT_TABLE_DEFAULT_PRI_ADDER;
+    if (cnf->rt_table_default_pri > 0) {
+      prio = cnf->rt_table_default_pri;
+    }
+    else if (cnf->rt_table_default_pri == DEF_RT_AUTO) {
       olsr_cnf->rt_table_default_pri = prio;
       fprintf(stderr, "Choose priority %u for rt_table_default_pri\n", prio);
     }
@@ -564,12 +685,40 @@ olsrd_sanity_check_cnf(struct olsrd_config *cnf)
   if (cnf->smart_gw_use_count > 1) {
     struct sgw_egress_if * sgwegressif = cnf->smart_gw_egress_interfaces;
 
+    /* check that we're in IPv4 */
+    if (cnf->ip_version != AF_INET) {
+      fprintf(stderr, "Error, multi smart gateway mode is only supported for IPv4\n");
+      return -1;
+    }
+
 	/* check that the sgw takedown percentage is in the range [0, 100] */
 	if (/*(cnf->smart_gw_takedown_percentage < 0) ||*/ (cnf->smart_gw_takedown_percentage > 100)) {
 	  fprintf(stderr, "Error, smart gateway takedown percentage (%u) is not in the range [0, 100]\n",
 		  cnf->smart_gw_takedown_percentage);
 	  return -1;
 	}
+
+    if (!cnf->smart_gw_instance_id) {
+      fprintf(stderr, "Error, no smart gateway instance id configured in multi-gateway mode\n");
+      return -1;
+    }
+
+    {
+      size_t len = strlen(cnf->smart_gw_instance_id);
+      size_t index = 0;
+
+      if (!len) {
+        fprintf(stderr, "Error, smart gateway instance id can not be empty\n");
+        return -1;
+      }
+
+      while (index++ < len) {
+        if (isspace(cnf->smart_gw_instance_id[index])) {
+          fprintf(stderr, "Error, smart gateway instance id contains whitespace\n");
+          return -1;
+        }
+      }
+    }
 
     if (!cnf->smart_gw_policyrouting_script) {
       fprintf(stderr, "Error, no policy routing script configured in multi-gateway mode\n");
@@ -607,9 +756,19 @@ olsrd_sanity_check_cnf(struct olsrd_config *cnf)
       return -1;
     }
 
-    /* an egress interface must not be an OLSR interface */
     while (sgwegressif) {
-      struct olsr_if * olsrif = cnf->interfaces;
+      struct olsr_if * olsrif;
+
+      /* an egress interface must have a valid length */
+      size_t len = sgwegressif->name ? strlen(sgwegressif->name) : 0;
+      if ((len < 1) || (len > IFNAMSIZ)) {
+        fprintf(stderr, "Error, egress interface '%s' has an invalid length of %lu, allowed: [1, %u]\n", sgwegressif->name, (long unsigned int) len,
+            (unsigned int) IFNAMSIZ);
+        return -1;
+      }
+
+      /* an egress interface must not be an OLSR interface */
+      olsrif = cnf->interfaces;
       while (olsrif) {
         if (!strcmp(olsrif->name, sgwegressif->name)) {
           fprintf(stderr, "Error, egress interface %s already is an OLSR interface\n", sgwegressif->name);
@@ -627,35 +786,82 @@ olsrd_sanity_check_cnf(struct olsrd_config *cnf)
       return -1;
     }
 
+    if (cnf->smart_gw_egress_file_period < MIN_SMARTGW_EGRESS_FILE_PERIOD) {
+      fprintf(stderr, "Error, egress file period must be at least %u\n", MIN_SMARTGW_EGRESS_FILE_PERIOD);
+      return -1;
+    }
+
     {
-      uint8_t egressLow = cnf->smart_gw_mark_offset_egress;
-      uint8_t egressHigh = egressLow + cnf->smart_gw_egress_interfaces_count - 1;
-      uint8_t tunnelsLow = cnf->smart_gw_mark_offset_tunnels;
-      uint8_t tunnelsHigh = tunnelsLow + cnf->smart_gw_use_count - 1;
-      bool overlap = false;
+      uint32_t nrOfTables = 1 + cnf->smart_gw_egress_interfaces_count + cnf->smart_gw_use_count;
 
-      /* check that the egress interface marks range does not overflow */
-      if (egressLow > (UINT8_MAX - cnf->smart_gw_egress_interfaces_count)) {
-        fprintf(stderr, "Error, egress interface mark offset %u together with egress interface count %u overflows range [0, %u]\n",
-            egressLow, cnf->smart_gw_egress_interfaces_count, UINT8_MAX);
+      uint32_t nrOfBypassRules = cnf->smart_gw_egress_interfaces_count + getNrOfOlsrInterfaces(olsr_cnf);
+      uint32_t nrOfTableRules = nrOfTables;
+      uint32_t nrOfRules = nrOfBypassRules + nrOfTableRules;
+
+      uint32_t tablesLow;
+      uint32_t tablesHigh;
+      uint32_t tablesLowMax = ((1u << 31) - nrOfTables + 1);
+
+      uint32_t rulesLow;
+      uint32_t rulesHigh;
+      uint32_t rulesLowMax = UINT32_MAX - nrOfRules;
+
+      /* setup tables low/high */
+      tablesLow = cnf->smart_gw_offset_tables;
+      tablesHigh = cnf->smart_gw_offset_tables + nrOfTables;
+
+      /*
+       * tablesLow  >  0
+       * tablesLow  >  0
+       * tablesHigh <= 2^31
+       * [tablesLow, tablesHigh] no overlap with [253, 255]
+       */
+      if (!tablesLow) {
+        fprintf(stderr, "Error, smart gateway tables offset can't be zero.\n");
         return -1;
       }
 
-      /* check that the tunnel interface marks range does not overflow */
-      if (tunnelsLow > (UINT8_MAX - cnf->smart_gw_use_count)) {
-        fprintf(stderr, "Error, tunnel interface mark offset %u together with use count %u overflows range [0, %u]\n",
-            tunnelsLow, cnf->smart_gw_use_count, UINT8_MAX);
+      if (tablesLow > tablesLowMax) {
+        fprintf(stderr, "Error, smart gateway tables offset too large, maximum is %ul.\n", tablesLowMax);
         return -1;
       }
 
-      /* check that the egress and tunnel marks ranges do not overlap */
-      overlap =            ((tunnelsLow <= egressLow)   && (egressLow   <= tunnelsHigh));
-      overlap = overlap || ((tunnelsLow <= egressHigh)  && (egressHigh  <= tunnelsHigh));
-      overlap = overlap || ((egressLow  <= tunnelsLow)  && (tunnelsLow  <= egressHigh));
-      overlap = overlap || ((egressLow  <= tunnelsHigh) && (tunnelsHigh <= egressHigh));
-      if (overlap) {
-        fprintf(stderr, "Error, egress interface mark range [%u, %u] overlaps with tunnel interface mark range [%u, %u]\n",
-            egressLow, egressHigh, tunnelsLow, tunnelsHigh);
+      if (rangesOverlap(tablesLow, tablesHigh, 253, 255)) {
+        fprintf(stderr, "Error, smart gateway tables range [%u, %u] overlaps with routing tables [253, 255].\n", tablesLow, tablesHigh);
+        return -1;
+      }
+
+      /* set default for rules offset if needed */
+      if (cnf->smart_gw_offset_rules == 0) {
+        if (valueInRange(tablesLow, 1, nrOfBypassRules)) {
+          fprintf(stderr, "Error, smart gateway table offset is too low: %u bypass rules won't fit between it and zero.\n", nrOfBypassRules);
+          return -1;
+        }
+
+        cnf->smart_gw_offset_rules = tablesLow - nrOfBypassRules;
+      }
+
+      /* setup rules low/high */
+      rulesLow = cnf->smart_gw_offset_rules;
+      rulesHigh = cnf->smart_gw_offset_rules + nrOfRules;
+
+      /*
+       * rulesLow  > 0
+       * rulesHigh < 2^32
+       * [rulesLow, rulesHigh] no overlap with [32766, 32767]
+       */
+      if (!rulesLow) {
+        fprintf(stderr, "Error, smart gateway rules offset can't be zero.\n");
+        return -1;
+      }
+
+      if (rulesLow > rulesLowMax) {
+        fprintf(stderr, "Error, smart gateway rules offset too large, maximum is %ul.\n", rulesLowMax);
+        return -1;
+      }
+
+      if (rangesOverlap(rulesLow, rulesHigh, 32766, 32767)) {
+        fprintf(stderr, "Error, smart gateway rules range [%u, %u] overlaps with rules [32766, 32767].\n", rulesLow, rulesHigh);
         return -1;
       }
     }
@@ -760,11 +966,6 @@ olsrd_sanity_check_cnf(struct olsrd_config *cnf)
       return -1;
     }
 
-    if (io == NULL) {
-      fprintf(stderr, "Interface %s has no configuration!\n", in->name);
-      return -1;
-    }
-
     /*merge lqmults*/
     if (mult_orig!=NULL) {
       io->orig_lq_mult_cnt=1;
@@ -787,123 +988,161 @@ olsrd_sanity_check_cnf(struct olsrd_config *cnf)
 }
 
 void
-olsrd_free_cnf(struct olsrd_config *cnf)
+olsrd_free_cnf(struct olsrd_config **cnfVariableAddress)
 {
-  struct ip_prefix_list *hd, *h = cnf->hna_entries;
-  struct olsr_if *ind, *in = cnf->interfaces;
-  struct plugin_entry *ped, *pe = cnf->plugins;
-  struct olsr_lq_mult *mult, *next_mult;
+  struct olsrd_config *cnf;
 
-  while (h) {
-    hd = h;
-    h = h->next;
-    free(hd);
+  if (!cnfVariableAddress || !*cnfVariableAddress) {
+    return;
   }
 
-  while (in) {
-    for (mult = in->cnf->lq_mult; mult != NULL; mult = next_mult) {
+  cnf = *cnfVariableAddress;
+
+  free(cnf->smart_gw_status_file);
+  cnf->smart_gw_status_file = NULL;
+
+  free(cnf->smart_gw_egress_file);
+  cnf->smart_gw_egress_file = NULL;
+
+  // cnf->smart_gw_egress_interfaces : cleaned up by the gateway system
+
+  free(cnf->smart_gw_policyrouting_script);
+  cnf->smart_gw_policyrouting_script = NULL;
+
+  free(cnf->smart_gw_instance_id);
+  cnf->smart_gw_instance_id = NULL;
+
+  free(cnf->lock_file);
+  cnf->lock_file = NULL;
+
+  free(cnf->lq_algorithm);
+  cnf->lq_algorithm = NULL;
+
+  while (cnf->interfaces) {
+    struct olsr_if *interface;
+    struct olsr_lq_mult *mult = NULL;
+    struct olsr_lq_mult *next_mult = NULL;
+
+    for (mult = cnf->interfaces->cnf->lq_mult; mult != NULL; mult = next_mult) {
       next_mult = mult->next;
       free(mult);
     }
 
-    free(in->cnf);
-    free(in->cnfi);
+    free(cnf->interfaces->cnf);
+    free(cnf->interfaces->cnfi);
 
-    ind = in;
-    in = in->next;
+    free(cnf->interfaces->name);
 
-    free(ind);
+    interface = cnf->interfaces;
+    cnf->interfaces = cnf->interfaces->next;
+
+    free(interface);
   }
 
-  while (pe) {
-    ped = pe;
-    pe = pe->next;
-    free(ped->name);
-    free(ped);
+  free(cnf->interface_defaults);
+  cnf->interface_defaults = NULL;
+
+  ip_prefix_list_clear(&cnf->ipc_nets);
+
+  ip_prefix_list_clear(&cnf->hna_entries);
+
+  while (cnf->plugins) {
+    struct plugin_entry *plugin = cnf->plugins;
+    cnf->plugins = cnf->plugins->next;
+    free(plugin->name);
+    free(plugin);
   }
+
+  free(cnf->pidfile);
+  cnf->pidfile = NULL;
+
+  free(cnf->configuration_file);
+  cnf->configuration_file = NULL;
+
+  free(cnf);
+  *cnfVariableAddress = NULL;
 
   return;
 }
 
 struct olsrd_config *
-olsrd_get_default_cnf(void)
+olsrd_get_default_cnf(char * configuration_file)
 {
-  struct olsrd_config *c = malloc(sizeof(struct olsrd_config));
+    struct olsrd_config *c = malloc(sizeof(struct olsrd_config));
   if (c == NULL) {
     fprintf(stderr, "Out of memory %s\n", __func__);
     return NULL;
   }
 
-  set_default_cnf(c);
+  memset(c, 0, sizeof(struct olsrd_config));
+  set_default_cnf(c, configuration_file);
   return c;
 }
 
 void
-set_default_cnf(struct olsrd_config *cnf)
+set_default_cnf(struct olsrd_config *cnf, char * configuration_file)
 {
-  memset(cnf, 0, sizeof(*cnf));
-
+  cnf->configuration_file = configuration_file;
+  cnf->olsrport = DEF_OLSRPORT;
   cnf->debug_level = DEF_DEBUGLVL;
   cnf->no_fork = false;
   cnf->pidfile = NULL;
   cnf->host_emul = false;
   cnf->ip_version = AF_INET;
-  cnf->ipsize = sizeof(struct in_addr);
-  cnf->maxplen = 32;
   cnf->allow_no_interfaces = DEF_ALLOW_NO_INTS;
   cnf->tos = DEF_TOS;
-  cnf->olsrport = DEF_OLSRPORT;
   cnf->rt_proto = DEF_RTPROTO;
   cnf->rt_table = DEF_RT_AUTO;
   cnf->rt_table_default = DEF_RT_AUTO;
   cnf->rt_table_tunnel = DEF_RT_AUTO;
   cnf->rt_table_pri = DEF_RT_AUTO;
-  cnf->rt_table_default_pri = DEF_RT_AUTO;
-  cnf->rt_table_defaultolsr_pri = DEF_RT_AUTO;
   cnf->rt_table_tunnel_pri = DEF_RT_AUTO;
-
-  cnf->willingness_auto = DEF_WILL_AUTO;
+  cnf->rt_table_defaultolsr_pri = DEF_RT_AUTO;
+  cnf->rt_table_default_pri = DEF_RT_AUTO;
   cnf->willingness = DEF_WILLINGNESS;
+  cnf->willingness_auto = DEF_WILL_AUTO;
   cnf->ipc_connections = DEF_IPC_CONNECTIONS;
-  cnf->fib_metric = DEF_FIB_METRIC;
-
   cnf->use_hysteresis = DEF_USE_HYST;
-  cnf->hysteresis_param.scaling = HYST_SCALING;
-  cnf->hysteresis_param.thr_high = HYST_THRESHOLD_HIGH;
-  cnf->hysteresis_param.thr_low = HYST_THRESHOLD_LOW;
-
+  cnf->fib_metric = DEF_FIB_METRIC;
+  cnf->fib_metric_default = DEF_FIB_METRIC_DEFAULT;
+  cnf->hysteresis_param.scaling = HYST_SCALING;cnf->hysteresis_param.thr_high = HYST_THRESHOLD_HIGH;cnf->hysteresis_param.thr_low = HYST_THRESHOLD_LOW;
+  cnf->plugins = NULL;
+  cnf->hna_entries = NULL;
+  cnf->ipc_nets = NULL;
+  cnf->interface_defaults = NULL;
+  cnf->interfaces = NULL;
   cnf->pollrate = DEF_POLLRATE;
   cnf->nic_chgs_pollrate = DEF_NICCHGPOLLRT;
-
+  cnf->clear_screen = DEF_CLEAR_SCREEN;
   cnf->tc_redundancy = TC_REDUNDANCY;
   cnf->mpr_coverage = MPR_COVERAGE;
   cnf->lq_level = DEF_LQ_LEVEL;
   cnf->lq_fish = DEF_LQ_FISH;
   cnf->lq_aging = DEF_LQ_AGING;
   cnf->lq_algorithm = NULL;
-  cnf->lq_nat_thresh = DEF_LQ_NAT_THRESH;
-  cnf->clear_screen = DEF_CLEAR_SCREEN;
 
-  cnf->del_gws = false;
-  cnf->will_int = 10 * HELLO_INTERVAL;
-  cnf->max_jitter = 0.0;
-  cnf->exit_value = EXIT_SUCCESS;
-  cnf->max_tc_vtime = 0.0;
-  cnf->ioctl_s = 0;
+  cnf->min_tc_vtime = 0.0;
+
+  cnf->set_ip_forward = true;
+
+  cnf->lock_file = NULL; /* derived config */
   cnf->use_niit = DEF_USE_NIIT;
-  cnf->niit4to6_if_index = 0;
-  cnf->niit6to4_if_index = 0;
 
   cnf->smart_gw_active = DEF_SMART_GW;
   cnf->smart_gw_always_remove_server_tunnel = DEF_SMART_GW_ALWAYS_REMOVE_SERVER_TUNNEL;
+  cnf->smart_gw_allow_nat = DEF_GW_ALLOW_NAT;
+  cnf->smart_gw_uplink_nat = DEF_GW_UPLINK_NAT;
   cnf->smart_gw_use_count = DEF_GW_USE_COUNT;
   cnf->smart_gw_takedown_percentage = DEF_GW_TAKEDOWN_PERCENTAGE;
+  cnf->smart_gw_instance_id = NULL;
   cnf->smart_gw_policyrouting_script = NULL;
   cnf->smart_gw_egress_interfaces = NULL;
   cnf->smart_gw_egress_interfaces_count = 0;
-  cnf->smart_gw_mark_offset_egress = DEF_GW_MARK_OFFSET_EGRESS;
-  cnf->smart_gw_mark_offset_tunnels = DEF_GW_MARK_OFFSET_TUNNELS;
-  cnf->smart_gw_allow_nat = DEF_GW_ALLOW_NAT;
+  cnf->smart_gw_egress_file = NULL;
+  cnf->smart_gw_egress_file_period = DEF_GW_EGRESS_FILE_PERIOD;
+  cnf->smart_gw_status_file = NULL;
+  cnf->smart_gw_offset_tables = DEF_GW_OFFSET_TABLES;
+  cnf->smart_gw_offset_rules = DEF_GW_OFFSET_RULES;
   cnf->smart_gw_period = DEF_GW_PERIOD;
   cnf->smart_gw_stablecount = DEF_GW_STABLE_COUNT;
   cnf->smart_gw_thresh = DEF_GW_THRESH;
@@ -911,25 +1150,48 @@ set_default_cnf(struct olsrd_config *cnf)
   cnf->smart_gw_weight_exitlink_down = DEF_GW_WEIGHT_EXITLINK_DOWN;
   cnf->smart_gw_weight_etx = DEF_GW_WEIGHT_ETX;
   cnf->smart_gw_divider_etx = DEF_GW_DIVIDER_ETX;
+  cnf->smart_gw_path_max_cost_etx_max = DEF_GW_MAX_COST_MAX_ETX;
   cnf->smart_gw_type = DEF_GW_TYPE;
-  cnf->smart_gw_uplink = DEF_UPLINK_SPEED;
-  cnf->smart_gw_uplink_nat = DEF_GW_UPLINK_NAT;
-  cnf->smart_gw_downlink = DEF_DOWNLINK_SPEED;
+  cnf->smart_gw_uplink = 0;
+  cnf->smart_gw_downlink = 0;
+  smartgw_set_uplink(cnf, DEF_UPLINK_SPEED);
+  smartgw_set_downlink(cnf, DEF_DOWNLINK_SPEED);
+  // cnf->smart_gateway_bandwidth_zero : derived config set by smartgw_set_(up|down)link
+  memset(&cnf->smart_gw_prefix, 0, sizeof(cnf->smart_gw_prefix));
 
+
+  memset(&cnf->main_addr, 0, sizeof(cnf->main_addr));
+  memset(&cnf->unicast_src_ip, 0, sizeof(cnf->unicast_src_ip));
   cnf->use_src_ip_routes = DEF_USE_SRCIP_ROUTES;
-  cnf->set_ip_forward = true;
 
+
+  cnf->maxplen = 32;
+  cnf->ipsize = sizeof(struct in_addr);
+  cnf->del_gws = false;
+  cnf->will_int = 10 * HELLO_INTERVAL;
+  cnf->max_jitter = 0.0;
+  cnf->exit_value = EXIT_SUCCESS;
+  cnf->max_tc_vtime = 0.0;
+
+  cnf->niit4to6_if_index = 0;
+  cnf->niit6to4_if_index = 0;
+
+
+  cnf->has_ipv4_gateway = false;
+  cnf->has_ipv6_gateway = false;
+
+  cnf->ioctl_s = 0;
 #ifdef __linux__
   cnf->rtnl_s = 0;
+  cnf->rt_monitor_socket = -1;
 #endif /* __linux__ */
 
 #if defined __FreeBSD__ || defined __FreeBSD_kernel__ || defined __APPLE__ || defined __NetBSD__ || defined __OpenBSD__
   cnf->rts = 0;
 #endif /* defined __FreeBSD__ || defined __FreeBSD_kernel__ || defined __APPLE__ || defined __NetBSD__ || defined __OpenBSD__ */
+  cnf->lq_nat_thresh = DEF_LQ_NAT_THRESH;
 
-#ifdef HTTPINFO_PUD
   cnf->pud_position = NULL;
-#endif /* HTTPINFO_PUD */
 }
 
 struct if_config_options *
@@ -938,7 +1200,6 @@ get_default_if_config(void)
   struct if_config_options *io = malloc(sizeof(*io));
 
   if (io == NULL) {
-    fprintf(stderr, "Out of memory %s\n", __func__);
     return NULL;
   }
 
@@ -1037,6 +1298,8 @@ olsrd_print_cnf(struct olsrd_config *cnf)
 
   printf("SmGw. Takedown%%  : %u\n", cnf->smart_gw_takedown_percentage);
 
+  printf("SmGw. Instance Id: %s\n", cnf->smart_gw_instance_id);
+
   printf("SmGw. Pol. Script: %s\n", cnf->smart_gw_policyrouting_script);
 
   printf("SmGw. Egress I/Fs:");
@@ -1049,9 +1312,15 @@ olsrd_print_cnf(struct olsrd_config *cnf)
   }
   printf("\n");
 
-  printf("SmGw. Mark Egress: %u\n", cnf->smart_gw_mark_offset_egress);
+  printf("SmGw. Egress File: %s\n", !cnf->smart_gw_egress_file ? DEF_GW_EGRESS_FILE : cnf->smart_gw_egress_file);
 
-  printf("SmGw. Mark Tunnel: %u\n", cnf->smart_gw_mark_offset_tunnels);
+  printf("SmGw. Egr Fl Per.: %u\n", cnf->smart_gw_egress_file_period);
+
+  printf("SmGw. Status File: %s\n", cnf->smart_gw_status_file);
+
+  printf("SmGw. Offst Tabls: %u\n", cnf->smart_gw_offset_tables);
+
+  printf("SmGw. Offst Rules: %u\n", cnf->smart_gw_offset_rules);
 
   printf("SmGw. Allow NAT  : %s\n", cnf->smart_gw_allow_nat ? "yes" : "no");
 
@@ -1228,6 +1497,16 @@ ip_prefix_list_remove(struct ip_prefix_list **list, const union olsr_ip_addr *ne
   return 0;
 }
 
+void ip_prefix_list_clear(struct ip_prefix_list **list) {
+  if (!list) {
+    return;
+  }
+
+  while (*list) {
+    ip_prefix_list_remove(list, &((*list)->net.prefix), (*list)->net.prefix_len);
+  }
+}
+
 struct ip_prefix_list *
 ip_prefix_list_find(struct ip_prefix_list *list, const union olsr_ip_addr *net, uint8_t prefix_len)
 {
@@ -1238,6 +1517,12 @@ ip_prefix_list_find(struct ip_prefix_list *list, const union olsr_ip_addr *net, 
     }
   }
   return NULL;
+}
+
+void set_derived_cnf(struct olsrd_config * cnf) {
+  if (!cnf->lock_file) {
+    cnf->lock_file = olsrd_get_default_lockfile(cnf);
+  }
 }
 
 /*

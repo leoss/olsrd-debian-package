@@ -1,8 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
- * RIB implementation (c) 2007, Hannes Gredler (hannes@gredler.at)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -298,7 +301,7 @@ olsr_insert_rt_path(struct rt_path *rtp, struct tc_entry *tc, struct link_entry 
   /*
    * no unreachable routes please.
    */
-  if (tc->path_cost == ROUTE_COST_BROKEN) {
+  if (tc->path_cost >= ROUTE_COST_BROKEN) {
     return;
   }
 
@@ -395,7 +398,7 @@ olsr_hopcount_change(const struct rt_metric * met1, const struct rt_metric * met
 /**
  * Depending if flat_metric is configured and the kernel fib operation
  * return the hopcount metric of a route.
- * For adds this is the metric of best rour after olsr_rt_best() election,
+ * For adds this is the metric of best route after olsr_rt_best() election,
  * for deletes this is the metric of the route that got stored in the rt_entry,
  * during route installation.
  */
@@ -405,7 +408,7 @@ olsr_fib_metric(const struct rt_metric * met)
   if (FIBM_CORRECT == olsr_cnf->fib_metric) {
     return met->hops;
   }
-  return RT_METRIC_DEFAULT;
+  return olsr_cnf->fib_metric_default;
 }
 
 /**

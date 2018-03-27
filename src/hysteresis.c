@@ -1,7 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -144,7 +148,7 @@ olsr_update_hysteresis_hello(struct link_entry *entry, olsr_reltime htime)
 }
 
 void
-update_hysteresis_incoming(union olsr_ip_addr *remote, struct interface *local, uint16_t seqno)
+update_hysteresis_incoming(union olsr_ip_addr *remote, struct interface_olsr *local, uint16_t seqno)
 {
   struct link_entry *lnk = lookup_link_entry(remote, NULL, local);
 

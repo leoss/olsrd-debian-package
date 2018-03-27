@@ -1,7 +1,11 @@
-
 /*
  * The olsr.org Optimized Link-State Routing daemon (olsrd)
- * Copyright (c) 2004, Thomas Lopatic (thomas@lopatic.de)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,6 +62,7 @@
 #include "net_os.h"
 #include "net_olsr.h"
 #include "ipcalc.h"
+#include "olsr.h"
 
 #if defined WINCE
 #define WIDE_STRING(s) L##s
@@ -98,7 +103,7 @@ gethemusocket(struct sockaddr_in *pin)
 }
 
 int
-getsocket(int bufspace, struct interface *ifp __attribute__ ((unused)))
+getsocket(int bufspace, struct interface_olsr *ifp __attribute__ ((unused)))
 {
   struct sockaddr_in Addr;
   int On = 1;
@@ -155,7 +160,7 @@ getsocket(int bufspace, struct interface *ifp __attribute__ ((unused)))
 }
 
 int
-getsocket6(int bufspace, struct interface *ifp __attribute__ ((unused)))
+getsocket6(int bufspace, struct interface_olsr *ifp __attribute__ ((unused)))
 {
   struct sockaddr_in6 Addr6;
   int On = 1;
@@ -324,11 +329,11 @@ DisableIcmpRedirects(void)
   fprintf(stderr, "I have disabled ICMP redirect processing in the registry for you.\n");
   fprintf(stderr, "REBOOT NOW, so that these changes take effect. Exiting...\n\n");
 
-  exit(0);
+  olsr_exit(NULL, EXIT_SUCCESS);
 }
 
 int
-join_mcast(struct interface *Nic, int Sock)
+join_mcast(struct interface_olsr *Nic, int Sock)
 {
   /* See linux/in6.h */
   struct ipaddr_str buf;

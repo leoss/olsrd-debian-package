@@ -1,8 +1,11 @@
-
 /*
- * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
- *                     includes code by Bruno Randolf
+ * The olsr.org Optimized Link-State Routing daemon (olsrd)
+ *
+ * (c) by the OLSR project
+ *
+ * See our Git repository to find out who worked on this file
+ * and thus is a copyright holder on it.
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -271,7 +274,7 @@ ipc_action(int fd __attribute__ ((unused)), void *data __attribute__ ((unused)),
 #endif /* _WRS_KERNEL */
   olsr_printf(1, "(DOT DRAW)IPC: Connection from %s\n", inet_ntoa(pin.sin_addr));
 
-  abuf_init(&outbuffer, 4096);
+  abuf_init(&outbuffer, AUTOBUFCHUNK);
   outbuffer_socket = ipc_connection;
 
   pcf_event(1, 1, 1);
@@ -300,7 +303,7 @@ dotdraw_write_data(void *foo __attribute__ ((unused))) {
     if (result > 0)
       abuf_pull(&outbuffer, result);
 
-    if (result <= 0) {
+    if (result < 0) {
       /* close this socket and cleanup*/
       close(outbuffer_socket);
       abuf_free(&outbuffer);
@@ -308,14 +311,6 @@ dotdraw_write_data(void *foo __attribute__ ((unused))) {
       writetimer_entry = NULL;
       outbuffer_socket = -1;
     }
-  }
-  if (outbuffer.len == 0) {
-    /* close this socket and cleanup*/
-    close(outbuffer_socket);
-    abuf_free(&outbuffer);
-    olsr_stop_timer(writetimer_entry);
-    writetimer_entry = NULL;
-    outbuffer_socket = -1;
   }
 }
 
