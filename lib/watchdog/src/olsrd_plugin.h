@@ -1,7 +1,7 @@
 
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2008 Henning Rogge <rogge@fgan.de>
+ * Copyright (c) 2004-2009, the olsr.org team - see HISTORY file
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,46 +39,27 @@
  *
  */
 
-#ifndef LQ_ETX_FPM_
-#define LQ_ETX_FPM_
+/*
+ * Dynamic linked library for the olsr.org olsr daemon
+ */
 
-#include "olsr_types.h"
-#include "lq_plugin.h"
+#ifndef _OLSRD_PLUGIN_MINI
+#define _OLSRD_PLUGIN_MINI
 
-/* use only 1<<16 - 1 to allow the multiplication of two
- * upscaled numbers between 0 and 1 */
-#define LQ_FPM_INTERNAL_MULTIPLIER 65535
-#define LQ_FPM_LINKCOST_MULTIPLIER 65535
 
-#define LQ_ALGORITHM_ETX_FPM_NAME "etx_fpm"
+/****************************************************************************
+ *                Functions that the plugin MUST provide                    *
+ ****************************************************************************/
 
-struct default_lq_fpm {
-  uint8_t valueLq;
-  uint8_t valueNlq;
-  uint16_t quickstart;
-};
 
-void default_lq_initialize_fpm(void);
+/* Initialization function */
+int
+  olsrd_plugin_init(void);
 
-olsr_linkcost default_lq_calc_cost_fpm(const void *lq);
+int
+  olsrd_plugin_interface_version(void);
 
-olsr_linkcost default_lq_packet_loss_worker_fpm(struct link_entry *link, void *lq, bool lost);
-void default_lq_memorize_foreign_hello_fpm(void *local, void *foreign);
-
-int default_lq_serialize_hello_lq_pair_fpm(unsigned char *buff, void *lq);
-void default_lq_deserialize_hello_lq_pair_fpm(const uint8_t ** curr, void *lq);
-int default_lq_serialize_tc_lq_pair_fpm(unsigned char *buff, void *lq);
-void default_lq_deserialize_tc_lq_pair_fpm(const uint8_t ** curr, void *lq);
-
-void default_lq_copy_link2tc_fpm(void *target, void *source);
-void default_lq_clear_fpm(void *target);
-
-const char *default_lq_print_fpm(void *ptr, char separator, struct lqtextbuffer *buffer);
-const char *default_lq_print_cost_fpm(olsr_linkcost cost, struct lqtextbuffer *buffer);
-
-extern struct lq_handler lq_etx_fpm_handler;
-
-#endif /*LQ_ETX_FPM_ */
+#endif
 
 /*
  * Local Variables:
