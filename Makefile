@@ -35,14 +35,16 @@
 # to the project. For more information see the website or contact
 # the copyright holders.
 #
-# $Id: Makefile,v 1.86 2007/07/05 23:12:43 bernd67 Exp $
+# $Id: Makefile,v 1.90 2007/08/02 20:53:20 bernd67 Exp $
 
-VERS =		0.5.2
+VERS =		0.5.3
+
+all:
 
 TOPDIR = .
 include Makefile.inc
 
-CFLAGS +=	-DVERSION=\"$(VERS)\"
+CPPFLAGS +=	-DVERSION=\"$(VERS)\"
 
 MAKECMD = $(MAKE) OS="$(OS)" WARNINGS="$(WARNINGS)"
 
@@ -72,12 +74,11 @@ switch:
 $(CFGOBJS):
 		$(MAKECMD) -C $(CFGDIR)
 
-.PHONY: help libs clean_libs libs_clean clean uberclean install_libs libs_install install_bin install_olsrd install build_all install_all clean_all
+.PHONY: help libs clean_libs libs_clean clean uberclean install_libs libs_install install_bin install_olsrd install build_all install_all clean_all 
 
 clean:
 		-rm -f $(OBJS) $(SRCS:%.c=%.d) olsrd olsrd.exe
 		$(MAKECMD) -C $(CFGDIR) clean
-		$(MAKECMD) -C $(SWITCHDIR) clean
 
 uberclean:	clean clean_libs
 		-rm -f $(TAGFILE)
@@ -180,6 +181,6 @@ quagga:
 		$(MAKECMD) -C lib/quagga DESTDIR=$(DESTDIR) install 
 
 
-build_all:	cfgparser olsrd libs
+build_all:	cfgparser olsrd libs switch
 install_all:	install install_libs
 clean_all:	uberclean clean_libs
