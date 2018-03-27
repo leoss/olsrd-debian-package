@@ -35,35 +35,32 @@
 # to the project. For more information see the website or contact
 # the copyright holders.
 #
-# $Id: Makefile,v 1.90 2007/08/02 20:53:20 bernd67 Exp $
+# $Id: Makefile,v 1.100 2007/10/20 11:26:25 bernd67 Exp $
 
-VERS =		0.5.3
-
-all:
+VERS =		0.5.4
 
 TOPDIR = .
 include Makefile.inc
 
-CPPFLAGS +=	-DVERSION=\"$(VERS)\"
-
+# pass generated variables to save time
 MAKECMD = $(MAKE) OS="$(OS)" WARNINGS="$(WARNINGS)"
 
-LIBS +=		$(OS_LIB_DYNLOAD)
+LIBS +=		$(OS_LIB_DYNLOAD) $(OS_LIB_PTHREAD)
 
 ifeq ($(OS), win32)
 LDFLAGS +=	-Wl,--out-implib=libolsrd.a -Wl,--export-all-symbols
 endif
 
-SWITCHDIR =     src/olsr_switch
+SWITCHDIR =	src/olsr_switch
 CFGDIR =	src/cfgparser
 CFGOBJS = 	$(CFGDIR)/oscan.o $(CFGDIR)/oparse.o $(CFGDIR)/olsrd_conf.o
-CFGDEPS = 	$(wildcard $(CFGDIR)/*.c) $(wildcard $(CFGDIR)/*.h) $(CFGDIR)/oparse.y $(CFGDIR)/oscan.lex
-TAG_SRCS = $(SRCS) $(HDRS) $(wildcard src/cfgparser/*.c) $(wildcard src/cfgparser/*.h) $(wildcard src/olsr_switch/*.c) $(wildcard src/olsr_switch/*.h)
+CFGDEPS = 	$(wildcard $(CFGDIR)/*.[ch]) $(CFGDIR)/oparse.y $(CFGDIR)/oscan.lex
+TAG_SRCS =	$(SRCS) $(HDRS) $(wildcard $(CFGDIR)/*.[ch] $(SWITCHDIR)/*.[ch])
 
-default_target: cfgparser olsrd
+default_target: cfgparser $(EXENAME)
 
-olsrd:		$(OBJS) $(CFGOBJS)
-		$(CC) $(LDFLAGS) -o $@ $(OBJS) $(CFGOBJS) $(LIBS)
+$(EXENAME):	$(OBJS) $(CFGOBJS) src/builddata.o
+		$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 cfgparser:	$(CFGDEPS)
 		$(MAKECMD) -C $(CFGDIR)
@@ -74,15 +71,29 @@ switch:
 $(CFGOBJS):
 		$(MAKECMD) -C $(CFGDIR)
 
+# generate it always
+.PHONY: src/builddata.c
+src/builddata.c:
+	@$(RM) "$@"
+	@echo "#include \"defs.h\"" >> "$@" 
+	@echo "const char olsrd_version[] = \"olsr.org - $(VERS)\";" >> "$@" 
+	@date +"const char build_date[] = \"%Y-%m-%d %H:%M:%S\";" >> "$@" 
+	@echo "const char build_host[] = \"$(shell hostname)\";" >> "$@" 
+
+
 .PHONY: help libs clean_libs libs_clean clean uberclean install_libs libs_install install_bin install_olsrd install build_all install_all clean_all 
 
 clean:
-		-rm -f $(OBJS) $(SRCS:%.c=%.d) olsrd olsrd.exe
+		-rm -f $(OBJS) $(SRCS:%.c=%.d) $(EXENAME) $(EXENAME).exe src/builddata.c
+ifeq ($(OS), win32)
+		-rm -f libolsrd.a
+endif
 		$(MAKECMD) -C $(CFGDIR) clean
 
 uberclean:	clean clean_libs
 		-rm -f $(TAGFILE)
-		find . \( -name '*.[od]' -o -name '*~' \) -print | xargs -r rm -f
+		# BSD-xargs has no "--no-run-if-empty" aka "-r"
+		find . \( -name '*.[od]' -o -name '*~' \) -print0 | xargs -0 rm -f
 		$(MAKECMD) -C $(CFGDIR) uberclean
 		$(MAKECMD) -C $(SWITCHDIR) clean
 
@@ -95,7 +106,7 @@ install_bin:
 
 install_olsrd:	install_bin
 		@echo ========= C O N F I G U R A T I O N - F I L E ============
-		@echo olsrd uses the configfile $(CFGFILE)
+		@echo $(EXENAME) uses the configfile $(CFGFILE)
 		@echo a default configfile. A sample RFC-compliance aimed
 		@echo configfile can be installed. Note that a LQ-based configfile
 		@echo can be found at files/olsrd.conf.default.lq
@@ -105,11 +116,11 @@ install_olsrd:	install_bin
 		@echo -------------------------------------------
 		@echo Edit $(CFGFILE) before running olsrd!!
 		@echo -------------------------------------------
-		@echo Installing manpages olsrd\(8\) and olsrd.conf\(5\)
+		@echo Installing manpages $(EXENAME)\(8\) and $(CFGNAME)\(5\)
 		mkdir -p $(MANDIR)/man8/
-		cp files/olsrd.8.gz $(MANDIR)/man8/olsrd.8.gz
+		cp files/olsrd.8.gz $(MANDIR)/man8/$(EXENAME).8.gz
 		mkdir -p $(MANDIR)/man5/
-		cp files/olsrd.conf.5.gz $(MANDIR)/man5/olsrd.conf.5.gz
+		cp files/olsrd.conf.5.gz $(MANDIR)/man5/$(CFGNAME).5.gz
 
 tags:
 		$(TAGCMD) -o $(TAGFILE) $(TAG_SRCS)
@@ -181,6 +192,6 @@ quagga:
 		$(MAKECMD) -C lib/quagga DESTDIR=$(DESTDIR) install 
 
 
-build_all:	cfgparser olsrd libs switch
+build_all:	all cfgparser $(EXENAME) switch libs
 install_all:	install install_libs
 clean_all:	uberclean clean_libs

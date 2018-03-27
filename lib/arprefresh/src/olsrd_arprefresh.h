@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2007, Bernd Petrovitsch <bernd@firmix.at>
+ * Copyright (c) 2007, Sven-Ola Tuecke <sven-ola-aet-gmx.de>
+ * Copyright (c) 2004, Andreas Tønnesen(andreto-at-olsr.org)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without 
@@ -28,33 +29,17 @@
  *
  */
 
-/* $Id: plugin_util.h,v 1.3 2007/09/16 22:14:08 bernd67 Exp $ */
+/* $Id: olsrd_arprefresh.h,v 1.1 2007/08/19 20:37:41 bernd67 Exp $ */
 
-/*
- * Example plugin for olsrd.org OLSR daemon
- * Only the bare minimum
- */
+#ifndef _OLSRD_ARPREFRESH
+#define _OLSRD_ARPREFRESH
 
-#ifndef _OLSRD_PLUGIN_UTIL
-#define _OLSRD_PLUGIN_UTIL
-
+#include "olsr_types.h"
 #include "olsrd_plugin.h"
+#include "plugin_util.h"
 
-/* Common/utility functions for plugins */
-set_plugin_parameter set_plugin_port;
-set_plugin_parameter set_plugin_ipaddress;
-set_plugin_parameter set_plugin_boolean;
-set_plugin_parameter set_plugin_int;
-set_plugin_parameter set_plugin_string;
-
+int olsrd_plugin_init(void);
+void olsrd_get_plugin_parameters(const struct olsrd_plugin_parameters **params, int *size);
+int olsrd_plugin_interface_version(void);
 
 #endif
-
-/*
- * Local Variables:
- * mode: c
- * style: linux
- * c-basic-offset: 4
- * indent-tabs-mode: nil
- * End:
- */

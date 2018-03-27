@@ -36,13 +36,14 @@
  * to the project. For more information see the website or contact
  * the copyright holders.
  *
- * $Id: lq_packet.h,v 1.6 2005/02/20 18:52:18 kattemat Exp $
+ * $Id: lq_packet.h,v 1.8 2007/08/29 22:57:17 bernd67 Exp $
  */
 
 #ifndef _OLSR_LQ_PACKET_H
 #define _OLSR_LQ_PACKET_H
 
 #include "olsr_types.h"
+#include "packet.h"
 
 #define LQ_HELLO_MESSAGE      201
 #define LQ_TC_MESSAGE         202
@@ -123,21 +124,12 @@ struct lq_hello_header
 };
 
 // deserialized LQ_TC
-
-struct lq_tc_neighbor
-{
-  double                link_quality;
-  double                neigh_link_quality;
-  union olsr_ip_addr    main;
-  struct lq_tc_neighbor *next;
-};
-
 struct lq_tc_message
 {
   struct olsr_common    comm;
   union olsr_ip_addr    from;
   olsr_u16_t            ansn;
-  struct lq_tc_neighbor *neigh;
+  struct tc_mpr_addr    *neigh;
 };
 
 // serialized LQ_TC
@@ -157,5 +149,7 @@ void olsr_input_lq_hello(union olsr_message *ser, struct interface *inif,
 
 void olsr_input_lq_tc(union olsr_message *ser, struct interface *inif,
                       union olsr_ip_addr *from);
+
+extern olsr_bool lq_tc_pending;
 
 #endif

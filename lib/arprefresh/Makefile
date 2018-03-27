@@ -1,6 +1,6 @@
-
 # The olsr.org Optimized Link-State Routing daemon(olsrd)
 # Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+# Arprefresh plugin Copyright (c) 2007, Sven-Ola-aet-gmx.de
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without 
@@ -36,88 +36,23 @@
 # to the project. For more information see the website or contact
 # the copyright holders.
 #
-# $Id: Makefile,v 1.30 2007/09/17 21:44:15 bernd67 Exp $
+# $Id: Makefile,v 1.1 2007/08/19 20:37:41 bernd67 Exp $
 
-TOPDIR=../..
+OLSRD_PLUGIN =	true
+PLUGIN_NAME =	olsrd_arprefresh
+PLUGIN_VER =	0.1
+
+TOPDIR = ../..
 include $(TOPDIR)/Makefile.inc
 
-SRCS =		olsrd_conf.c  oparse.c  oscan.c cfgfile_gen.c
-HDRS =		olsrd_conf.h  oparse.h
+default_target: $(PLUGIN_FULLNAME)
 
-ifeq ($(OS), win32)
+$(PLUGIN_FULLNAME): $(OBJS) version-script.txt
+		$(CC) $(LDFLAGS) -o $(PLUGIN_FULLNAME) $(OBJS) $(LIBS)
 
-LIBNAME ?=	olsrd_cfgparser.dll
-BINNAME ?=	olsrd_cfgparser.exe
-CPPFLAGS +=	-DWIN32_STDIO_HACK
-OBJS +=		../win32/compat.o
-
-else
-
-LIBNAME ?=	olsrd_cfgparser.so.0.1
-BINNAME ?=	olsrd_cfgparser
-endif
-
-
-ifdef MAKEBIN
-
-CPPFLAGS +=	-DMAKEBIN 
-NAME =		$(BINNAME)
-
-else 
-
-# build lib per default
-
-ifeq (${OS}, osx)
-LDFLAGS +=	-dynamiclib -single_module
-else
-LDFLAGS +=	-shared -Wl,-soname,$(LIBNAME)
-endif
-
-ifeq (${OS}, win32)
-LDFLAGS +=	-Wl,--out-implib=libolsrd_cfgparser.a -Wl,--export-all-symbols
-endif
-
-CPPFLAGS +=	-DMAKELIB
-NAME =		$(LIBNAME)
-
-endif
-
-
-default_target: $(NAME)
-
-$(NAME):	$(OBJS)
-		$(CC) $(LDFLAGS) -o $(NAME) $(OBJS) $(LIBS)
-
-oscan.c:	oscan.lex Makefile
-		$(FLEX) -Cem -ooscan.c-tmp oscan.lex
-		sed	-e '/^static/s/yy_get_next_buffer[\(][\)]/yy_get_next_buffer(void)/' \
-			-e '/^static/s/yy_get_previous_state[\(][\)]/yy_get_previous_state(void)/' \
-			-e '/^static/s/yygrowstack[\(][\)]/yygrowstack(void)/' \
-			-e '/^static/s/input[\(][\)]/input(void)/' \
-			-e '/^static  *void  *yy_fatal_error/s/^\(.*)\);$$/\1 __attribute__((noreturn));/' \
-			-e '/^#line/s/$(subst .,\.,$@-tmp)/$@/' \
-			< oscan.c-tmp >oscan.c
-		$(RM) oscan.c-tmp
-
-oscan.o: CFLAGS := $(filter-out -Wunreachable-code -Wsign-compare, $(CFLAGS)) -Wno-sign-compare
-
-oparse.c:	oparse.y olsrd_conf.h Makefile
-		$(BISON) -d -o oparse.c oparse.y
-
-oparse.o: CFLAGS := $(filter-out -Wunreachable-code, $(CFLAGS))
-
-
-.PHONY: install clean uberclean
-
-install:
-		install -D -m 755 $(NAME) $(LIBDIR)/$(NAME)
-		/sbin/ldconfig -n $(LIBDIR)
+install:	$(PLUGIN_FULLNAME)
+		$(STRIP) $(PLUGIN_FULLNAME)
+		$(INSTALL_LIB)
 
 clean:
-		rm -f *.[od~] oscan.c oparse.[ch]
-		rm -f $(LIBNAME)
-		rm -f $(BINNAME)
-		$(RM) oparse.c-tmp
-
-uberclean:	clean
-		rm -f oparse.c oparse.h oscan.c
+		rm -f $(OBJS) $(SRCS:%.c=%.d) $(PLUGIN_FULLNAME)
