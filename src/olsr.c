@@ -1,33 +1,34 @@
+
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
  * All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without 
- * modification, are permitted provided that the following conditions 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
  * are met:
  *
- * * Redistributions of source code must retain the above copyright 
+ * * Redistributions of source code must retain the above copyright
  *   notice, this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright 
- *   notice, this list of conditions and the following disclaimer in 
- *   the documentation and/or other materials provided with the 
+ * * Redistributions in binary form must reproduce the above copyright
+ *   notice, this list of conditions and the following disclaimer in
+ *   the documentation and/or other materials provided with the
  *   distribution.
- * * Neither the name of olsr.org, olsrd nor the names of its 
- *   contributors may be used to endorse or promote products derived 
+ * * Neither the name of olsr.org, olsrd nor the names of its
+ *   contributors may be used to endorse or promote products derived
  *   from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS 
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE 
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, 
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT 
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN 
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
  * Visit http://www.olsr.org for more information.
@@ -66,7 +67,6 @@
 #include <stdarg.h>
 #include <signal.h>
 
-
 olsr_bool changes_topology;
 olsr_bool changes_neighborhood;
 olsr_bool changes_hna;
@@ -76,9 +76,8 @@ olsr_bool changes_force;
  * Process changes functions
  */
 
-struct pcf
-{
-  int (*function)(int, int, int);
+struct pcf {
+  int (*function) (int, int, int);
   struct pcf *next;
 };
 
@@ -107,9 +106,8 @@ get_msg_seqno(void)
   return message_seqno++;
 }
 
-
 void
-register_pcf(int (*f)(int, int, int))
+register_pcf(int (*f) (int, int, int))
 {
   struct pcf *new_pcf;
 
@@ -123,10 +121,9 @@ register_pcf(int (*f)(int, int, int))
 
 }
 
-
 /**
  *Process changes in neighborhood or/and topology.
- *Re-calculates the neighborhooh/topology if there
+ *Re-calculates the neighborhood/topology if there
  *are any updates - then calls the right functions to
  *update the routing table.
  *@return 0
@@ -137,28 +134,23 @@ olsr_process_changes(void)
   struct pcf *tmp_pc_list;
 
 #ifdef DEBUG
-  if(changes_neighborhood)
+  if (changes_neighborhood)
     OLSR_PRINTF(3, "CHANGES IN NEIGHBORHOOD\n");
-  if(changes_topology)
+  if (changes_topology)
     OLSR_PRINTF(3, "CHANGES IN TOPOLOGY\n");
-  if(changes_hna)
+  if (changes_hna)
     OLSR_PRINTF(3, "CHANGES IN HNA\n");
 #endif
-  
-  if(!changes_force &&
-     2 <= olsr_cnf->lq_level &&
-     0 >= olsr_cnf->lq_dlimit)
-    return;
-    
-  if(!changes_neighborhood &&
-     !changes_topology &&
-     !changes_hna)
+
+  if (!changes_force && 2 <= olsr_cnf->lq_level && 0 >= olsr_cnf->lq_dlimit)
     return;
 
-  if (olsr_cnf->debug_level > 0 && olsr_cnf->clear_screen && isatty(1))
-  {
-      clear_console();
-      printf("       *** %s (%s on %s) ***\n", olsrd_version, build_date, build_host);
+  if (!changes_neighborhood && !changes_topology && !changes_hna)
+    return;
+
+  if (olsr_cnf->debug_level > 0 && olsr_cnf->clear_screen && isatty(1)) {
+    clear_console();
+    printf("       *** %s (%s on %s) ***\n", olsrd_version, build_date, build_host);
   }
 
   if (changes_neighborhood) {
@@ -173,39 +165,29 @@ olsr_process_changes(void)
   if (changes_neighborhood || changes_topology || changes_hna) {
     olsr_calculate_routing_table();
   }
-  
-  if (olsr_cnf->debug_level > 0)
-    {      
-      if (olsr_cnf->debug_level > 2) 
-        {
-          olsr_print_mid_set();
-	  
-          if (olsr_cnf->debug_level > 3)
-            {
-             if (olsr_cnf->debug_level > 8)
-               {
-                 olsr_print_duplicate_table();
-               }
-              olsr_print_hna_set();
-            }
+
+  if (olsr_cnf->debug_level > 0) {
+    if (olsr_cnf->debug_level > 2) {
+      olsr_print_mid_set();
+
+      if (olsr_cnf->debug_level > 3) {
+        if (olsr_cnf->debug_level > 8) {
+          olsr_print_duplicate_table();
         }
-
-#if 1     
-      olsr_print_link_set();
-      olsr_print_neighbor_table();
-      olsr_print_two_hop_neighbor_table();
-      olsr_print_tc_table();
+        olsr_print_hna_set();
+      }
+    }
+#if 1
+    olsr_print_link_set();
+    olsr_print_neighbor_table();
+    olsr_print_two_hop_neighbor_table();
+    olsr_print_tc_table();
 #endif
-    }
+  }
 
-  for(tmp_pc_list = pcf_list; 
-      tmp_pc_list != NULL;
-      tmp_pc_list = tmp_pc_list->next)
-    {
-      tmp_pc_list->function(changes_neighborhood,
-			    changes_topology,
-			    changes_hna);
-    }
+  for (tmp_pc_list = pcf_list; tmp_pc_list != NULL; tmp_pc_list = tmp_pc_list->next) {
+    tmp_pc_list->function(changes_neighborhood, changes_topology, changes_hna);
+  }
 
   changes_neighborhood = OLSR_FALSE;
   changes_topology = OLSR_FALSE;
@@ -217,13 +199,14 @@ olsr_process_changes(void)
  * Callback for the periodic route calculation.
  */
 void
-olsr_trigger_forced_update(void *unused __attribute__((unused))) {
+olsr_trigger_forced_update(void *unused __attribute__ ((unused)))
+{
 
   changes_force = OLSR_TRUE;
   changes_neighborhood = OLSR_TRUE;
   changes_topology = OLSR_TRUE;
   changes_hna = OLSR_TRUE;
-  
+
   olsr_process_changes();
 }
 
@@ -234,7 +217,7 @@ olsr_trigger_forced_update(void *unused __attribute__((unused))) {
  */
 void
 olsr_init_tables(void)
-{  
+{
   changes_topology = OLSR_FALSE;
   changes_neighborhood = OLSR_FALSE;
   changes_hna = OLSR_FALSE;
@@ -250,7 +233,7 @@ olsr_init_tables(void)
 
   /* Initialize lq plugin set */
   init_lq_handler_tree();
-  
+
   /* Initialize link set */
   olsr_init_link_set();
 
@@ -276,17 +259,17 @@ olsr_init_tables(void)
   olsr_init_mid_set();
 
   /* Initialize HNA set */
-  olsr_init_hna_set();  
+  olsr_init_hna_set();
 
 #if 0
   /* Initialize Layer 1/2 database */
   olsr_initialize_layer12();
 #endif
-  
+
   /* Start periodic SPF and RIB recalculation */
   if (olsr_cnf->lq_dinter > 0.0) {
-    olsr_start_timer((unsigned int)(olsr_cnf->lq_dinter * MSEC_PER_SEC), 5,
-                     OLSR_TIMER_PERIODIC, &olsr_trigger_forced_update, NULL, 0);
+    olsr_start_timer((unsigned int)(olsr_cnf->lq_dinter * MSEC_PER_SEC), 5, OLSR_TIMER_PERIODIC, &olsr_trigger_forced_update, NULL,
+                     0);
   }
 }
 
@@ -294,15 +277,13 @@ olsr_init_tables(void)
  *Check if a message is to be forwarded and forward
  *it if necessary.
  *
- *@param m the OLSR message recieved
- *@param originator the originator of this message
- *@param seqno the seqno of the message
+ *@param m the OLSR message to be forwarded
+ *@param neighbour we received message from
  *
  *@returns positive if forwarded
  */
 int
-olsr_forward_message(union olsr_message *m, 
-		     union olsr_ip_addr *from_addr)
+olsr_forward_message(union olsr_message *m, union olsr_ip_addr *from_addr)
 {
   union olsr_ip_addr *src;
   struct neighbor_entry *neighbor;
@@ -314,99 +295,88 @@ olsr_forward_message(union olsr_message *m,
    * of a bug in parser.c:parse_packet, we have a lot of messages because
    * all older olsrd's have lq_fish enabled.
    */
-  if (AF_INET == olsr_cnf->ip_version)
-  {
-    if (2 > m->v4.ttl || 255 < (int)m->v4.hopcnt + (int)m->v4.ttl) return 0;
-  }
-  else
-  {
-    if (2 > m->v6.ttl || 255 < (int)m->v6.hopcnt + (int)m->v6.ttl) return 0;
+  if (AF_INET == olsr_cnf->ip_version) {
+    if (m->v4.ttl < 2 || 255 < (int)m->v4.hopcnt + (int)m->v4.ttl)
+      return 0;
+  } else {
+    if (m->v6.ttl < 2 || 255 < (int)m->v6.hopcnt + (int)m->v6.ttl)
+      return 0;
   }
 
   /* Lookup sender address */
   src = mid_lookup_main_addr(from_addr);
-  if(!src)
+  if (!src)
     src = from_addr;
 
-  neighbor=olsr_lookup_neighbor_table(src);
-  if(!neighbor)
+  neighbor = olsr_lookup_neighbor_table(src);
+  if (!neighbor)
     return 0;
 
-  if(neighbor->status != SYM)
+  if (neighbor->status != SYM)
     return 0;
 
   /* Check MPR */
-  if(olsr_lookup_mprs_set(src) == NULL)
-    {
+  if (olsr_lookup_mprs_set(src) == NULL) {
 #ifdef DEBUG
-#ifndef NODEBUG
-      struct ipaddr_str buf;
+    struct ipaddr_str buf;
+    OLSR_PRINTF(5, "Forward - sender %s not MPR selector\n", olsr_ip_to_string(&buf, src));
 #endif
-      OLSR_PRINTF(5, "Forward - sender %s not MPR selector\n", olsr_ip_to_string(&buf, src));
-#endif
-      return 0;
-    }
+    return 0;
+  }
+
+  if (olsr_message_is_duplicate(m)) {
+    return 0;
+  }
 
   /* Treat TTL hopcnt */
-  if(olsr_cnf->ip_version == AF_INET)
-    {
-      /* IPv4 */
-      m->v4.hopcnt++;
-      m->v4.ttl--; 
-    }
-  else
-    {
-      /* IPv6 */
-      m->v6.hopcnt++;
-      m->v6.ttl--; 
-    }
+  if (olsr_cnf->ip_version == AF_INET) {
+    /* IPv4 */
+    m->v4.hopcnt++;
+    m->v4.ttl--;
+  } else {
+    /* IPv6 */
+    m->v6.hopcnt++;
+    m->v6.ttl--;
+  }
 
   /* Update packet data */
   msgsize = ntohs(m->v4.olsr_msgsize);
 
   /* looping trough interfaces */
-  for (ifn = ifnet; ifn ; ifn = ifn->int_next) 
-    { 
-      if(net_output_pending(ifn))
-	{
-	  /*
-	   * Check if message is to big to be piggybacked
-	   */
-	  if(net_outbuffer_push(ifn, m, msgsize) != msgsize)
-	    {
-	      /* Send */
-	      net_output(ifn);
-	      /* Buffer message */
-	      set_buffer_timer(ifn);
-	      
-	      if(net_outbuffer_push(ifn, m, msgsize) != msgsize)
-		{
-		  OLSR_PRINTF(1, "Received message to big to be forwarded in %s(%d bytes)!", ifn->int_name, msgsize);
-		  olsr_syslog(OLSR_LOG_ERR, "Received message to big to be forwarded on %s(%d bytes)!", ifn->int_name, msgsize);
-		}
-	    }
-	}
-      else
-	{
-	  /* No forwarding pending */
-	  set_buffer_timer(ifn);
-	  
-	  if(net_outbuffer_push(ifn, m, msgsize) != msgsize)
-	    {
-	      OLSR_PRINTF(1, "Received message to big to be forwarded in %s(%d bytes)!", ifn->int_name, msgsize);
-	      olsr_syslog(OLSR_LOG_ERR, "Received message to big to be forwarded on %s(%d bytes)!", ifn->int_name, msgsize);
-	    }
-	}
+  for (ifn = ifnet; ifn; ifn = ifn->int_next) {
+    if (net_output_pending(ifn)) {
+      /*
+       * Check if message is to big to be piggybacked
+       */
+      if (net_outbuffer_push(ifn, m, msgsize) != msgsize) {
+        /* Send */
+        net_output(ifn);
+        /* Buffer message */
+        set_buffer_timer(ifn);
+
+        if (net_outbuffer_push(ifn, m, msgsize) != msgsize) {
+          OLSR_PRINTF(1, "Received message to big to be forwarded in %s(%d bytes)!", ifn->int_name, msgsize);
+          olsr_syslog(OLSR_LOG_ERR, "Received message to big to be forwarded on %s(%d bytes)!", ifn->int_name, msgsize);
+        }
+      }
+    } else {
+      /* No forwarding pending */
+      set_buffer_timer(ifn);
+
+      if (net_outbuffer_push(ifn, m, msgsize) != msgsize) {
+        OLSR_PRINTF(1, "Received message to big to be forwarded in %s(%d bytes)!", ifn->int_name, msgsize);
+        olsr_syslog(OLSR_LOG_ERR, "Received message to big to be forwarded on %s(%d bytes)!", ifn->int_name, msgsize);
+      }
     }
+  }
   return 1;
 }
 
-
 void
 set_buffer_timer(struct interface *ifn)
-{      
+{
   /* Set timer */
-  ifn->fwdtimer = GET_TIMESTAMP(random() * olsr_cnf->max_jitter * 1000 / RAND_MAX);
+  ifn->fwdtimer = GET_TIMESTAMP(random() * olsr_cnf->max_jitter * MSEC_PER_SEC / RAND_MAX);
 }
 
 void
@@ -417,25 +387,22 @@ olsr_init_willingness(void)
     /* Run it first and then periodic. */
     olsr_update_willingness(NULL);
 
-    olsr_start_timer((unsigned int)olsr_cnf->will_int * MSEC_PER_SEC, 5,
-                     OLSR_TIMER_PERIODIC, &olsr_update_willingness, NULL, 0);
+    olsr_start_timer((unsigned int)olsr_cnf->will_int * MSEC_PER_SEC, 5, OLSR_TIMER_PERIODIC, &olsr_update_willingness, NULL, 0);
   }
 }
 
 void
-olsr_update_willingness(void *foo __attribute__((unused)))
+olsr_update_willingness(void *foo __attribute__ ((unused)))
 {
   int tmp_will = olsr_cnf->willingness;
 
   /* Re-calculate willingness */
   olsr_cnf->willingness = olsr_calculate_willingness();
 
-  if(tmp_will != olsr_cnf->willingness)
-    {
-      OLSR_PRINTF(1, "Local willingness updated: old %d new %d\n", tmp_will, olsr_cnf->willingness);
-    }
+  if (tmp_will != olsr_cnf->willingness) {
+    OLSR_PRINTF(1, "Local willingness updated: old %d new %d\n", tmp_will, olsr_cnf->willingness);
+  }
 }
-
 
 /**
  *Calculate this nodes willingness to act as a MPR
@@ -451,19 +418,19 @@ olsr_calculate_willingness(void)
   struct olsr_apm_info ainfo;
 
   /* If fixed willingness */
-  if(!olsr_cnf->willingness_auto)
+  if (!olsr_cnf->willingness_auto)
     return olsr_cnf->willingness;
 
-  if(apm_read(&ainfo) < 1)
+  if (apm_read(&ainfo) < 1)
     return WILL_DEFAULT;
 
   apm_printinfo(&ainfo);
 
   /* If AC powered */
-  if(ainfo.ac_line_status == OLSR_AC_POWERED)
+  if (ainfo.ac_line_status == OLSR_AC_POWERED)
     return 6;
 
-  /* If battery powered 
+  /* If battery powered
    *
    * juice > 78% will: 3
    * 78% > juice > 26% will: 2
@@ -477,76 +444,70 @@ olsr_msgtype_to_string(olsr_u8_t msgtype)
 {
   static char type[20];
 
-  switch(msgtype)
-    {
-    case(HELLO_MESSAGE):
-      return "HELLO";
-    case(TC_MESSAGE):
-      return "TC";
-    case(MID_MESSAGE):
-      return "MID";
-    case(HNA_MESSAGE):
-      return "HNA";
-    case(LQ_HELLO_MESSAGE):
-      return("LQ-HELLO");
-    case(LQ_TC_MESSAGE):
-      return("LQ-TC");
-    default:
-      break;
-    }
+  switch (msgtype) {
+  case (HELLO_MESSAGE):
+    return "HELLO";
+  case (TC_MESSAGE):
+    return "TC";
+  case (MID_MESSAGE):
+    return "MID";
+  case (HNA_MESSAGE):
+    return "HNA";
+  case (LQ_HELLO_MESSAGE):
+    return ("LQ-HELLO");
+  case (LQ_TC_MESSAGE):
+    return ("LQ-TC");
+  default:
+    break;
+  }
 
   snprintf(type, sizeof(type), "UNKNOWN(%d)", msgtype);
   return type;
 }
-
 
 const char *
 olsr_link_to_string(olsr_u8_t linktype)
 {
   static char type[20];
 
-  switch(linktype)
-    {
-    case(UNSPEC_LINK):
-      return "UNSPEC";
-    case(ASYM_LINK):
-      return "ASYM";
-    case(SYM_LINK):
-      return "SYM";
-    case(LOST_LINK):
-      return "LOST";
-    case(HIDE_LINK):
-      return "HIDE";
-    default:
-      break;
-    }
+  switch (linktype) {
+  case (UNSPEC_LINK):
+    return "UNSPEC";
+  case (ASYM_LINK):
+    return "ASYM";
+  case (SYM_LINK):
+    return "SYM";
+  case (LOST_LINK):
+    return "LOST";
+  case (HIDE_LINK):
+    return "HIDE";
+  default:
+    break;
+  }
 
   snprintf(type, sizeof(type), "UNKNOWN(%d)", linktype);
   return type;
 }
-
 
 const char *
 olsr_status_to_string(olsr_u8_t status)
 {
   static char type[20];
 
-  switch(status)
-    {
-    case(NOT_NEIGH):
-      return "NOT NEIGH";
-    case(SYM_NEIGH):
-      return "NEIGHBOR";
-    case(MPR_NEIGH):
-      return "MPR";
-    default:
-      break;
-    }
+  switch (status) {
+  case (NOT_NEIGH):
+    return "NOT NEIGH";
+  case (SYM_NEIGH):
+    return "NEIGHBOR";
+  case (MPR_NEIGH):
+    return "MPR";
+  default:
+    break;
+  }
 
   snprintf(type, sizeof(type), "UNKNOWN(%d)", status);
   return type;
 }
-
 
 /**
  *Termination function to be called whenever a error occures
@@ -565,7 +526,6 @@ olsr_exit(const char *msg, int val)
 
   raise(SIGTERM);
 }
-
 
 /**
  * Wrapper for malloc(3) that does error-checking
@@ -588,21 +548,18 @@ olsr_malloc(size_t size, const char *id)
   ptr = calloc(1, size);
 
   if (!ptr) {
-      const char * const err_msg = strerror(errno);
-      OLSR_PRINTF(1, "OUT OF MEMORY: %s\n", err_msg);
-      olsr_syslog(OLSR_LOG_ERR, "olsrd: out of memory!: %s\n", err_msg);
-      olsr_exit(id, EXIT_FAILURE);
+    const char *const err_msg = strerror(errno);
+    OLSR_PRINTF(1, "OUT OF MEMORY: %s\n", err_msg);
+    olsr_syslog(OLSR_LOG_ERR, "olsrd: out of memory!: %s\n", err_msg);
+    olsr_exit(id, EXIT_FAILURE);
   }
-
-#if 0 
+#if 0
   /* useful for debugging */
-  olsr_printf(1, "MEMORY: alloc %s %p, %u bytes\n",
-              id, ptr, size);
+  olsr_printf(1, "MEMORY: alloc %s %p, %u bytes\n", id, ptr, size);
 #endif
 
   return ptr;
 }
-
 
 /**
  *Wrapper for printf that prints to a specific
@@ -613,18 +570,18 @@ olsr_malloc(size_t size, const char *id)
 int
 olsr_printf(int loglevel, const char *format, ...)
 {
-  if((loglevel <= olsr_cnf->debug_level) && debug_handle)
-    {
-      va_list arglist;
-      va_start(arglist, format);
-      vfprintf(debug_handle, format, arglist);
-      va_end(arglist);
-    }
+  if ((loglevel <= olsr_cnf->debug_level) && debug_handle) {
+    va_list arglist;
+    va_start(arglist, format);
+    vfprintf(debug_handle, format, arglist);
+    va_end(arglist);
+  }
   return 0;
 }
 
 /*
  * Local Variables:
  * c-basic-offset: 2
+ * indent-tabs-mode: nil
  * End:
  */

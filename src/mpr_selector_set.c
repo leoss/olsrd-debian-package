@@ -1,33 +1,34 @@
+
 /*
  * The olsr.org Optimized Link-State Routing daemon(olsrd)
- * Copyright (c) 2004, Andreas Tønnesen(andreto@olsr.org)
+ * Copyright (c) 2004, Andreas Tonnesen(andreto@olsr.org)
  * All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without 
- * modification, are permitted provided that the following conditions 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
  * are met:
  *
- * * Redistributions of source code must retain the above copyright 
+ * * Redistributions of source code must retain the above copyright
  *   notice, this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright 
- *   notice, this list of conditions and the following disclaimer in 
- *   the documentation and/or other materials provided with the 
+ * * Redistributions in binary form must reproduce the above copyright
+ *   notice, this list of conditions and the following disclaimer in
+ *   the documentation and/or other materials provided with the
  *   distribution.
- * * Neither the name of olsr.org, olsrd nor the names of its 
- *   contributors may be used to endorse or promote products derived 
+ * * Neither the name of olsr.org, olsrd nor the names of its
+ *   contributors may be used to endorse or promote products derived
  *   from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS 
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE 
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, 
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT 
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN 
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
  * Visit http://www.olsr.org for more information.
@@ -37,7 +38,6 @@
  * the copyright holders.
  *
  */
-
 
 #include "ipcalc.h"
 #include "defs.h"
@@ -67,8 +67,7 @@ olsr_init_mprs_set(void)
   mprs_list.prev = &mprs_list;
 }
 
-
-olsr_u16_t 
+olsr_u16_t
 get_local_ansn(void)
 {
   return ansn;
@@ -81,6 +80,7 @@ increase_local_ansn(void)
 }
 
 #if 0
+
 /**
  * Check if we(this node) is selected as a MPR by any
  * neighbors. If the list is empty we are not MPR.
@@ -88,10 +88,9 @@ increase_local_ansn(void)
 olsr_bool
 olsr_is_mpr(void)
 {
-    return ((mprs_list.next == &mprs_list) ? OLSR_FALSE : OLSR_TRUE);
+  return ((mprs_list.next == &mprs_list) ? OLSR_FALSE : OLSR_TRUE);
 }
 #endif
-
 
 /**
  * Wrapper for the timer callback.
@@ -99,7 +98,7 @@ olsr_is_mpr(void)
 static void
 olsr_expire_mpr_sel_entry(void *context)
 {
-#if !defined(NODEBUG) && defined(DEBUG)
+#ifdef DEBUG
   struct ipaddr_str buf;
 #endif
   struct mpr_selector *mpr_sel;
@@ -108,8 +107,7 @@ olsr_expire_mpr_sel_entry(void *context)
   mpr_sel->MS_timer = NULL;
 
 #ifdef DEBUG
-  OLSR_PRINTF(1, "MPRS: Timing out %st\n",
-              olsr_ip_to_string(&buf, &mpr_sel->MS_main_addr));
+  OLSR_PRINTF(1, "MPRS: Timing out %st\n", olsr_ip_to_string(&buf, &mpr_sel->MS_main_addr));
 #endif
 
   DEQUEUE_ELEM(mpr_sel);
@@ -118,7 +116,6 @@ olsr_expire_mpr_sel_entry(void *context)
   free(mpr_sel);
   signal_link_changes(OLSR_TRUE);
 }
-
 
 /**
  * Set the mpr selector expiration timer.
@@ -130,10 +127,8 @@ static void
 olsr_set_mpr_sel_timer(struct mpr_selector *mpr_sel, olsr_reltime rel_timer)
 {
 
-  olsr_set_timer(&mpr_sel->MS_timer, rel_timer, OLSR_MPR_SEL_JITTER,
-                 OLSR_TIMER_ONESHOT, &olsr_expire_mpr_sel_entry, mpr_sel, 0);
+  olsr_set_timer(&mpr_sel->MS_timer, rel_timer, OLSR_MPR_SEL_JITTER, OLSR_TIMER_ONESHOT, &olsr_expire_mpr_sel_entry, mpr_sel, 0);
 }
-
 
 /**
  *Add a MPR selector to the MPR selector set
@@ -146,9 +141,7 @@ olsr_set_mpr_sel_timer(struct mpr_selector *mpr_sel, olsr_reltime rel_timer)
 struct mpr_selector *
 olsr_add_mpr_selector(const union olsr_ip_addr *addr, olsr_reltime vtime)
 {
-#ifndef NODEBUG
   struct ipaddr_str buf;
-#endif
   struct mpr_selector *new_entry;
 
   OLSR_PRINTF(1, "MPRS: adding %s\n", olsr_ip_to_string(&buf, addr));
@@ -160,15 +153,13 @@ olsr_add_mpr_selector(const union olsr_ip_addr *addr, olsr_reltime vtime)
   /* Queue */
   QUEUE_ELEM(mprs_list, new_entry);
   /*
-  new_entry->prev = &mprs_list;
-  new_entry->next = mprs_list.next;
-  mprs_list.next->prev = new_entry;
-  mprs_list.next = new_entry;
-  */
+     new_entry->prev = &mprs_list;
+     new_entry->next = mprs_list.next;
+     mprs_list.next->prev = new_entry;
+     mprs_list.next = new_entry;
+   */
   return new_entry;
 }
-
-
 
 /**
  *Lookup an entry in the MPR selector table
@@ -183,12 +174,12 @@ olsr_lookup_mprs_set(const union olsr_ip_addr *addr)
 {
   struct mpr_selector *mprs;
 
-  if(addr == NULL)
+  if (addr == NULL)
     return NULL;
   //OLSR_PRINTF(1, "MPRS: Lookup....");
 
   for (mprs = mprs_list.next; mprs != &mprs_list; mprs = mprs->next) {
-    if(ipequal(&mprs->MS_main_addr, addr)) {
+    if (ipequal(&mprs->MS_main_addr, addr)) {
       //OLSR_PRINTF(1, "MATCH\n");
       return mprs;
     }
@@ -196,7 +187,6 @@ olsr_lookup_mprs_set(const union olsr_ip_addr *addr)
   //OLSR_PRINTF(1, "NO MACH\n");
   return NULL;
 }
-
 
 /**
  *Update a MPR selector entry or create an new
@@ -210,14 +200,12 @@ olsr_lookup_mprs_set(const union olsr_ip_addr *addr)
 int
 olsr_update_mprs_set(const union olsr_ip_addr *addr, olsr_reltime vtime)
 {
-#ifndef NODEBUG
   struct ipaddr_str buf;
-#endif
   struct mpr_selector *mprs = olsr_lookup_mprs_set(addr);
 
   OLSR_PRINTF(5, "MPRS: Update %s\n", olsr_ip_to_string(&buf, addr));
 
-  if(mprs == NULL) {
+  if (mprs == NULL) {
     olsr_add_mpr_selector(addr, vtime);
     signal_link_changes(OLSR_TRUE);
     return 1;
@@ -226,8 +214,8 @@ olsr_update_mprs_set(const union olsr_ip_addr *addr, olsr_reltime vtime)
   return 0;
 }
 
-
 #if 0
+
 /**
  *Print the current MPR selector set to STDOUT
  */
@@ -236,10 +224,8 @@ olsr_print_mprs_set(void)
 {
   struct mpr_selector *mprs;
   OLSR_PRINTF(1, "MPR SELECTORS: ");
-  for(mprs = mprs_list.next; mprs != &mprs_list; mprs = mprs->next) {
-#ifndef NODEBUG
+  for (mprs = mprs_list.next; mprs != &mprs_list; mprs = mprs->next) {
     struct ipaddr_str buf;
-#endif
     OLSR_PRINTF(1, "%s ", olsr_ip_to_string(&buf, &mprs->MS_main_addr));
   }
   OLSR_PRINTF(1, "\n");
@@ -249,5 +235,6 @@ olsr_print_mprs_set(void)
 /*
  * Local Variables:
  * c-basic-offset: 2
+ * indent-tabs-mode: nil
  * End:
  */

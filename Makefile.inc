@@ -10,9 +10,6 @@ DEBUG ?= 0
 # compile OLSR_PRINTF out
 NO_DEBUG_MESSAGES ?= 0
 
-# the optimize option to be set for gcc
-OPTIMIZE ?= 
-
 # enable mudflap with 1 or deactivate with 0
 # you need a recent enough gcc and the libmudflap installed
 MUDFLAP ?= 0
@@ -90,14 +87,14 @@ endif
 #WARNINGS +=	-Wunreachable-code
 WARNINGS +=	-Winline
 WARNINGS +=	-Wdisabled-optimization
-#WARNINGS +=	-Werror
+WARNINGS +=	-Werror
 WARNINGS +=	-finline-functions-called-once
 WARNINGS +=	-fearly-inlining
 ifeq ($(DEBUG),0)
 WARNINGS +=	-fomit-frame-pointer
 endif
 # we have small inline functions in src/lq_route.h which should always be inlined
-WARNINGS +=	-finline-limit=350
+WARNINGS +=	-finline-limit=700
 # These tell gcc to put each function and global variable in a separate section.
 # The linker can than remove all unreferenced section. But in the olsrd binary
 # unused doesn't imply unused at all since the function may be used by plugins,
@@ -180,11 +177,14 @@ OBJS +=		$(SRCS:%.c=%.o)
 ifeq ($(DEBUG),1)
 CPPFLAGS +=	-DDEBUG
 CFLAGS +=	-ggdb
+OPTIMIZE ?=	-O0
 else
 CPPFLAGS +=	-DNDEBUG
+OPTIMIZE ?=	-O2
 endif
 ifeq ($(NO_DEBUG_MESSAGES),1)
 CPPFLAGS +=	-DNODEBUG
+OPTIMIZE ?=	-Os
 endif
 
 # a make function to quote "/" and "."

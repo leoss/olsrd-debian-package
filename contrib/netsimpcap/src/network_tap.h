@@ -1,7 +1,8 @@
+
 /*
  * NetsimPcap - a userspace network bridge with simulated packet loss
  *             Copyright 2008 H. Rogge (rogge@fgan.de)
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -25,14 +26,15 @@ typedef struct MacAddress {
   char mac[6];
 } MacAddress;
 
-int readMac(char *value, MacAddress *target);
+int readMac(char *value, MacAddress * target);
 void closeTap(int fd);
-int createTap(char *name, MacAddress *mac);
+int createTap(char *name, MacAddress * mac);
 
-#endif /*NETWORK_H_*/
+#endif /*NETWORK_H_ */
 
 /*
  * Local Variables:
  * c-basic-offset: 2
+ * indent-tabs-mode: nil
  * End:
  */
