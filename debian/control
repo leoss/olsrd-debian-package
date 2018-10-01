@@ -1,6 +1,6 @@
 Source: olsrd
 Section: net
-Priority: extra
+Priority: optional
 Maintainer: Roland Stigge <stigge@antcom.de>
 Uploaders: Hans-Christoph Steiner <hans@eds.org>
 Build-Depends: debhelper (>= 9),

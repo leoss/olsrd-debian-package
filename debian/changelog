@@ -1,7 +1,11 @@
 olsrd (0.9.6.1-1) UNRELEASED; urgency=medium
 
+  [ Nicolas Braud-Santoni ]
   * New upstream version 0.9.6.1
   * Update debian/watch
+
+  [ Ondřej Nový ]
+  * d/control: Deprecating priority extra as per policy 4.0.1
 
  -- Nicolas Braud-Santoni <nicolas@braud-santoni.eu>  Tue, 27 Mar 2018 08:11:51 +0200
 
