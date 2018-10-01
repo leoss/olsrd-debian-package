@@ -7,6 +7,7 @@ olsrd (0.9.6.1-1) UNRELEASED; urgency=medium
   [ Ondřej Nový ]
   * d/control: Deprecating priority extra as per policy 4.0.1
   * d/changelog: Remove trailing whitespaces
+  * d/control: Remove trailing whitespaces
 
  -- Nicolas Braud-Santoni <nicolas@braud-santoni.eu>  Tue, 27 Mar 2018 08:11:51 +0200
 
