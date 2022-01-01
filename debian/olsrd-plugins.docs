@@ -9,8 +9,8 @@ lib/txtinfo/README_TXTINFO
 lib/watchdog/README_WATCHDOG
 lib/mini/README_MINI
 lib/pgraph/README_PGRAPH
-lib/mdns/README
-lib/p2pd/README
+lib/mdns/README_MDNS
+lib/p2pd/README_P2PD
 lib/arprefresh/README_ARPREFRESH
 lib/dot_draw/README_DOT_DRAW
 lib/dyn_gw_plain/README_DYN_GW_PLAIN
